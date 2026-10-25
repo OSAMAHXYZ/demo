@@ -564,9 +564,42 @@
                     : '<p class="status-lock">Only the assigned advisor can update</p>'}
             </div>
             </div>
+            ${notesHtml(order)}
             <button class="bo-toggle" type="button" aria-expanded="false">View Full BO Details</button>
             ${excelFieldsHtml(order)}
         </article>`;
+    }
+    function notesHtml(order) {
+        const session = readSession();
+        const teamNotes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
+        const mine = session ? teamNotes.find((note) => note.recordId === session.recordId) : null;
+        const leader = String(order.leaderNote || '').trim();
+        const others = teamNotes.filter((note) => !session || note.recordId !== session.recordId);
+        const list = others.map((note) => `<div class="note-item">
+            <header><b>${esc(note.by || 'Team')}</b><span>${esc(note.updatedDisplay || note.display || '')}</span></header>
+            <p dir="auto">${esc(note.text || '')}</p>
+        </div>`).join('');
+        return `<section class="order-notes" data-notes-key="${esc(order.key)}">
+            <div class="note-block leader-note">
+                <h4>Leader note</h4>
+                ${leader
+                    ? `<p dir="auto">${esc(leader)}</p><small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small>`
+                    : '<p class="muted">No leader note yet.</p>'}
+            </div>
+            <div class="note-block team-notes">
+                <h4>Team notes</h4>
+                ${list || '<p class="muted">No team notes yet.</p>'}
+                <label class="note-compose">
+                    <span>Your note</span>
+                    <textarea class="team-note-input" rows="2" maxlength="2000" placeholder="Add a note the admin and team can see">${mine ? esc(mine.text || '') : ''}</textarea>
+                </label>
+                <div class="note-actions">
+                    <button type="button" class="solid note-save" data-note-id="${esc(mine && mine.id || '')}">${mine ? 'Update note' : 'Save note'}</button>
+                    ${mine ? '<button type="button" class="ghost note-clear" data-note-id="' + esc(mine.id) + '">Remove</button>' : ''}
+                    <span class="note-feedback muted" hidden></span>
+                </div>
+            </div>
+        </section>`;
     }
     function tickTimers() {
         paintSession();
@@ -599,6 +632,29 @@
             const note = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
             if (note) note.textContent = data.error || 'Only the assigned advisor can update this order.';
         }
+    }
+    async function saveTeamNote(key, note, noteId, feedback) {
+        const session = readSession();
+        if (!session) return endSession('logout');
+        if (feedback) {
+            feedback.hidden = false;
+            feedback.textContent = 'Saving…';
+        }
+        const res = await fetch('/api/reserved-orders/team-note', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: session.token, key, note, noteId: noteId || undefined })
+        });
+        if (res.status === 401) return endSession('logout');
+        touch();
+        loadLive.last = '';
+        await loadLive();
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            if (feedback) feedback.textContent = data.error || 'Could not save note.';
+            return;
+        }
+        if (feedback) feedback.textContent = note ? 'Saved.' : 'Removed.';
     }
 
     async function loadAlertRules() {
@@ -1120,6 +1176,23 @@
         if (button) applyKpi(button.dataset.kpi);
     });
     $('cards').addEventListener('click', (event) => {
+        const noteSave = event.target.closest('.note-save');
+        if (noteSave) {
+            const box = noteSave.closest('.order-notes');
+            if (!box) return;
+            const input = box.querySelector('.team-note-input');
+            const feedback = box.querySelector('.note-feedback');
+            saveTeamNote(box.dataset.notesKey, input ? input.value : '', noteSave.dataset.noteId || '', feedback);
+            return;
+        }
+        const noteClear = event.target.closest('.note-clear');
+        if (noteClear) {
+            const box = noteClear.closest('.order-notes');
+            if (!box) return;
+            const feedback = box.querySelector('.note-feedback');
+            saveTeamNote(box.dataset.notesKey, '', noteClear.dataset.noteId || '', feedback);
+            return;
+        }
         const toggle = event.target.closest('.bo-toggle');
         if (!toggle) return;
         const row = toggle.nextElementSibling;

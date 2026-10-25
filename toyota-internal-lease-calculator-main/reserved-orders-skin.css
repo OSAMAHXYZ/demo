@@ -1365,3 +1365,82 @@
 #overlay-message .date-step button { background: var(--ro-surface-2); border-color: var(--ro-line-strong); color: var(--ro-ink); }
 #overlay-message .preview-box, #app .mc-preview-box { background: #0b141a; }
 #overlay-message .preview-box::before { color: rgba(255, 255, 255, 0.35); }
+
+/* Order notes · leader + team */
+#app .order-notes {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px 4px;
+  border-top: 1px solid var(--ro-line);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.35), transparent);
+}
+#app .note-block {
+  border: 1px solid var(--ro-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--ro-surface-2);
+}
+#app .note-block.leader-note {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+#app .note-block h4 {
+  margin: 0 0 6px;
+  font: 700 0.78rem/1.2 var(--ro-sans, inherit);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ro-muted);
+}
+#app .note-block.leader-note h4 { color: var(--ro-amber); }
+#app .note-block p { margin: 0; color: var(--ro-ink); white-space: pre-wrap; }
+#app .note-block small,
+#app .note-block .muted { color: var(--ro-muted); }
+#app .note-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ro-line);
+}
+#app .note-item:last-child { border-bottom: 0; }
+#app .note-item header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  color: var(--ro-muted);
+}
+#app .note-item header b { color: var(--ro-ink-2); }
+#app .note-compose {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+#app .note-compose span {
+  font: 600 0.75rem/1.2 var(--ro-sans, inherit);
+  color: var(--ro-muted);
+}
+#app .team-note-input,
+#drawer #leader-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid var(--ro-line-strong, #cbd5e1);
+  padding: 8px 10px;
+  resize: vertical;
+  font: 500 0.9rem/1.4 var(--ro-sans, inherit);
+  background: #fff;
+  color: #0f172a;
+}
+#app .team-note-input {
+  background: #0b1220;
+  color: var(--ro-ink);
+  border-color: var(--ro-line-strong);
+}
+#app .note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+#drawer .note-item { margin-bottom: 8px; }
+#drawer #leader-note-input { margin-top: 6px; }

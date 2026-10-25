@@ -869,7 +869,12 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             statusChangedBy: prev.statusChangedBy || '',
             statusChangedAt: prev.statusChangedAt || '',
             history: Array.isArray(prev.history) ? prev.history : [],
-            assignmentHistory
+            assignmentHistory,
+            leaderNote: prev.leaderNote || '',
+            leaderNoteBy: prev.leaderNoteBy || '',
+            leaderNoteAt: prev.leaderNoteAt || '',
+            leaderNoteDisplay: prev.leaderNoteDisplay || '',
+            teamNotes: Array.isArray(prev.teamNotes) ? prev.teamNotes : []
         };
     }
 
@@ -2213,6 +2218,101 @@ function attachReservedOrders(app, options) {
             newValue: order.status,
             source: 'admin-merged',
             details: 'Admin changed status from merged sheet'
+        });
+        notify();
+        res.json({ ok: true, order: publicOrder(order) });
+    });
+    app.post('/api/reserved-orders/admin/leader-note', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const live = loadLive();
+        const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
+        if (!order) return res.status(404).json({ error: 'Order not found.' });
+        const text = String(req.body?.note || '').trim().slice(0, 2000);
+        const now = new Date();
+        const oldValue = order.leaderNote || '';
+        order.leaderNote = text;
+        order.leaderNoteBy = text ? 'Admin' : '';
+        order.leaderNoteAt = text ? localStamp(now) : '';
+        order.leaderNoteDisplay = text ? displayStamp(now) : '';
+        live.updatedAt = now.toISOString();
+        saveLive(live);
+        audit(req, {
+            user: 'Admin',
+            role: 'admin',
+            action: text ? 'LEADER_NOTE_SET' : 'LEADER_NOTE_CLEARED',
+            entity: 'order',
+            vin: order.vin,
+            orderNumber: order.orderNumber,
+            oldValue,
+            newValue: text,
+            source: 'admin',
+            details: 'Leader note for the team'
+        });
+        notify();
+        res.json({ ok: true, order: publicOrder(order) });
+    });
+    app.post('/api/reserved-orders/team-note', (req, res) => {
+        const user = sessionUser(req.body?.token);
+        if (!user) return res.status(401).json({ error: 'Session expired. Sign in again.' });
+        const live = loadLive();
+        const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
+        if (!order) return res.status(404).json({ error: 'Order not found.' });
+        const text = String(req.body?.note || '').trim().slice(0, 2000);
+        const noteId = String(req.body?.noteId || '').trim();
+        const now = new Date();
+        order.teamNotes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
+        let action = 'TEAM_NOTE_ADDED';
+        let oldValue = '';
+        if (noteId) {
+            const index = order.teamNotes.findIndex((item) => item.id === noteId);
+            if (index < 0) return res.status(404).json({ error: 'Note not found.' });
+            if (order.teamNotes[index].recordId && order.teamNotes[index].recordId !== user.recordId) {
+                return res.status(403).json({ error: 'You can only edit your own note.' });
+            }
+            oldValue = order.teamNotes[index].text || '';
+            if (!text) {
+                order.teamNotes.splice(index, 1);
+                action = 'TEAM_NOTE_REMOVED';
+            } else {
+                order.teamNotes[index] = Object.assign({}, order.teamNotes[index], {
+                    text,
+                    by: user.name,
+                    employeeNumber: user.employeeNumber || '',
+                    recordId: user.recordId || '',
+                    updatedAt: localStamp(now),
+                    updatedDisplay: displayStamp(now)
+                });
+                action = 'TEAM_NOTE_UPDATED';
+            }
+        } else {
+            if (!text) return res.status(400).json({ error: 'Write a note first.' });
+            order.teamNotes.push({
+                id: `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+                text,
+                by: user.name,
+                employeeNumber: user.employeeNumber || '',
+                recordId: user.recordId || '',
+                at: localStamp(now),
+                display: displayStamp(now),
+                updatedAt: localStamp(now),
+                updatedDisplay: displayStamp(now)
+            });
+        }
+        live.updatedAt = now.toISOString();
+        saveLive(live);
+        audit(req, {
+            user: user.name,
+            employeeNumber: user.employeeNumber,
+            recordId: user.recordId,
+            role: user.role,
+            action,
+            entity: 'order',
+            vin: order.vin,
+            orderNumber: order.orderNumber,
+            oldValue,
+            newValue: text,
+            source: 'employee',
+            details: 'Team note on reserved order'
         });
         notify();
         res.json({ ok: true, order: publicOrder(order) });

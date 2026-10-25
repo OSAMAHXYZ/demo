@@ -451,7 +451,7 @@
             <td>${paymentCell(order)}</td>
             <td class="col-status">${statusSelectHtml(order)}</td>
             <td class="timer-cell" data-deadline="${esc(deadline)}">${esc(remain(order))}</td>
-            <td><button class="ghost" type="button" data-open="${esc(order.key)}">View</button></td>
+            <td>${order.leaderNote || (order.teamNotes && order.teamNotes.length) ? '<span class="s-pill is-info" title="Has notes">Notes</span> ' : ''}<button class="ghost" type="button" data-open="${esc(order.key)}">View</button></td>
         </tr>`;
         }).join('');
     }
@@ -460,13 +460,52 @@
         if (!order) return;
         const history = (order.history || []).map((item) => `<div><b>${esc(item.changedDisplay || item.changedAt)}</b><br>${esc(item.oldStatus || '')} → ${esc(item.status)} · ${esc(item.changedBy)} · ${esc(item.employeeNumber || '')}</div>`).join('') || '<div>No status changes yet</div>';
         const related = audit.filter((event) => event.vin === order.vin || event.orderNumber === order.orderNumber).slice(0, 30);
+        const teamNotes = (order.teamNotes || []).map((note) => `<div class="note-item"><header><b>${esc(note.by || 'Team')}</b><span>${esc(note.updatedDisplay || note.display || '')}</span></header><p dir="auto">${esc(note.text || '')}</p></div>`).join('') || '<div class="muted">No team notes yet.</div>';
         $('drawer').classList.remove('hidden');
         $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button>
             <h2>Order #${esc(order.orderNumber || 'NO ORDER')}</h2>
             <p>${esc(order.vin)} · ${esc(order.vehicle || '')}<br>Status ${esc(order.status)} · Queue #${order.queueNumber == null ? '—' : order.queueNumber}<br>Deadline ${esc(order.deadline || 'NO ASSIGN DATE')}</p>
+            <h3>Leader note</h3>
+            <p class="muted">Visible to the whole team on the employee page.</p>
+            <textarea id="leader-note-input" rows="4" maxlength="2000" placeholder="Write a leader note for this order">${esc(order.leaderNote || '')}</textarea>
+            <div style="display:flex;gap:8px;margin:8px 0 16px;align-items:center;">
+                <button class="solid" type="button" id="leader-note-save">Save leader note</button>
+                <button class="ghost" type="button" id="leader-note-clear">Clear</button>
+                <span class="muted" id="leader-note-feedback"></span>
+            </div>
+            <h3>Team notes</h3>
+            <div class="mkt-fields">${teamNotes}</div>
             <h3>Status history</h3>${history}
             <h3>Audit</h3>${related.map((event) => `<div>${esc(event.display || event.at)} · ${esc(event.action)} · ${esc(event.user)}</div>`).join('') || '<div>No audit events</div>'}`;
         $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
+        const saveLeader = async (text) => {
+            const feedback = $('leader-note-feedback');
+            if (feedback) feedback.textContent = 'Saving…';
+            try {
+                const data = await api('/api/reserved-orders/admin/leader-note', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password(), key: order.key, note: text })
+                });
+                const next = data.order || {};
+                order.leaderNote = next.leaderNote || '';
+                order.leaderNoteBy = next.leaderNoteBy || '';
+                order.leaderNoteAt = next.leaderNoteAt || '';
+                order.leaderNoteDisplay = next.leaderNoteDisplay || '';
+                if (feedback) feedback.textContent = text ? 'Saved.' : 'Cleared.';
+            } catch (e) {
+                if (feedback) feedback.textContent = e.message || 'Could not save.';
+            }
+        };
+        if ($('leader-note-save')) {
+            $('leader-note-save').addEventListener('click', () => saveLeader(($('leader-note-input') || {}).value || ''));
+        }
+        if ($('leader-note-clear')) {
+            $('leader-note-clear').addEventListener('click', () => {
+                if ($('leader-note-input')) $('leader-note-input').value = '';
+                saveLeader('');
+            });
+        }
     }
     function renderStaff() {
         $('staff-list').innerHTML = '<h2>Employees</h2>' + staff.map((person) => `<div class="staff-row" style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #e6e8ee;">
