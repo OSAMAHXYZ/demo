@@ -261,7 +261,9 @@ body.cp-mode #contact-performance-host { flex: 1; min-height: 0; min-width: 0; d
 .cp-ach-total { text-align: right; color: var(--cp-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .cp-ach-pct { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--cp-ink); }
 .cp-employees .cp-table td,
-.cp-employees .cp-table th { height: 32px; padding: 4px 8px; max-width: none; }
+.cp-employees .cp-table th { height: 32px; padding: 4px 8px; max-width: none; text-align: center; vertical-align: middle; }
+.cp-employees .cp-table th button { width: 100%; text-align: center; }
+.cp-employees .cp-table td.num { text-align: center; }
 .cp-employees .cp-table td:nth-child(2) { max-width: 280px; }
 .cp-table tr.is-on td { background: #eff6ff; }
 .cp-meter { height: 6px; background: #eef2f6; border-radius: 99px; overflow: hidden; width: 88px; display: inline-block; vertical-align: middle; margin-right: 6px; }
@@ -562,7 +564,8 @@ body.cp-mode #contact-performance-host { display: block; height: auto; min-heigh
 .cp-table { font-size: 12.5px; }
 .cp-table th { padding: 10px 10px; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
 .cp-table td { padding: 9px 10px; max-width: 220px; }
-.cp-employees .cp-table td, .cp-employees .cp-table th { height: 40px; padding: 8px 10px; }
+.cp-employees .cp-table td, .cp-employees .cp-table th { height: 40px; padding: 8px 10px; text-align: center; vertical-align: middle; }
+.cp-employees .cp-table td.num { text-align: center; }
 .cp-table td.num { font-family: "Space Grotesk", Manrope, sans-serif; }
 .cp-raw { display: block; margin-top: 3px; font-size: 10.5px; color: var(--cp-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .cp-pager { margin-top: 10px; font-size: 12.5px; }
