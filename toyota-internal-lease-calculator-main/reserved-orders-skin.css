@@ -1407,11 +1407,27 @@
   border-top: 2px solid rgba(251, 191, 36, 0.45);
   background: rgba(15, 23, 42, 0.55);
 }
+.excel-live .col-updated-by {
+  min-width: 150px;
+  max-width: 230px;
+  white-space: normal !important;
+  vertical-align: top;
+}
 .excel-live .col-updated-by b { display: block; color: #eef3fa; }
-.excel-live .col-updated-by small,
+.excel-live .col-updated-by small {
+  display: block;
+  color: #93a0b8;
+  font-size: 0.7rem;
+}
+.excel-live .col-updated-by .saudi-time,
 .excel-live .saudi-time,
 #drawer .saudi-time { color: #fbbf24; }
-.excel-live .col-updated-at { min-width: 140px; white-space: normal !important; }
+.excel-live .col-updated-by .saudi-time {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
 #drawer .status-history-row {
   padding: 8px 0;
   border-bottom: 1px solid #e6e8ee;

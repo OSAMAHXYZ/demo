@@ -160,7 +160,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by / Updated at show who changed status and when (Saudi time).'
+        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by shows who changed status and when (Saudi time).'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -690,28 +690,26 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            const meta = ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry', 'Time left'];
+            const meta = ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left'];
             const titles = {
                 Expiry: 'Expiry date',
                 'Time left': 'Time left',
                 Source: 'Source',
                 'Leader note': 'Leader note',
-                'Updated by': 'Updated by',
-                'Updated at': 'Updated at (Saudi)'
+                'Updated by': 'Updated by'
             };
             MERGED_COL_ORDER.forEach((label) => { titles[label] = label; });
             // Keep every merged column so non-duplicate rows with blanks still appear.
             return { cols: meta.concat(MERGED_COL_ORDER), titles };
         }
         const meta = source === 'reserved'
-            ? ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry', 'Time left']
-            : ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry', 'Time left'];
+            ? ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left']
+            : ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left'];
         const titles = {
             Expiry: 'Expiry date',
             'Time left': 'Time left',
             'Leader note': 'Leader note',
-            'Updated by': 'Updated by',
-            'Updated at': 'Updated at (Saudi)'
+            'Updated by': 'Updated by'
         };
         const letters = new Set();
         list.forEach((order) => orderSheetFields(order, source).forEach((field) => {
@@ -760,24 +758,23 @@
         if (label === 'Status') return order.status || '';
         if (label === 'Leader note') return order.leaderNote || '';
         if (label === 'BO ahead') return aheadText(order);
-        if (label === 'Updated by') {
+        if (label === 'Updated by' || label === 'Team notes' || label === 'Updated at') {
             const who = order.statusChangedBy || '';
             const id = order.statusChangedEmployeeNumber || '';
-            return who ? (id ? `${who} · ${id}` : who) : '';
-        }
-        if (label === 'Updated at') {
-            if (order.statusChangedDisplay) return order.statusChangedDisplay;
-            const parsed = parseLocal(order.statusChangedAt);
-            if (!parsed) return order.statusChangedAt || '';
-            return parsed.toLocaleString('en-GB', {
-                timeZone: 'Asia/Riyadh',
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            }) + ' (Saudi)';
+            const when = order.statusChangedDisplay
+                || (parseLocal(order.statusChangedAt)
+                    ? parseLocal(order.statusChangedAt).toLocaleString('en-GB', {
+                        timeZone: 'Asia/Riyadh',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                    }) + ' (Saudi)'
+                    : (order.statusChangedAt || ''));
+            if (!who && !when) return '';
+            return [who ? (id ? `${who} · ${id}` : who) : '', when].filter(Boolean).join(' · ');
         }
         if (label === 'Expiry') {
             if (source === 'merged' && order.mergedExpiry) return order.mergedExpiry;
@@ -871,15 +868,26 @@
                     ${order.leaderNoteDisplay ? `<small>${esc(order.leaderNoteBy || 'Admin')} · ${esc(order.leaderNoteDisplay)}</small>` : ''}
                 </td>`;
             }
-            if (label === 'Updated by') {
-                return value
-                    ? `<td class="col-updated-by"><b>${esc(order.statusChangedBy || value)}</b>${order.statusChangedEmployeeNumber ? `<small>${esc(order.statusChangedEmployeeNumber)}</small>` : ''}</td>`
-                    : '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
-            }
-            if (label === 'Updated at') {
-                return value
-                    ? `<td class="col-updated-at"><span class="saudi-time">${esc(value)}</span></td>`
-                    : '<td class="col-updated-at"><span class="ahead-empty">—</span></td>';
+            if (label === 'Updated by' || label === 'Team notes' || label === 'Updated at') {
+                const who = order.statusChangedBy || '';
+                const id = order.statusChangedEmployeeNumber || '';
+                const when = order.statusChangedDisplay
+                    || (parseLocal(order.statusChangedAt)
+                        ? parseLocal(order.statusChangedAt).toLocaleString('en-GB', {
+                            timeZone: 'Asia/Riyadh',
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                        }) + ' (Saudi)'
+                        : (order.statusChangedAt || ''));
+                if (!who && !when) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
+                return `<td class="col-updated-by">
+                    ${who ? `<b>${esc(who)}</b>${id ? `<small>${esc(id)}</small>` : ''}` : ''}
+                    ${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}
+                </td>`;
             }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'Expiry') return `<td class="col-expiry">${esc(value || '—')}</td>`;
