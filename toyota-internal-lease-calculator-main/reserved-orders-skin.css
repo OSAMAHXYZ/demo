@@ -1525,22 +1525,33 @@
 #drawer .note-item { margin-bottom: 8px; }
 #drawer #leader-note-input { margin-top: 6px; }
 
-/* Area / Share level · RTLESAL or retail electronic sales = ok, else red */
-.excel-live td.cell-retail-ok {
-  background: rgba(16, 185, 129, 0.12) !important;
+/* Area / Share level · RTLESAL / Retail Electronic Sales = green, anything else = red.
+   Must beat .excel-live tbody td / even / hover !important striping. */
+.excel-live tbody td.cell-retail-ok,
+.excel-live tbody tr:nth-child(even) td.cell-retail-ok,
+.excel-live tbody tr:hover td.cell-retail-ok,
+#live-sheet-merged.excel-live tbody td.cell-retail-ok,
+#live-sheet-esales.excel-live tbody td.cell-retail-ok,
+#live-sheet-reserved.excel-live tbody td.cell-retail-ok {
+  background: rgba(16, 185, 129, 0.28) !important;
   color: #6ee7b7 !important;
-  font-weight: 700;
+  font-weight: 800;
 }
-.excel-live td.cell-retail-bad {
-  background: rgba(235, 10, 30, 0.28) !important;
+.excel-live tbody td.cell-retail-bad,
+.excel-live tbody tr:nth-child(even) td.cell-retail-bad,
+.excel-live tbody tr:hover td.cell-retail-bad,
+#live-sheet-merged.excel-live tbody td.cell-retail-bad,
+#live-sheet-esales.excel-live tbody td.cell-retail-bad,
+#live-sheet-reserved.excel-live tbody td.cell-retail-bad {
+  background: rgba(235, 10, 30, 0.38) !important;
   color: #fecaca !important;
   font-weight: 800;
 }
-.excel-live tbody tr:hover td.cell-retail-bad {
-  background: rgba(235, 10, 30, 0.4) !important;
-}
-.excel-live td.cell-retail-empty {
+.excel-live tbody td.cell-retail-empty,
+.excel-live tbody tr:nth-child(even) td.cell-retail-empty,
+.excel-live tbody tr:hover td.cell-retail-empty {
   background: rgba(148, 163, 184, 0.08) !important;
+  color: #94a3b8 !important;
 }
 
 /* Admin · shared status list */
