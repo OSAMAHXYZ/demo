@@ -278,6 +278,30 @@
         if (/^(product|alj suffix|model year|age|assign date|salesman name|sharing levels|vehicle search area)$/i.test(value)) return '';
         return value;
     }
+    function looksLikeVinText(value) {
+        return /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(String(value || '').trim());
+    }
+    function looksLikeDateText(value) {
+        const text = String(value || '').trim();
+        return /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(text) || /^\d{4}-\d{2}-\d{2}/.test(text);
+    }
+    function isReservedFileOrder(order) {
+        if (!order) return false;
+        if (order.inEsales === false || order.fromReservedFile) return true;
+        if (order.inReservedFile && !(Array.isArray(order.esalesFields) && order.esalesFields.length)) return true;
+        return false;
+    }
+    function reservedField(order, letter) {
+        const want = String(letter || '').toUpperCase();
+        const pools = [order && order.reservedFields, order && order.fields];
+        for (let p = 0; p < pools.length; p++) {
+            const fields = Array.isArray(pools[p]) ? pools[p] : [];
+            const hit = fields.find((field) => String(field.col || '').trim().toUpperCase() === want);
+            if (!hit || isBlankValue(hit.value)) continue;
+            return String(hit.value).replace(/\u00a0/g, ' ').trim();
+        }
+        return '';
+    }
     function productOnly(product, sfx) {
         const name = String(product || '').trim();
         const suffix = String(sfx || '').trim();
@@ -286,6 +310,7 @@
         return name;
     }
     function areaText(order) {
+        if (isReservedFileOrder(order)) return '';
         const fromB = columnText(order, 'B');
         if (fromB) return fromB;
         const first = sourceFields(order)[0];
@@ -305,8 +330,9 @@
         return `${iso[3]}.${iso[2]}.${iso[1]}`;
     }
     function assignText(order) {
+        if (isReservedFileOrder(order)) return order.assignDisplay || '';
         const raw = columnText(order, 'G');
-        if (raw) return dateText(raw);
+        if (raw && !looksLikeVinText(raw) && !/^[A-Z0-9]{2,4}$/i.test(raw)) return dateText(raw);
         return order.assignDisplay || '';
     }
     function columnDeadline(order) {
@@ -337,6 +363,9 @@
         return '';
     }
     function sourceFields(order) {
+        if (isReservedFileOrder(order) && Array.isArray(order.reservedFields) && order.reservedFields.length) {
+            return order.reservedFields;
+        }
         return Array.isArray(order.fields) ? order.fields : [];
     }
     function isBlankValue(value) {
@@ -406,18 +435,47 @@
         const deadline = columnDeadline(order);
         const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
         const hours = order.paymentHours || 48;
-        const sfx = columnText(order, 'J');
-        const product = productOnly(columnText(order, 'I'), sfx);
-        const year = columnText(order, 'K');
-        const ageRaw = columnText(order, 'P');
-        const area = areaText(order);
-        const share = columnText(order, 'C');
-        const colors = [columnText(order, 'M'), columnText(order, 'N')].filter((item) => !isBlankValue(item)).join(' / ');
-        const advisor = columnText(order, 'T');
-        const assignedOn = assignText(order);
-        const customer = firstText(order, order.customerName, (label) => label === 'customer' || label === 'customer name' || label === 'العميل');
+        const reservedOnly = isReservedFileOrder(order);
+        let sfx;
+        let product;
+        let year;
+        let ageRaw;
+        let area;
+        let share;
+        let colors;
+        let advisor;
+        let assignedOn;
+        if (reservedOnly) {
+            // Reserved Order File layout: E product, F sfx, D year, G/H colors, B name, C order, I VIN, J expiry.
+            sfx = reservedField(order, 'F');
+            const rawProduct = reservedField(order, 'E') || (!looksLikeVinText(order.vehicle) ? order.vehicle : '');
+            product = productOnly(rawProduct, sfx);
+            year = reservedField(order, 'D') || order.modelYear || '';
+            ageRaw = '';
+            area = '';
+            share = '';
+            colors = [reservedField(order, 'G') || order.exterior, reservedField(order, 'H') || order.interior]
+                .filter((item) => !isBlankValue(item)).join(' / ');
+            advisor = '';
+            assignedOn = '';
+        } else {
+            sfx = columnText(order, 'J');
+            if (looksLikeDateText(sfx)) sfx = '';
+            product = productOnly(columnText(order, 'I'), sfx);
+            if (looksLikeVinText(product)) product = productName(order) || '';
+            year = columnText(order, 'K');
+            ageRaw = columnText(order, 'P');
+            area = areaText(order);
+            share = columnText(order, 'C');
+            colors = [columnText(order, 'M'), columnText(order, 'N')].filter((item) => !isBlankValue(item)).join(' / ');
+            advisor = columnText(order, 'T');
+            assignedOn = assignText(order);
+        }
+        const customer = reservedOnly
+            ? (firstText(order, order.customerName, (label) => label === 'name' || label === 'customer' || label === 'customer name' || label === 'العميل') || reservedField(order, 'B'))
+            : firstText(order, order.customerName, (label) => label === 'customer' || label === 'customer name' || label === 'العميل');
         const img = carImage(product);
-        const assigned = Boolean(advisor);
+        const assigned = Boolean(advisor && String(advisor).toLowerCase() !== 'unassigned');
         const orderLabel = order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER';
         const vin = show(order.vin, 'VIN NOT FOUND');
         const initial = product ? product.slice(0, 1) : '';
@@ -443,9 +501,9 @@
             ${specs ? `<div class="lane-mid">${specs}</div>` : ''}
             <div class="lane-assign">
                 <span class="assign-pill ${assigned ? 'on' : 'off'}">${assigned ? 'Assigned' : 'Unassigned'}</span>
-                ${meta('Advisor', esc(advisor || 'UNASSIGNED'), advisor || 'UNASSIGNED')}
-                ${meta('Assignment date', esc(assignedOn || 'No Assignment Date'), assignedOn || 'No Assignment Date')}
-                ${meta('Payment', esc(show(order.paymentLabel, 'UNKNOWN')))}
+                ${assigned ? meta('Advisor', esc(advisor), advisor) : ''}
+                ${assignedOn ? meta('Assignment date', esc(assignedOn), assignedOn) : ''}
+                ${(!reservedOnly && order.paymentLabel && order.paymentLabel !== 'UNKNOWN') ? meta('Payment', esc(order.paymentLabel), order.paymentLabel) : ''}
                 <div class="meta ahead-meta"><span>Upcoming queue</span>${aheadHtml(order)}</div>
             </div>
             <div class="lane-side">

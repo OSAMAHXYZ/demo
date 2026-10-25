@@ -427,9 +427,69 @@ function rowFields(headers, line) {
     return fields;
 }
 
+function isReservedOrderFileLayout(headers) {
+    const list = headers || [];
+    const productCol = findHeaderIndex([/^product$/i, /^model$/i], list);
+    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], list);
+    const yearCol = findHeaderIndex([/model\s*year/, /^year$/], list);
+    const joined = list.map((header) => headerText(header)).join(' | ');
+    // Reserved Order File: Product/year before VIN (e.g. D year, E product, I VIN).
+    // Stock E-Sales: Product at I, VIN at L.
+    if (productCol >= 0 && vinCol >= 0 && productCol < vinCol && productCol <= columnIndex('F')) return true;
+    if (yearCol >= 0 && vinCol >= 0 && yearCol < vinCol && yearCol <= columnIndex('E')) return true;
+    if (/order\s*no/.test(joined) && /exterior\s*color/.test(joined) && /interior\s*color/.test(joined)) return true;
+    return false;
+}
+
+function extractReservedOrderFileRows(grid) {
+    const headerIdx = detectHeaderRow(grid);
+    const headers = grid[headerIdx] || [];
+    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
+    const orderCol = findHeaderIndex([/order\s*(no|number|#)?/, /sales\s*order/, /رقم الطلب/, /^bo$/], headers);
+    const customerCol = findHeaderIndex([/^name$/, /customer\s*name/, /customer/, /guest/, /العميل/], headers);
+    const productCol = findHeaderIndex([/^product$/i, /^model$/i, /vehicle/], headers);
+    const suffixCol = findHeaderIndex([/^sfx$/i, /^suffix$/i, /alj\s*suffix/i, /au\s*suffix/i, /^order$/i], headers);
+    const yearCol = findHeaderIndex([/model\s*year/, /^year$/], headers);
+    const exteriorCol = findHeaderIndex([/exterior/, /ext(erior)?\s*color/], headers);
+    const interiorCol = findHeaderIndex([/interior/, /int(erior)?\s*color/], headers);
+    const expiryCol = findHeaderByPriority([
+        [/expir/, /انتهاء/, /صلاحية/],
+        [/valid\s*(until|to|thru)/, /reservation\s*end/]
+    ], headers);
+    const rows = [];
+    for (let r = headerIdx + 1; r < grid.length; r++) {
+        const line = grid[r] || [];
+        if (!line.some((v) => cleanText(v))) continue;
+        rows.push({
+            rowIndex: r + 1,
+            vin: cell(line, vinCol >= 0 ? vinCol : columnIndex('I')),
+            orderNumber: cell(line, orderCol >= 0 ? orderCol : columnIndex('C')),
+            vehicle: cell(line, productCol >= 0 ? productCol : columnIndex('E')),
+            suffix: cell(line, suffixCol >= 0 ? suffixCol : columnIndex('F')),
+            exterior: cell(line, exteriorCol >= 0 ? exteriorCol : columnIndex('G')),
+            interior: cell(line, interiorCol >= 0 ? interiorCol : columnIndex('H')),
+            modelYear: cell(line, yearCol >= 0 ? yearCol : columnIndex('D')),
+            salesAdvisor: '',
+            customerName: customerCol >= 0 ? cell(line, customerCol) : cell(line, columnIndex('B')),
+            createdRaw: '',
+            assignRaw: '',
+            paymentRaw: '',
+            statusRaw: '',
+            expiryRaw: expiryCol >= 0 ? cell(line, expiryCol) : cell(line, columnIndex('J')),
+            searchArea: '',
+            shareLevel: '',
+            reservationAge: '',
+            fields: rowFields(headers, line),
+            reservedFileLayout: true
+        });
+    }
+    return { headerIdx, rows };
+}
+
 function extractReservedRows(grid) {
     const headerIdx = detectHeaderRow(grid);
     const headers = grid[headerIdx] || [];
+    if (isReservedOrderFileLayout(headers)) return extractReservedOrderFileRows(grid);
     const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
     const orderCol = findHeaderIndex([/order\s*(no|number|#)?/, /sales\s*order/, /رقم الطلب/, /^bo$/], headers);
     const customerCol = findHeaderIndex([/customer\s*name/, /customer/, /guest/, /العميل/], headers);
@@ -846,8 +906,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 modelYear: cleanText(row.modelYear),
                 exterior: cleanText(row.exterior),
                 interior: cleanText(row.interior),
-                searchArea: cleanText(row.searchArea) || '—',
-                shareLevel: cleanText(row.shareLevel) || '—',
+                searchArea: cleanText(row.searchArea) || '',
+                shareLevel: cleanText(row.shareLevel) || '',
                 allocationAging: parseAgingDays(row.reservationAge),
                 fields: Array.isArray(row.fields) ? row.fields : [],
                 esalesFields: [],
