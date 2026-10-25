@@ -844,7 +844,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         const reservedFile = extractReservedRows(reservedFileSheet.grid || []);
         (reservedFile.rows || []).forEach((row) => {
             const vin = normalizeVin(row.vin);
-            if (!vin) return;
+            // Skip totals / age / junk cells that land in the VIN column (e.g. "24").
+            if (!vin || !/^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vin)) return;
             reservedFileRows += 1;
             const existing = byVin.get(vin);
             if (existing) {
@@ -893,7 +894,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 paymentKind: payment.kind,
                 paymentLabel: payment.kind === 'unknown' ? 'UNKNOWN' : payment.label,
                 paymentHours: payment.hours,
-                deadline: '',
+                // Reserved-only rows have no assign date — drive the timer from expiry.
+                deadline: expiry && expiry.expiryDate ? expiry.expiryDate : '',
                 status: normalizeStatus(row.statusRaw),
                 statusChangedBy: '',
                 statusChangedAt: '',

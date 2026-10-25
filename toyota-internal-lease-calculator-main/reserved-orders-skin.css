@@ -1153,7 +1153,7 @@
   .excel-live tbody tr.is-novin td { color: #fbbf24 !important; background: rgba(251, 191, 36, 0.08) !important; }
   .excel-live .col-queue { min-width: 56px; text-align: center; }
   .excel-live .col-status { min-width: 120px; }
-  #live-sheet-merged .admin-status-select {
+  .admin-status-select {
     width: 100%;
     min-width: 140px;
     max-width: 200px;
@@ -1165,14 +1165,19 @@
     font: 600 0.78rem/1.2 var(--ro-sans, inherit);
     cursor: pointer;
   }
-  #live-sheet-merged .admin-status-select:focus {
+  .admin-status-select:focus {
     outline: 2px solid rgba(96, 165, 250, 0.55);
     outline-offset: 1px;
   }
-  #live-sheet-merged .admin-status-select:disabled { opacity: 0.6; cursor: wait; }
-  #live-sheet-merged .admin-status-select.is-saved {
+  .admin-status-select:disabled { opacity: 0.6; cursor: wait; }
+  .admin-status-select.is-saved {
     border-color: rgba(52, 211, 153, 0.7);
     box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+  }
+  #panel-orders .admin-status-select {
+    background: #fff;
+    color: #0f172a;
+    border-color: #cbd5e1;
   }
   .excel-live .col-ahead {
     min-width: 220px;

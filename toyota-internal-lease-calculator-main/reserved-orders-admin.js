@@ -38,13 +38,51 @@
         return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
     }
     function pad(n) { return String(n).padStart(2, '0'); }
+    function orderDeadline(order) {
+        if (order && order.deadline && parseLocal(order.deadline)) return order.deadline;
+        if (order && order.expiryDate && parseLocal(order.expiryDate)) return order.expiryDate;
+        const iso = String(order && order.expiryDate || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}T23:59:59`;
+        const display = String(order && order.expiryDisplay || '').trim();
+        const dmy = display.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+        if (dmy) {
+            const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+            return `${year}-${pad(dmy[2])}-${pad(dmy[1])}T23:59:59`;
+        }
+        return order && order.deadline || '';
+    }
     function remain(order) {
-        const end = parseLocal(order.deadline);
+        const end = parseLocal(orderDeadline(order));
         if (!end) return 'NO ASSIGN DATE';
         const ms = end.getTime() - Date.now();
         if (ms <= 0) return 'EXPIRED';
         const total = Math.floor(ms / 1000);
         return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+    }
+    function statusSelectHtml(order) {
+        const value = order.status || '';
+        const options = STATUSES.map((item) => {
+            const selected = item === value ? ' selected' : '';
+            return `<option value="${esc(item)}"${selected}>${esc(item)}</option>`;
+        }).join('');
+        const extra = value && !STATUSES.includes(value)
+            ? `<option value="${esc(value)}" selected>${esc(value)}</option>`
+            : '';
+        return `<select class="admin-status-select" data-key="${esc(order.key)}" data-prev="${esc(value)}" title="Change status" aria-label="Change status">${extra}${options}</select>`;
+    }
+    function paymentCell(order) {
+        const label = String(order.paymentLabel || '').trim();
+        if (label && label.toUpperCase() !== 'UNKNOWN') return esc(label);
+        const salesType = fieldOf(order, 'U') || fieldValueFromList(orderSheetFields(order, 'esales'), 'U');
+        if (salesType) {
+            const st = /^\d$/.test(salesType) ? '0' + salesType : salesType;
+            return esc(`Type ${st}`);
+        }
+        return '—';
+    }
+    function isRealVin(order) {
+        const vin = String(order && order.vin || '').trim();
+        return /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vin);
     }
     async function api(url, options) {
         const res = await fetch(url, options);
@@ -395,22 +433,26 @@
         const payment = $('admin-payment').value;
         const expiredOnly = $('admin-expired').value === 'expired';
         const rows = orders.filter((order) => {
+            if (!isRealVin(order)) return false;
             if (q && ![order.vin, order.orderNumber, order.salesAdvisor, order.customerName].join(' ').toLowerCase().includes(q)) return false;
             if (status && order.status !== status) return false;
             if (payment && order.paymentKind !== payment) return false;
             if (expiredOnly && remain(order) !== 'EXPIRED') return false;
             return true;
         }).sort((a, b) => (a.queueNumber || 0) - (b.queueNumber || 0));
-        $('admin-rows').innerHTML = rows.map((order) => `<tr>
+        $('admin-rows').innerHTML = rows.map((order) => {
+            const deadline = orderDeadline(order);
+            return `<tr>
             <td>#${order.queueNumber == null ? '—' : order.queueNumber}</td>
             <td>${esc(order.orderNumber || 'NO ORDER')}</td>
             <td>${esc(order.vin || 'VIN NOT FOUND')}</td>
             <td>${esc(order.salesAdvisor || 'UNASSIGNED')}</td>
-            <td>${esc(order.paymentLabel || 'UNKNOWN')}</td>
-            <td>${esc(order.status || '')}</td>
-            <td class="timer-cell" data-deadline="${esc(order.deadline || '')}">${esc(remain(order))}</td>
+            <td>${paymentCell(order)}</td>
+            <td class="col-status">${statusSelectHtml(order)}</td>
+            <td class="timer-cell" data-deadline="${esc(deadline)}">${esc(remain(order))}</td>
             <td><button class="ghost" type="button" data-open="${esc(order.key)}">View</button></td>
-        </tr>`).join('');
+        </tr>`;
+        }).join('');
     }
     function openOrder(key) {
         const order = orders.find((item) => item.key === key);
@@ -680,14 +722,7 @@
             const value = sheetValue(order, label, source);
             if (label === 'Status') {
                 if (source === 'merged' && order.key) {
-                    const options = STATUSES.map((item) => {
-                        const selected = item === value ? ' selected' : '';
-                        return `<option value="${esc(item)}"${selected}>${esc(item)}</option>`;
-                    }).join('');
-                    const extra = value && !STATUSES.includes(value)
-                        ? `<option value="${esc(value)}" selected>${esc(value)}</option>`
-                        : '';
-                    return `<td class="col-status"><select class="admin-status-select" data-key="${esc(order.key)}" data-prev="${esc(value || '')}" title="Change status" aria-label="Change status for ${esc(order.vin || order.orderNumber || 'order')}">${extra}${options}</select></td>`;
+                    return `<td class="col-status">${statusSelectHtml(order)}</td>`;
                 }
                 return `<td class="col-status">${statusPill(value)}</td>`;
             }
@@ -800,6 +835,12 @@
     ['admin-search', 'admin-status', 'admin-payment', 'admin-expired'].forEach((id) => $(id).addEventListener('input', renderOrders));
     ['audit-q', 'audit-employee', 'audit-action'].forEach((id) => $(id).addEventListener('input', renderAudit));
     $('admin-rows').addEventListener('click', (event) => { const button = event.target.closest('[data-open]'); if (button) openOrder(button.dataset.open); });
+    $('admin-rows').addEventListener('change', (event) => {
+        const select = event.target.closest('.admin-status-select');
+        if (!select) return;
+        if (select.value === select.dataset.prev) return;
+        adminSetStatus(select.dataset.key, select.value, select);
+    });
     $('audit-rows').addEventListener('click', (event) => {
         const button = event.target.closest('[data-audit]');
         if (!button) return;
