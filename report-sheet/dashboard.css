@@ -12543,12 +12543,10 @@ body.alloc-mode .badge.na { background: rgba(148, 163, 184, 0.16) !important; co
 
 /* —— Reserved Vehicles Tracker · full-screen cockpit —— */
 body.rv-mode { overflow: hidden !important; }
-body.rv-mode .app-topbar .global-search,
-body.rv-mode .app-topbar .topbar-actions .present-btn,
-body.rv-mode .app-topbar .topbar-actions .day-toggle { display: none !important; }
+body.rv-mode .app-topbar { display: none !important; }
 body.rv-mode #panel-reservedvehicles {
   position: fixed;
-  top: var(--topbar-h);
+  top: 0;
   left: var(--sidebar-w);
   right: 0;
   bottom: 0;
@@ -12575,19 +12573,33 @@ body.rv-mode #dashboard.show {
   max-height: none;
   padding: 0 !important;
 }
-body.rv-mode #rv-empty { margin: 18px; }
+body.rv-mode #rv-empty {
+  margin: auto;
+  max-width: 640px;
+  width: calc(100% - 32px);
+}
 body.rv-mode #rv-dash.rv-dash,
 body.rv-mode #rv-dash.rv-tower {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "top"
+    "toolbar"
+    "kpis"
+    "main";
   gap: 10px;
   padding: 12px 14px 14px;
   color: #e8eef7;
   overflow: hidden;
 }
+body.rv-mode .rv-top { grid-area: top; }
+body.rv-mode .rv-toolbar { grid-area: toolbar; }
+body.rv-mode #rv-kpis { grid-area: kpis; }
+body.rv-mode .rv-main { grid-area: main; }
 body.rv-mode .rv-top {
   display: flex;
   align-items: center;
@@ -12947,6 +12959,8 @@ body.rv-mode .rv-banner {
   border-radius: 10px;
   padding: 8px 12px;
 }
+body.rv-mode .rv-banner[hidden] { display: none !important; }
+body.rv-mode .rv-toolbar .rv-banner + .rv-banner { margin-top: 6px; }
 body.rv-mode .rv-pager {
   display: flex;
   justify-content: flex-end;

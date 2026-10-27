@@ -27,7 +27,7 @@
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261027rvfs1" />
+  <link rel="stylesheet" href="dashboard.css?v=20261027rvfs2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -2606,22 +2606,24 @@ body.live-app #panel-salesreport .sr-emp-sum {
               <label>Compare to<select id="rv-push-to"><option value="">Later push</option></select></label>
               <label>From<input id="rv-date-from" type="date" /></label>
               <label>To<input id="rv-date-to" type="date" /></label>
+              <label>Status
+                <select id="rv-filter-status" title="Filter VIN status">
+                  <option value="">All statuses</option>
+                  <option value="proforma">Has Proforma</option>
+                  <option value="noproforma">No Proforma</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="rtl">RTL Stock</option>
+                  <option value="missing">Not found</option>
+                  <option value="queue">In BO queue</option>
+                  <option value="noqueue">Not in BO file</option>
+                </select>
+              </label>
               <button type="button" class="btn" id="rv-compare">Compare Pushes</button>
-              <select id="rv-filter-status" title="Filter VIN status">
-                <option value="">All statuses</option>
-                <option value="proforma">Has Proforma</option>
-                <option value="noproforma">No Proforma</option>
-                <option value="delivered">Delivered</option>
-                <option value="rtl">RTL Stock</option>
-                <option value="missing">Not found</option>
-                <option value="queue">In BO queue</option>
-                <option value="noqueue">Not in BO file</option>
-              </select>
             </div>
             <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
+            <p class="rv-banner" id="rv-snapshot-banner" hidden></p>
+            <p class="rv-banner" id="rv-compare-result" hidden></p>
           </div>
-          <p class="rv-banner" id="rv-snapshot-banner" hidden></p>
-          <p class="rv-banner" id="rv-compare-result" hidden></p>
           <div class="bo-kpis" id="rv-kpis"></div>
           <div class="rv-main">
             <section class="rv-board" id="rv-board" aria-label="Live sheet, marketing orders, and VIN assignment history">
