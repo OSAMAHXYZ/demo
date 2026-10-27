@@ -27,7 +27,7 @@
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261023rv2" />
+  <link rel="stylesheet" href="dashboard.css?v=20261027rvfs1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -2599,75 +2599,81 @@ body.live-app #panel-salesreport .sr-emp-sum {
               </button>
             </div>
           </header>
-          <div class="rv-controls">
-            <label>Push<select id="rv-push"><option value="">Current live sheet</option></select></label>
-            <label>Compare from<select id="rv-push-from"><option value="">Earlier push</option></select></label>
-            <label>Compare to<select id="rv-push-to"><option value="">Later push</option></select></label>
-            <label>From<input id="rv-date-from" type="date" /></label>
-            <label>To<input id="rv-date-to" type="date" /></label>
-            <button type="button" class="btn" id="rv-compare">Compare Pushes</button>
-            <select id="rv-filter-status" title="Filter VIN status">
-              <option value="">All statuses</option>
-              <option value="proforma">Has Proforma</option>
-              <option value="noproforma">No Proforma</option>
-              <option value="delivered">Delivered</option>
-              <option value="rtl">RTL Stock</option>
-              <option value="missing">Not found</option>
-              <option value="queue">In BO queue</option>
-              <option value="noqueue">Not in BO file</option>
-            </select>
+          <div class="rv-toolbar">
+            <div class="rv-controls">
+              <label>Push<select id="rv-push"><option value="">Current live sheet</option></select></label>
+              <label>Compare from<select id="rv-push-from"><option value="">Earlier push</option></select></label>
+              <label>Compare to<select id="rv-push-to"><option value="">Later push</option></select></label>
+              <label>From<input id="rv-date-from" type="date" /></label>
+              <label>To<input id="rv-date-to" type="date" /></label>
+              <button type="button" class="btn" id="rv-compare">Compare Pushes</button>
+              <select id="rv-filter-status" title="Filter VIN status">
+                <option value="">All statuses</option>
+                <option value="proforma">Has Proforma</option>
+                <option value="noproforma">No Proforma</option>
+                <option value="delivered">Delivered</option>
+                <option value="rtl">RTL Stock</option>
+                <option value="missing">Not found</option>
+                <option value="queue">In BO queue</option>
+                <option value="noqueue">Not in BO file</option>
+              </select>
+            </div>
+            <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
           </div>
           <p class="rv-banner" id="rv-snapshot-banner" hidden></p>
           <p class="rv-banner" id="rv-compare-result" hidden></p>
-          <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
           <div class="bo-kpis" id="rv-kpis"></div>
-          <section class="rv-board" id="rv-board" aria-label="Live sheet, marketing orders, and VIN assignment history">
-            <article class="rv-board-card rv-live-card">
+          <div class="rv-main">
+            <section class="rv-board" id="rv-board" aria-label="Live sheet, marketing orders, and VIN assignment history">
+              <article class="rv-board-card rv-live-card">
+                <header class="rv-board-h">
+                  <div>
+                    <h3>Live sheet</h3>
+                    <p id="rv-live-meta">Same columns as the reserved orders admin live sheet</p>
+                  </div>
+                  <div class="rv-sheet-tabs" role="tablist">
+                    <button type="button" class="is-on" data-rv-sheet="live">Live</button>
+                    <button type="button" data-rv-sheet="removed">Sold VINs</button>
+                  </div>
+                </header>
+                <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
+                <div class="rv-live-table" id="rv-live-table"></div>
+                <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
+                <p class="foot" id="rv-table-foot"></p>
+              </article>
+              <aside class="rv-side">
+                <article class="rv-board-card rv-mkt-card-wrap">
+                  <header class="rv-board-h">
+                    <div>
+                      <h3 dir="rtl">طلبات التسويق</h3>
+                      <p id="rv-mkt-count">Order number, advisor, and when it was sent</p>
+                    </div>
+                  </header>
+                  <input id="rv-mkt-search" type="search" placeholder="Search marketing orders" aria-label="Search marketing orders" />
+                  <div class="rv-mkt-list" id="rv-mkt-rows"></div>
+                </article>
+                <article class="rv-board-card rv-history-card">
+                  <header class="rv-board-h">
+                    <div>
+                      <h3>VIN assignment</h3>
+                      <p id="rv-history-count">Who this VIN is with on reserved orders</p>
+                    </div>
+                  </header>
+                  <input id="rv-history-search" type="search" placeholder="Search VIN or employee" aria-label="Search assignment history" />
+                  <div class="rv-history-list" id="rv-history"></div>
+                </article>
+              </aside>
+            </section>
+            <section class="rv-audit" id="rv-audit-card">
               <header class="rv-board-h">
                 <div>
-                  <h3>Live sheet</h3>
-                  <p id="rv-live-meta">Same columns as the reserved orders admin live sheet</p>
-                </div>
-                <div class="rv-sheet-tabs" role="tablist">
-                  <button type="button" class="is-on" data-rv-sheet="live">Live</button>
-                  <button type="button" data-rv-sheet="removed">Sold VINs</button>
+                  <h3>Push snapshots</h3>
+                  <p id="rv-audit-count">Each push from reserved admin or the report sheet keeps live and removed VINs</p>
                 </div>
               </header>
-              <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
-              <div class="rv-live-table" id="rv-live-table"></div>
-              <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
-              <p class="foot" id="rv-table-foot"></p>
-            </article>
-            <article class="rv-board-card rv-mkt-card-wrap">
-              <header class="rv-board-h">
-                <div>
-                  <h3 dir="rtl">طلبات التسويق</h3>
-                  <p id="rv-mkt-count">Order number, advisor, and when it was sent</p>
-                </div>
-              </header>
-              <input id="rv-mkt-search" type="search" placeholder="Search marketing orders" aria-label="Search marketing orders" />
-              <div class="rv-mkt-list" id="rv-mkt-rows"></div>
-            </article>
-            <article class="rv-board-card rv-history-card">
-              <header class="rv-board-h">
-                <div>
-                  <h3>VIN assignment</h3>
-                  <p id="rv-history-count">Who this VIN is with on reserved orders</p>
-                </div>
-              </header>
-              <input id="rv-history-search" type="search" placeholder="Search VIN or employee" aria-label="Search assignment history" />
-              <div class="rv-history-list" id="rv-history"></div>
-            </article>
-          </section>
-          <section class="rv-audit" id="rv-audit-card">
-            <header class="rv-board-h">
-              <div>
-                <h3>Push snapshots</h3>
-                <p id="rv-audit-count">Each push from reserved admin or the report sheet keeps live and removed VINs</p>
-              </div>
-            </header>
-            <div class="rv-audit-table" id="rv-audit"></div>
-          </section>
+              <div class="rv-audit-table" id="rv-audit"></div>
+            </section>
+          </div>
         </div>
       </div>
 
