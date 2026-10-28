@@ -727,9 +727,12 @@
   }
   function shiftsForDate(emp, dateKey) {
     const fallback = (emp && emp.shifts) || [];
-    if (!emp || !dateKey || !emp.weekShifts) return fallback;
-    const custom = emp.weekShifts[weekStartKey(dateKey)];
-    return Array.isArray(custom) && custom.length ? custom : fallback;
+    if (!emp || !dateKey) return fallback;
+    const dayCustom = emp.dayShifts && emp.dayShifts[dateKey];
+    if (Array.isArray(dayCustom) && dayCustom.length) return dayCustom;
+    const weekCustom = emp.weekShifts && emp.weekShifts[weekStartKey(dateKey)];
+    if (Array.isArray(weekCustom) && weekCustom.length) return weekCustom;
+    return fallback;
   }
   function normalizeShifts(emp, dateKey) {
     return shiftsForDate(emp, dateKey).map((s) => {
@@ -747,6 +750,14 @@
     return keys.map((key) => {
       const label = normalizeShifts({ shifts: emp.weekShifts[key] }).map((s) => s.label).join(' / ');
       return `${weekRangeLabel(key)}: ${label}`;
+    }).join('\n');
+  }
+  function dayTimingText(emp) {
+    const keys = Object.keys((emp && emp.dayShifts) || {}).sort();
+    if (!keys.length) return '';
+    return keys.map((key) => {
+      const label = normalizeShifts({ shifts: emp.dayShifts[key] }).map((s) => s.label).join(' / ');
+      return `${fmtLong(key)}: ${label}`;
     }).join('\n');
   }
   function shiftRowError(shifts) {
@@ -840,7 +851,7 @@
     const key = weekKey(week, day);
     employees.forEach((emp) => {
       if (offMap[emp.id].has(day) || vacationOn(emp.id, key, vacations)) return;
-      const shifts = normalizeShifts(emp, week && week[0] && week[0].key);
+      const shifts = normalizeShifts(emp, key);
       BLOCKS.forEach((block) => {
         if (shifts.some((s) => overlaps(s, block))) score += 1;
       });
@@ -856,7 +867,7 @@
         employees.forEach((emp) => {
           if (offMap[emp.id].has(day) || (emp.id === extraId && day === extraDay)) return;
           if (vacationOn(emp.id, key, vacations)) return;
-          if (normalizeShifts(emp, week && week[0] && week[0].key).some((s) => overlaps(s, block))) total += 1;
+          if (normalizeShifts(emp, key).some((s) => overlaps(s, block))) total += 1;
         });
         if (total < min) min = total;
       });
@@ -864,8 +875,8 @@
     return min === Infinity ? 0 : min;
   }
   function costScore(emp, day, offMap, employees, week, vacations, minManpower) {
-    const shifts = normalizeShifts(emp, week && week[0] && week[0].key);
     const key = weekKey(week, day);
+    const shifts = normalizeShifts(emp, key);
     let covered = 0;
     let breaks = 0;
     BLOCKS.forEach((block) => {
@@ -874,7 +885,7 @@
       let others = 0;
       employees.forEach((other) => {
         if (other.id === emp.id || offMap[other.id].has(day) || vacationOn(other.id, key, vacations)) return;
-        if (normalizeShifts(other, week && week[0] && week[0].key).some((s) => overlaps(s, block))) others += 1;
+        if (normalizeShifts(other, key).some((s) => overlaps(s, block))) others += 1;
       });
       if (others < minManpower) breaks += 1;
     });
@@ -889,9 +900,9 @@
   function generateSchedule(employees, seed, week, vacations) {
     const rows = [];
     employees.forEach((emp) => {
-      const shifts = normalizeShifts(emp, week[0] && week[0].key);
-      const kind = shifts.length > 1 ? 'split' : 'standard';
       week.forEach((col) => {
+        const shifts = normalizeShifts(emp, col.key);
+        const kind = shifts.length > 1 ? 'split' : 'standard';
         const vac = vacationOn(emp.id, col.key, vacations);
         const rot = (emp.offMode === 'rotation' || emp.offMode === 'advisor-pool') ? rotationIndexFor(col.key) : null;
         const offReason = offReasonFor(emp, col);
@@ -1349,6 +1360,7 @@
         <div><span class="pill ${status.cls}">● ${esc(status.text)}</span></div>
         <div class="meta"><b>${shifts.length > 1 ? 'Split Shift' : 'Shift'}</b><br>${shifts.map((s) => esc(s.label)).join('<br>')}</div>
         ${weekTimingText(emp) ? `<div class="meta"><b>Different weeks</b><br>${esc(weekTimingText(emp)).replace(/\n/g, '<br>')}</div>` : ''}
+        ${dayTimingText(emp) ? `<div class="meta"><b>One-day times</b><br>${esc(dayTimingText(emp)).replace(/\n/g, '<br>')}</div>` : ''}
         <div class="meta">Off day<br>${esc(rule.offs)}</div>
         <div class="meta">Vacation: ${esc(vacationLine(emp))}</div>
         <div class="actions"><button class="btn small" type="button" data-act="profile" data-id="${esc(emp.id)}">Manage</button><button class="btn-primary small" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Vacation dates</button></div>
@@ -1762,6 +1774,13 @@
       shifts: source[week].map((shift) => ({ start: shift.start, end: shift.end })),
     }));
   }
+  function copyDayDraft(emp) {
+    const source = (emp && emp.dayShifts) || {};
+    return Object.keys(source).sort().map((day) => ({
+      day,
+      shifts: source[day].map((shift) => ({ start: shift.start, end: shift.end })),
+    }));
+  }
   function paintWeekShiftList() {
     const host = $('#week-shift-list');
     if (!host) return;
@@ -1772,6 +1791,17 @@
         return `<div class="week-time"><span><b>${esc(weekRangeLabel(row.week))}</b><small>${esc(label)}</small></span><button class="btn-ghost small" type="button" data-act="week-remove" data-week="${esc(row.week)}">Remove</button></div>`;
       }).join('')
       : '<p class="muted">No special week yet. The default time is used.</p>';
+  }
+  function paintDayShiftList() {
+    const host = $('#day-shift-list');
+    if (!host) return;
+    const rows = (state.dayDraft || []).slice().sort((a, b) => a.day.localeCompare(b.day));
+    host.innerHTML = rows.length
+      ? rows.map((row) => {
+        const label = normalizeShifts({ shifts: row.shifts }).map((s) => s.label).join(' / ');
+        return `<div class="week-time"><span><b>${esc(fmtLong(row.day))}</b><small>${esc(label)}</small></span><button class="btn-ghost small" type="button" data-act="day-remove" data-day="${esc(row.day)}">Remove</button></div>`;
+      }).join('')
+      : '<p class="muted">No one-day times yet. Pick a date below to override just that day.</p>';
   }
   function fillWeekTimeFields(weekKey) {
     const found = (state.weekDraft || []).find((row) => row.week === weekKey);
@@ -1784,18 +1814,41 @@
     if ($('#w-e2')) $('#w-e2').value = shifts[1] ? shifts[1].end : '21:00';
     if ($('#week-split-times')) $('#week-split-times').hidden = shifts.length < 2;
   }
+  function fillDayTimeFields(dayKey) {
+    const found = (state.dayDraft || []).find((row) => row.day === dayKey);
+    const weekFound = dayKey ? (state.weekDraft || []).find((row) => row.week === weekStartKey(dayKey)) : null;
+    const fallback = weekFound
+      ? weekFound.shifts
+      : [{ start: $('#e-s1') ? $('#e-s1').value : '12:00', end: $('#e-e1') ? $('#e-e1').value : '21:00' }];
+    const shifts = found ? found.shifts : fallback;
+    if ($('#d-s1')) $('#d-s1').value = shifts[0] ? shifts[0].start : '12:00';
+    if ($('#d-e1')) $('#d-e1').value = shifts[0] ? shifts[0].end : '21:00';
+    if ($('#d-split')) $('#d-split').checked = shifts.length > 1;
+    if ($('#d-s2')) $('#d-s2').value = shifts[1] ? shifts[1].start : '17:00';
+    if ($('#d-e2')) $('#d-e2').value = shifts[1] ? shifts[1].end : '21:00';
+    if ($('#day-split-times')) $('#day-split-times').hidden = shifts.length < 2;
+  }
   function readWeekTimeFields() {
     const shifts = [{ start: $('#w-s1').value, end: $('#w-e1').value }];
     if ($('#w-split').checked) shifts.push({ start: $('#w-s2').value, end: $('#w-e2').value });
     return shifts;
   }
+  function readDayTimeFields() {
+    const shifts = [{ start: $('#d-s1').value, end: $('#d-e1').value }];
+    if ($('#d-split').checked) shifts.push({ start: $('#d-s2').value, end: $('#d-e2').value });
+    return shifts;
+  }
   function employeeForm(emp) {
     state.editingId = emp ? emp.id : '';
     state.weekDraft = copyWeekDraft(emp);
+    state.dayDraft = copyDayDraft(emp);
     const shifts = emp ? emp.shifts : [{ start: '12:00', end: '21:00' }];
-    const thisWeek = weekStartKey(iso(new Date()));
+    const todayKey = iso(new Date());
+    const thisWeek = weekStartKey(todayKey);
     const savedThis = (emp && emp.weekShifts && emp.weekShifts[thisWeek]) || null;
     const weekShifts = savedThis || shifts;
+    const savedDay = (emp && emp.dayShifts && emp.dayShifts[todayKey]) || null;
+    const dayShifts = savedDay || weekShifts;
     const mode = emp ? emp.offMode : 'advisor-pool';
     const depts = [...new Set(defaultEmployees().concat(state.employees).map((e) => e.department))];
     const poss = [...new Set(defaultEmployees().concat(state.employees).map((e) => e.position))];
@@ -1820,6 +1873,15 @@
       <div class="field row" id="week-split-times" ${weekShifts.length > 1 ? '' : 'hidden'}><div class="field"><label>Second start</label><input id="w-s2" type="time" value="${weekShifts[1] ? weekShifts[1].start : '17:00'}" /></div><div class="field"><label>End</label><input id="w-e2" type="time" value="${weekShifts[1] ? weekShifts[1].end : '21:00'}" /></div></div>
       <button class="btn small" type="button" data-act="week-add">Set selected week</button>
       <div id="week-shift-list"></div>
+      <h3 style="margin:16px 0 4px">Timing for one day</h3>
+      <p class="muted">Pick a single date to set a different time for that day only. It overrides the week and default times.</p>
+      <div class="field"><label>Day</label><input id="e-day" type="date" value="${todayKey}" /></div>
+      <div class="actions"><button class="btn small" type="button" data-act="day-today">Today</button><button class="btn small" type="button" data-act="day-tomorrow">Tomorrow</button></div>
+      <div class="field row"><div class="field"><label>Day start</label><input id="d-s1" type="time" value="${dayShifts[0] ? dayShifts[0].start : '12:00'}" /></div><div class="field"><label>End</label><input id="d-e1" type="time" value="${dayShifts[0] ? dayShifts[0].end : '21:00'}" /></div></div>
+      <label><input id="d-split" type="checkbox" ${dayShifts.length > 1 ? 'checked' : ''} /> Split shift this day</label>
+      <div class="field row" id="day-split-times" ${dayShifts.length > 1 ? '' : 'hidden'}><div class="field"><label>Second start</label><input id="d-s2" type="time" value="${dayShifts[1] ? dayShifts[1].start : '17:00'}" /></div><div class="field"><label>End</label><input id="d-e2" type="time" value="${dayShifts[1] ? dayShifts[1].end : '21:00'}" /></div></div>
+      <button class="btn small" type="button" data-act="day-add">Set selected day</button>
+      <div id="day-shift-list"></div>
       <div class="field"><label>Additional rules</label><select id="e-mode">
         <option value="friday-only" ${mode === 'friday-only' ? 'selected' : ''}>Friday only</option>
         <option value="fixed" ${mode === 'fixed' ? 'selected' : ''}>Fixed off days</option>
@@ -1833,6 +1895,7 @@
       <p class="muted" id="e-msg"></p>
       <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button>${emp ? `<button class="btn-ghost" type="button" data-act="delete-employee" data-id="${esc(emp.id)}">Delete</button>` : ''}<button class="btn-primary" type="button" data-act="save-employee">${emp ? 'Save employee' : 'Add employee'}</button></div>`);
     paintWeekShiftList();
+    paintDayShiftList();
   }
   function readEmployee() {
     const name = $('#e-name').value.trim();
@@ -1857,7 +1920,14 @@
       if (weekError) return { error: `${weekRangeLabel(row.week)}: ${weekError}` };
       weekShifts[row.week] = row.shifts.map((shift) => ({ start: shift.start, end: shift.end }));
     }
-    const emp = { id, name, department, position, offMode, shifts, fixedOffDays, weekShifts, notes: $('#e-notes').value.trim() };
+    const dayShifts = {};
+    for (let i = 0; i < (state.dayDraft || []).length; i += 1) {
+      const row = state.dayDraft[i];
+      const dayError = shiftRowError(row.shifts);
+      if (dayError) return { error: `${fmtLong(row.day)}: ${dayError}` };
+      dayShifts[row.day] = row.shifts.map((shift) => ({ start: shift.start, end: shift.end }));
+    }
+    const emp = { id, name, department, position, offMode, shifts, fixedOffDays, weekShifts, dayShifts, notes: $('#e-notes').value.trim() };
     return emp;
   }
 
@@ -1984,6 +2054,7 @@
       <div class="check"><span>Department</span><b>${esc(emp.department)}</b></div>
       <div class="check"><span>Normal shift</span><b>${shifts.map((s) => esc(s.label)).join('<br>')}</b></div>
       <div class="check"><span>Week timings</span><b>${weekTimingText(emp) ? esc(weekTimingText(emp)).replace(/\n/g, '<br>') : 'Same time every week'}</b></div>
+      <div class="check"><span>One-day times</span><b>${dayTimingText(emp) ? esc(dayTimingText(emp)).replace(/\n/g, '<br>') : 'None'}</b></div>
       <div class="check"><span>Weekly off</span><b>${esc(rule.offs)}</b></div>
       <div class="check"><span>Vacation</span><b>${upcoming} upcoming</b></div>
       <h3>This week</h3>${state.schedule ? week : '<p class="muted">Generate a schedule to see this week.</p>'}
@@ -2139,6 +2210,26 @@
       paintWeekShiftList();
       if ($('#e-week') && $('#e-week').value && weekStartKey($('#e-week').value) === btn.dataset.week) fillWeekTimeFields(btn.dataset.week);
     }
+    if (act === 'day-today' || act === 'day-tomorrow') {
+      const day = iso(addDays(new Date(), act === 'day-tomorrow' ? 1 : 0));
+      if ($('#e-day')) $('#e-day').value = day;
+      fillDayTimeFields(day);
+    }
+    if (act === 'day-add') {
+      if (!$('#e-day') || !$('#e-day').value) { $('#e-msg').textContent = 'Choose the day.'; return; }
+      const day = iso(parseISO($('#e-day').value));
+      const custom = readDayTimeFields();
+      const dayError = shiftRowError(custom);
+      if (dayError) { $('#e-msg').textContent = dayError; return; }
+      state.dayDraft = (state.dayDraft || []).filter((row) => row.day !== day).concat({ day, shifts: custom });
+      paintDayShiftList();
+      $('#e-msg').textContent = `${fmtLong(day)} is set. Save the employee to keep it.`;
+    }
+    if (act === 'day-remove') {
+      state.dayDraft = (state.dayDraft || []).filter((row) => row.day !== btn.dataset.day);
+      paintDayShiftList();
+      if ($('#e-day') && $('#e-day').value && iso(parseISO($('#e-day').value)) === btn.dataset.day) fillDayTimeFields(btn.dataset.day);
+    }
     if (act === 'save-employee') {
       const emp = readEmployee();
       if (emp.error) { $('#e-msg').textContent = emp.error; return; }
@@ -2286,7 +2377,9 @@
     if (event.target.id === 'e-mode') $('#fixed-wrap').hidden = event.target.value !== 'fixed';
     if (event.target.id === 'e-split') $('#split-times').hidden = !event.target.checked;
     if (event.target.id === 'w-split' && $('#week-split-times')) $('#week-split-times').hidden = !event.target.checked;
+    if (event.target.id === 'd-split' && $('#day-split-times')) $('#day-split-times').hidden = !event.target.checked;
     if (event.target.id === 'e-week' && event.target.value) fillWeekTimeFields(weekStartKey(event.target.value));
+    if (event.target.id === 'e-day' && event.target.value) fillDayTimeFields(iso(parseISO(event.target.value)));
     if (event.target.id === 'e-pos' && !state.editingId) {
       const pos = event.target.value.toLowerCase();
       if (pos.includes('coordinator')) { $('#e-mode').value = 'friday-only'; $('#e-s1').value = '12:00'; $('#e-e1').value = '21:00'; $('#e-split').checked = false; }
