@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="auth.js?v=20261030auth2"></script>
+  <script src="auth.js?v=20261030auth3"></script>
   <script src="data-store.js?v=20261018ytd1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
@@ -183,6 +183,10 @@ body.live-app .sidebar-section-label {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+body.live-app #nav-admin-push[hidden],
+body.live-app #nav-data-uploader[hidden] {
+  display: none !important;
 }
 body.live-app .side-nav-item {
   position: relative;
@@ -1634,11 +1638,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
       </nav>
 
       <div class="sidebar-footer">
-        <a class="side-nav-item side-nav-link" href="admin.html" id="nav-admin-push" hidden>
+        <a class="side-nav-item side-nav-link" href="admin.html" id="nav-admin-push" hidden style="display:none">
           <span class="side-nav-icon" aria-hidden="true">⚙</span>
           <span class="side-nav-label">Admin Push</span>
         </a>
-        <a class="side-nav-item side-nav-link" href="data-uploader.html" id="nav-data-uploader" hidden>
+        <a class="side-nav-item side-nav-link" href="data-uploader.html" id="nav-data-uploader" hidden style="display:none">
           <span class="side-nav-icon" aria-hidden="true">⇪</span>
           <span class="side-nav-label">Data Uploader</span>
         </a>
@@ -8631,12 +8635,17 @@ body.live-app #panel-salesreport .sr-emp-sum {
     });
   }
 
+  function setNavLinkVisible(el, show) {
+    if (!el) return;
+    el.hidden = !show;
+    el.style.display = show ? "" : "none";
+  }
+
   function paintAuthChrome() {
     Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
-    const adminLink = document.getElementById("nav-admin-push");
-    const uploaderLink = document.getElementById("nav-data-uploader");
-    if (adminLink) adminLink.hidden = !Auth.canPushAnything(currentUser);
-    if (uploaderLink) uploaderLink.hidden = !Auth.isAdmin(currentUser);
+    const showAdminTools = Auth.isAdmin(currentUser);
+    setNavLinkVisible(document.getElementById("nav-admin-push"), showAdminTools);
+    setNavLinkVisible(document.getElementById("nav-data-uploader"), showAdminTools);
     const logout = document.getElementById("logout-btn");
     if (logout) logout.onclick = () => Auth.logout();
   }
@@ -8649,17 +8658,36 @@ body.live-app #panel-salesreport .sr-emp-sum {
       <strong style="display:block;color:inherit;margin-bottom:4px">No dashboards assigned</strong>
       Ask Khayri to open Admin Push → Viewer access and select dashboards for you.
     </div>`;
+    const dash = $("#dashboard");
+    const wait = $("#wait-section");
+    if (dash) {
+      dash.classList.remove("show");
+      dash.style.display = "none";
+    }
+    if (wait) {
+      wait.style.display = "";
+      wait.innerHTML = `<h2>No dashboards assigned</h2><p style="color:var(--muted);font-size:.9rem;margin:0">Ask Khayri to assign dashboards for your account in Admin Push → Viewer access.</p>`;
+    }
+    PANEL_DEFS.forEach((p) => {
+      const el = document.getElementById("panel-" + p.id);
+      if (el) el.style.display = "none";
+    });
   }
 
   Auth.fetchAccess().then(() => {
     paintAuthChrome();
     const panels = visiblePanels();
+    if (!panels.length) {
+      paintNoAccessState(panels);
+      return;
+    }
     if (!panels.some((p) => p.id === activePanel)) {
-      activePanel = panels[0] ? panels[0].id : "salesreport";
+      activePanel = panels[0].id;
     }
     if (typeof switchPanel === "function") switchPanel(activePanel);
-    paintNoAccessState(panels);
-  }).catch(() => {});
+  }).catch(() => {
+    paintAuthChrome();
+  });
 
   function clearSalesReportUi() {
     ["#sr-day-kpis", "#sr-kpis"].forEach((sel) => {
@@ -9228,7 +9256,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
   function switchPanel(panelId) {
     const panels = visiblePanels();
     if (!panels.some((p) => p.id === panelId)) {
-      panelId = panels[0] ? panels[0].id : "dashboard";
+      if (!panels.length) {
+        paintNoAccessState(panels);
+        return;
+      }
+      panelId = panels[0].id;
     }
     const leavingDelivery = activePanel === "delivery" && panelId !== "delivery";
     if (panelId === "gec" && activePanel !== "gec") panelBeforeGec = activePanel;
@@ -23502,7 +23534,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
 
   function paintIdleNav() {
     if (document.querySelector("#panel-tabs button")) return;
-    switchPanel("boerrors");
+    const allowed = visiblePanels();
+    if (!Auth.isAdmin(currentUser) && !allowed.length) {
+      paintNoAccessState(allowed);
+      return;
+    }
+    switchPanel(allowed[0] ? allowed[0].id : "boerrors");
     const titleEl = $("#app-page-title");
     if (titleEl) titleEl.textContent = "Dashboard";
     if (!window._data) {
@@ -23547,6 +23584,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const d = data();
     window._data = d;
     globalDateStale = false;
+    const allowed = visiblePanels();
+    if (!Auth.isAdmin(currentUser) && !allowed.length) {
+      paintNoAccessState(allowed);
+      return;
+    }
     $("#dashboard").classList.add("show");
     $("#dashboard").style.display = "";
     const navDash = $("#nav-dashboard");
@@ -23561,6 +23603,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
     else if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
     else activePanel = "bodashboard"; // stock-only (or no preferred inputs) → BO Dashboard
+    if (!allowed.some((p) => p.id === activePanel)) {
+      activePanel = allowed[0] ? allowed[0].id : activePanel;
+    }
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
 

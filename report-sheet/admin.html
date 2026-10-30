@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
   <link rel="stylesheet" href="bo-notifications.css?v=20261021np1" />
-  <script src="auth.js?v=20261030auth2"></script>
+  <script src="auth.js?v=20261030auth3"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
@@ -552,7 +552,7 @@
 <script>
 (function () {
   const Auth = window.ReportSheetAuth;
-  const currentUser = Auth && Auth.requireLogin({ pushAllowed: true });
+  const currentUser = Auth && Auth.requireLogin({ adminOnly: true });
   if (!currentUser) return;
   Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
   const logoutBtn = document.getElementById("logout-btn");
