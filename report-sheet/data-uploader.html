@@ -479,6 +479,13 @@
       button, .nav-links a { max-width: 100%; }
     }
   </style>
+  <script src="auth.js?v=20261030auth1"></script>
+  <script>
+    (function () {
+      var Auth = window.ReportSheetAuth;
+      if (!Auth || !Auth.requireLogin({ adminOnly: true })) return;
+    })();
+  </script>
 </head>
 <body class="uploader-enterprise">
   <div class="wrap">
@@ -687,6 +694,8 @@
 
   <script>
 (function () {
+  if (!window.ReportSheetAuth || !ReportSheetAuth.current() || !ReportSheetAuth.isAdmin()) return;
+
   const API_META = "/api/rtl-daily/meta";
   const API_SAVE = "/api/rtl-daily/save";
   const API_SAVE_FILE = "/api/rtl-daily/save-file";

@@ -141,6 +141,9 @@
     localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at }));
     localStorage.setItem(GEC_SLA_KEY, JSON.stringify({ minutes: normGecSla(meta.gecSlaMinutes), at }));
     applyGecControlFromMeta(meta);
+    if (meta.viewerAccess != null && global.ReportSheetAuth && typeof global.ReportSheetAuth.applyAccessFromMeta === "function") {
+      global.ReportSheetAuth.applyAccessFromMeta(meta);
+    }
   }
 
   // ---------- GEC CONTROL (visitor / lead / conversion status rules) ----------

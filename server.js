@@ -368,6 +368,26 @@ function sanitizeChannelTargets(input) {
   return out;
 }
 
+const REPORT_VIEWER_IDS = ['mohammed', 'ziyad'];
+const REPORT_VIEWER_DASHBOARDS = [
+  'summary', 'salesreport', 'ytdsales', 'gec', 'contact', 'delivery', 'lexus', 'b2c',
+  'bodashboard', 'boerrors', 'boallocstock', 'plantracker', 'reservedvehicles'
+];
+
+function sanitizeViewerAccess(input) {
+  const out = {};
+  REPORT_VIEWER_IDS.forEach((id) => { out[id] = []; });
+  const src = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const allowed = new Set(REPORT_VIEWER_DASHBOARDS);
+  REPORT_VIEWER_IDS.forEach((id) => {
+    const seen = new Set();
+    out[id] = (Array.isArray(src[id]) ? src[id] : [])
+      .map((x) => String(x || '').trim())
+      .filter((x) => allowed.has(x) && !seen.has(x) && (seen.add(x) || true));
+  });
+  return out;
+}
+
 function defaultReportSheetMeta() {
   return {
     at: 0,
@@ -384,7 +404,9 @@ function defaultReportSheetMeta() {
     gecSlaMinutes: 5,
     gecControl: null,
     gecControlAt: 0,
-    fileNames: {}
+    fileNames: {},
+    viewerAccess: sanitizeViewerAccess(null),
+    viewerAccessAt: 0
   };
 }
 
@@ -4759,8 +4781,36 @@ app.get('/api/report-sheet/meta', (_req, res) => {
     gecSlaMinutes: positiveOr(meta.gecSlaMinutes, 5),
     gecControl: sanitizeGecControl(meta.gecControl),
     gecControlAt: Number(meta.gecControlAt) || 0,
-    fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {}
+    fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {},
+    viewerAccess: sanitizeViewerAccess(meta.viewerAccess),
+    viewerAccessAt: Number(meta.viewerAccessAt) || 0
   });
+});
+
+/** Khayri assigns which dashboards Mohammed / Ziyad can open. */
+app.get('/api/report-sheet/viewer-access', (_req, res) => {
+  const meta = loadReportSheetMeta();
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    viewerAccess: sanitizeViewerAccess(meta.viewerAccess),
+    at: Number(meta.viewerAccessAt) || 0
+  });
+});
+
+app.post('/api/report-sheet/viewer-access', (req, res) => {
+  try {
+    const body = req.body || {};
+    const viewerAccess = sanitizeViewerAccess(body.viewerAccess);
+    const meta = loadReportSheetMeta();
+    const at = Date.now();
+    meta.viewerAccess = viewerAccess;
+    meta.viewerAccessAt = at;
+    saveReportSheetMeta(meta);
+    return res.json({ ok: true, at, viewerAccess });
+  } catch (err) {
+    console.error('[report-sheet/viewer-access]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
 });
 
 /** Admin → GEC CONTROL: saves status rules only (pushed files and other settings stay untouched). */
@@ -5519,7 +5569,11 @@ app.post('/api/report-sheet/push', async (req, res) => {
       gecSlaMinutes: positiveOr(body.gecSlaMinutes, 5),
       gecControl: pushedControl || prevControl,
       gecControlAt: controlChanged ? at : (Number(prevMeta.gecControlAt) || 0),
-      fileNames
+      fileNames,
+      viewerAccess: sanitizeViewerAccess(
+        body.viewerAccess != null ? body.viewerAccess : prevMeta.viewerAccess
+      ),
+      viewerAccessAt: Number(prevMeta.viewerAccessAt) || 0
     };
     saveReportSheetMeta(meta);
     broadcastReportSheetUpdate(at);

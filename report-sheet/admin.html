@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
   <link rel="stylesheet" href="bo-notifications.css?v=20261021np1" />
+  <script src="auth.js?v=20261030auth1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
@@ -202,6 +203,10 @@
           <span class="side-nav-icon" aria-hidden="true">▤</span>
           <span class="side-nav-label">YTD sales</span>
         </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="access" id="tab-access">
+          <span class="side-nav-icon" aria-hidden="true">👤</span>
+          <span class="side-nav-label">Viewer access</span>
+        </button>
       </nav>
       <div class="sidebar-footer">
         <a class="side-nav-item side-nav-link" href="data-uploader.html">
@@ -220,13 +225,17 @@
           <span class="side-nav-icon" aria-hidden="true">◉</span>
           <span class="side-nav-label">Live Dashboard</span>
         </a>
-        <div class="sidebar-user-card">
-          <div class="sidebar-user-avatar" aria-hidden="true">O</div>
+        <div class="sidebar-user-card" id="sidebar-user-card">
+          <div class="sidebar-user-avatar" aria-hidden="true">K</div>
           <div class="sidebar-user-meta">
-            <strong>Osama</strong>
-            <span>Digital Transformation</span>
+            <strong>Khayri</strong>
+            <span>Admin · Full access</span>
           </div>
         </div>
+        <button type="button" class="side-nav-item side-nav-link" id="logout-btn" style="width:100%;margin-top:8px;background:transparent;border:0;cursor:pointer;text-align:left">
+          <span class="side-nav-icon" aria-hidden="true">⎋</span>
+          <span class="side-nav-label">Log out</span>
+        </button>
       </div>
     </aside>
 
@@ -499,6 +508,25 @@
       </div>
     </section>
 
+    <section class="admin-panel" id="panel-access" hidden>
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>Viewer dashboard access</h2>
+          <span class="admin-section-tag">Mohammed · Ziyad</span>
+        </div>
+        <p class="admin-lead">
+          You (Khayri) always see every dashboard and can push everything.
+          Tick the dashboards each viewer may open on the live report, then save.
+          Changes apply on their next refresh / sign-in.
+        </p>
+        <div id="viewer-access-host"><p class="foot" style="margin:0">Loading…</p></div>
+        <div class="bo-notif-unlock" style="margin-top:14px">
+          <button type="button" class="btn-primary" id="viewer-access-save">Save viewer access</button>
+          <span class="hint" id="viewer-access-result"></span>
+        </div>
+      </div>
+    </section>
+
     <footer class="page-foot">Admin only · Push updates all live dashboards · <a href="index.html">Open live report</a></footer>
   </div>
       </div>
@@ -524,6 +552,13 @@
 
 <script>
 (function () {
+  const Auth = window.ReportSheetAuth;
+  const currentUser = Auth && Auth.requireLogin({ adminOnly: true });
+  if (!currentUser) return;
+  Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) logoutBtn.onclick = () => Auth.logout();
+
   const Store = window.ReportSheetStore;
   const TARGETS_KEY = Store.TARGETS_KEY;
   const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
@@ -1120,6 +1155,40 @@
     }
   }
 
+  function paintViewerAccess() {
+    const host = $("#viewer-access-host");
+    if (!host || !Auth) return;
+    const access = Auth.readAccess();
+    const viewers = Auth.USERS.filter((u) => u.role === "viewer");
+    host.innerHTML = viewers.map((user) => {
+      const selected = new Set(access[user.id] || []);
+      const checks = Auth.DASHBOARDS.map((dash) => `
+        <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:rgba(148,163,184,0.1);font-weight:600">
+          <input type="checkbox" data-viewer="${escapeHtml(user.id)}" data-dash="${escapeHtml(dash.id)}" ${selected.has(dash.id) ? "checked" : ""} />
+          <span>${escapeHtml(dash.label)}</span>
+        </label>`).join("");
+      return `<article class="card" style="margin:0 0 14px;padding:14px">
+        <h3 style="margin:0 0 4px">${escapeHtml(user.name)}</h3>
+        <p class="hint" style="margin:0 0 10px">Username <b>${escapeHtml(user.username)}</b> · only checked dashboards appear in their sidebar</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${checks}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn small" data-access-all="${escapeHtml(user.id)}">Select all</button>
+          <button type="button" class="btn small" data-access-none="${escapeHtml(user.id)}">Clear</button>
+        </div>
+      </article>`;
+    }).join("");
+  }
+
+  function collectViewerAccess() {
+    const next = Auth.emptyAccess();
+    document.querySelectorAll("#viewer-access-host input[data-viewer][data-dash]:checked").forEach((box) => {
+      const id = box.getAttribute("data-viewer");
+      const dash = box.getAttribute("data-dash");
+      if (next[id] && dash) next[id].push(dash);
+    });
+    return Auth.sanitizeAccess(next);
+  }
+
   function showAdminPanel(which) {
     const uploads = $("#panel-uploads");
     const targets = $("#panel-targets");
@@ -1127,6 +1196,7 @@
     const gec = $("#panel-gec");
     const boNotif = $("#panel-bonotifications");
     const notifPanel = $("#panel-notifications");
+    const accessPanel = $("#panel-access");
     const focusContact = which === "contact";
     const focusYtd = which === "ytd";
     if (focusContact || focusYtd) which = "uploads";
@@ -1136,8 +1206,12 @@
     if (gec) gec.hidden = which !== "gec";
     if (boNotif) boNotif.hidden = which !== "bonotifications";
     if (notifPanel) notifPanel.hidden = which !== "notifications";
+    if (accessPanel) accessPanel.hidden = which !== "access";
     if (which === "bonotifications") initBoNotifications();
     if (which === "notifications") initNotificationsPanel();
+    if (which === "access") {
+      Auth.fetchAccess().then(paintViewerAccess).catch(paintViewerAccess);
+    }
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       const active = focusContact ? "contact" : (focusYtd ? "ytd" : which);
       btn.classList.toggle("active", btn.dataset.adminPanel === active);
@@ -1950,9 +2024,41 @@
   }
   loadYtdMonthsList();
 
+  const accessHost = $("#viewer-access-host");
+  if (accessHost) {
+    accessHost.addEventListener("click", (event) => {
+      const all = event.target.closest("[data-access-all]");
+      const none = event.target.closest("[data-access-none]");
+      const userId = (all && all.getAttribute("data-access-all")) || (none && none.getAttribute("data-access-none"));
+      if (!userId) return;
+      accessHost.querySelectorAll(`input[data-viewer="${userId}"]`).forEach((box) => {
+        box.checked = !!all;
+      });
+    });
+  }
+  const accessSave = $("#viewer-access-save");
+  if (accessSave) {
+    accessSave.addEventListener("click", async () => {
+      const note = $("#viewer-access-result");
+      accessSave.disabled = true;
+      if (note) note.textContent = "Saving…";
+      try {
+        await Auth.saveAccess(collectViewerAccess());
+        if (note) note.textContent = "Saved · viewers see the selected dashboards after refresh.";
+        setStatus("Viewer access saved", "ok");
+      } catch (err) {
+        if (note) note.textContent = err.message || "Save failed";
+        setStatus(err.message || "Viewer access save failed", "err");
+      } finally {
+        accessSave.disabled = false;
+      }
+    });
+  }
+
   showAdminPanel("uploads");
   renderTargetsPanel();
   renderAllocationPanel();
+  Auth.fetchAccess().catch(() => {});
   hydrateFromStore().then(() => {
     renderSlots();
     if (!$("#panel-gec").hidden) { renderGecControl(); renderGecFound(); }

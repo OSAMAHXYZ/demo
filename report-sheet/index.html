@@ -13,6 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
+  <script src="auth.js?v=20261030auth1"></script>
   <script src="data-store.js?v=20261018ytd1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
@@ -1633,21 +1634,25 @@ body.live-app #panel-salesreport .sr-emp-sum {
       </nav>
 
       <div class="sidebar-footer">
-        <a class="side-nav-item side-nav-link" href="admin.html">
+        <a class="side-nav-item side-nav-link" href="admin.html" id="nav-admin-push" hidden>
           <span class="side-nav-icon" aria-hidden="true">⚙</span>
           <span class="side-nav-label">Admin Push</span>
         </a>
-        <a class="side-nav-item side-nav-link" href="data-uploader.html">
+        <a class="side-nav-item side-nav-link" href="data-uploader.html" id="nav-data-uploader" hidden>
           <span class="side-nav-icon" aria-hidden="true">⇪</span>
           <span class="side-nav-label">Data Uploader</span>
         </a>
-        <div class="sidebar-user-card">
-          <div class="sidebar-user-avatar" aria-hidden="true">O</div>
+        <div class="sidebar-user-card" id="sidebar-user-card">
+          <div class="sidebar-user-avatar" aria-hidden="true">?</div>
           <div class="sidebar-user-meta">
-            <strong>Osama</strong>
-            <span>Digital Transformation</span>
+            <strong>Signed out</strong>
+            <span>Report Sheet</span>
         </div>
       </div>
+        <button type="button" class="side-nav-item side-nav-link" id="logout-btn" style="width:100%;margin-top:8px;background:transparent;border:0;cursor:pointer;text-align:left">
+          <span class="side-nav-icon" aria-hidden="true">⎋</span>
+          <span class="side-nav-label">Log out</span>
+        </button>
       </div>
     </aside>
 
@@ -3244,6 +3249,10 @@ body.live-app #panel-salesreport .sr-emp-sum {
 
 <script>
 (function () {
+  const Auth = window.ReportSheetAuth;
+  const currentUser = Auth && Auth.requireLogin();
+  if (!currentUser) return;
+
   const MAX_ROWS = 4000;
 
   const SLOT_DEFS = [
@@ -8609,6 +8618,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "stockdashboard" || p.id === "dashboard") return false; // hidden from nav; panel code kept
+      if (Auth && !Auth.canViewPanel(p.id, currentUser)) return false;
       if (p.id === "salesreport") return hasSalesReportInputs();
       if (p.id === "summary") return hasSummaryInputs();
       if (p.id === "reservedvehicles") return true;
@@ -8620,6 +8630,36 @@ body.live-app #panel-salesreport .sr-emp-sum {
       return true;
     });
   }
+
+  function paintAuthChrome() {
+    Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
+    const adminLink = document.getElementById("nav-admin-push");
+    const uploaderLink = document.getElementById("nav-data-uploader");
+    const showAdmin = Auth.isAdmin(currentUser);
+    if (adminLink) adminLink.hidden = !showAdmin;
+    if (uploaderLink) uploaderLink.hidden = !showAdmin;
+    const logout = document.getElementById("logout-btn");
+    if (logout) logout.onclick = () => Auth.logout();
+  }
+  paintAuthChrome();
+  function paintNoAccessState(panels) {
+    const tabs = $("#panel-tabs");
+    if (!tabs) return;
+    if (panels.length) return;
+    tabs.innerHTML = `<div class="empty" style="padding:14px;color:var(--muted);font-size:13px;line-height:1.45">
+      <strong style="display:block;color:inherit;margin-bottom:4px">No dashboards assigned</strong>
+      Ask Khayri to open Admin Push → Viewer access and select dashboards for you.
+    </div>`;
+  }
+
+  Auth.fetchAccess().then(() => {
+    const panels = visiblePanels();
+    if (!panels.some((p) => p.id === activePanel)) {
+      activePanel = panels[0] ? panels[0].id : "salesreport";
+    }
+    if (typeof switchPanel === "function") switchPanel(activePanel);
+    paintNoAccessState(panels);
+  }).catch(() => {});
 
   function clearSalesReportUi() {
     ["#sr-day-kpis", "#sr-kpis"].forEach((sel) => {
