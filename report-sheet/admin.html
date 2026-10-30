@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
   <link rel="stylesheet" href="bo-notifications.css?v=20261021np1" />
-  <script src="auth.js?v=20261030auth1"></script>
+  <script src="auth.js?v=20261030auth2"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
@@ -511,13 +511,12 @@
     <section class="admin-panel" id="panel-access" hidden>
       <div class="card admin-section-card">
         <div class="pbi-viz-head">
-          <h2>Viewer dashboard access</h2>
+          <h2>Viewer access</h2>
           <span class="admin-section-tag">Mohammed · Ziyad</span>
         </div>
         <p class="admin-lead">
-          You (Khayri) always see every dashboard and can push everything.
-          Tick the dashboards each viewer may open on the live report, then save.
-          Changes apply on their next refresh / sign-in.
+          Only you (Khayri) see this page. Choose which <b>dashboards</b> each person can view,
+          and which <b>Admin Push</b> areas or Excel slots they can use. They never see each other or this settings screen.
         </p>
         <div id="viewer-access-host"><p class="foot" style="margin:0">Loading…</p></div>
         <div class="bo-notif-unlock" style="margin-top:14px">
@@ -553,11 +552,42 @@
 <script>
 (function () {
   const Auth = window.ReportSheetAuth;
-  const currentUser = Auth && Auth.requireLogin({ adminOnly: true });
+  const currentUser = Auth && Auth.requireLogin({ pushAllowed: true });
   if (!currentUser) return;
   Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
   const logoutBtn = document.getElementById("logout-btn");
   if (logoutBtn) logoutBtn.onclick = () => Auth.logout();
+  const isFullAdmin = Auth.isAdmin(currentUser);
+
+  function allowedSlots() {
+    return SLOT_DEFS.filter((d) => Auth.canPushSlot(d.id, currentUser));
+  }
+
+  function applyPushPermissions() {
+    document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
+      const panel = btn.dataset.adminPanel;
+      if (panel === "access") {
+        btn.hidden = !isFullAdmin;
+        return;
+      }
+      if (panel === "contact" || panel === "ytd") {
+        btn.hidden = !(Auth.canPushArea(panel, currentUser) || Auth.canPushSection("uploads", currentUser));
+        return;
+      }
+      btn.hidden = !Auth.canPushSection(panel, currentUser);
+    });
+    const eom = document.getElementById("eom-btn");
+    if (eom) eom.hidden = !isFullAdmin;
+    document.querySelectorAll('.sidebar-footer a[href="data-uploader.html"], .sidebar-footer a[href*="lexus-controller"], .sidebar-footer a[href*="toyota-b2c-controller"]').forEach((a) => {
+      a.hidden = !isFullAdmin;
+    });
+    const badge = document.getElementById("admin-mode-badge");
+    if (badge) badge.textContent = isFullAdmin ? "ADMIN" : "LIMITED PUSH";
+    if (!isFullAdmin) {
+      const title = document.querySelector(".app-page-title");
+      if (title) title.textContent = "Push (assigned areas)";
+    }
+  }
 
   const Store = window.ReportSheetStore;
   const TARGETS_KEY = Store.TARGETS_KEY;
@@ -994,7 +1024,9 @@
   }
 
   function renderSlots() {
-    $("#slots").innerHTML = SLOT_DEFS.map((d) => {
+    const defs = allowedSlots();
+    $("#slots").innerHTML = defs.length
+      ? defs.map((d) => {
       const s = slots[d.id];
       const loaded = s.buffer ? " loaded" : "";
       const required = (d.id === "sales" ? ' <span class="pill slot-required">Required</span>' : "")
@@ -1009,9 +1041,10 @@
         <p class="ar">${d.ar} · ${d.blurb}</p>
         ${meta}
       </label>`;
-    }).join("");
+    }).join("")
+      : `<p class="foot">No Excel slots were assigned to you. Ask Khayri to open Viewer access and tick push areas.</p>`;
 
-    const any = SLOT_DEFS.some((d) => slots[d.id].buffer);
+    const any = defs.some((d) => slots[d.id].buffer);
     $("#clear-files-btn").disabled = !any;
     const hasSales = !!slots.sales.buffer;
     const hasCancelled = !!slots.cancelled.buffer;
@@ -1157,23 +1190,37 @@
 
   function paintViewerAccess() {
     const host = $("#viewer-access-host");
-    if (!host || !Auth) return;
+    if (!host || !Auth || !isFullAdmin) return;
     const access = Auth.readAccess();
     const viewers = Auth.USERS.filter((u) => u.role === "viewer");
     host.innerHTML = viewers.map((user) => {
-      const selected = new Set(access[user.id] || []);
-      const checks = Auth.DASHBOARDS.map((dash) => `
+      const row = access[user.id] || Auth.emptyUserAccess();
+      const viewSet = new Set(row.view || []);
+      const pushSet = new Set(row.push || []);
+      const viewChecks = Auth.DASHBOARDS.map((dash) => `
         <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:rgba(148,163,184,0.1);font-weight:600">
-          <input type="checkbox" data-viewer="${escapeHtml(user.id)}" data-dash="${escapeHtml(dash.id)}" ${selected.has(dash.id) ? "checked" : ""} />
+          <input type="checkbox" data-viewer="${escapeHtml(user.id)}" data-kind="view" data-id="${escapeHtml(dash.id)}" ${viewSet.has(dash.id) ? "checked" : ""} />
           <span>${escapeHtml(dash.label)}</span>
+        </label>`).join("");
+      const pushChecks = Auth.PUSH_AREAS.map((area) => `
+        <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:rgba(37,99,235,0.08);font-weight:600">
+          <input type="checkbox" data-viewer="${escapeHtml(user.id)}" data-kind="push" data-id="${escapeHtml(area.id)}" ${pushSet.has(area.id) ? "checked" : ""} />
+          <span>${escapeHtml(area.label)}</span>
         </label>`).join("");
       return `<article class="card" style="margin:0 0 14px;padding:14px">
         <h3 style="margin:0 0 4px">${escapeHtml(user.name)}</h3>
-        <p class="hint" style="margin:0 0 10px">Username <b>${escapeHtml(user.username)}</b> · only checked dashboards appear in their sidebar</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${checks}</div>
+        <p class="hint" style="margin:0 0 10px">Username <b>${escapeHtml(user.username)}</b> · they never see other users or Viewer access</p>
+        <h4 style="margin:12px 0 8px">Dashboards they can view</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${viewChecks}</div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn small" data-access-all="${escapeHtml(user.id)}">Select all</button>
-          <button type="button" class="btn small" data-access-none="${escapeHtml(user.id)}">Clear</button>
+          <button type="button" class="btn small" data-access-all="${escapeHtml(user.id)}" data-kind="view">Select all dashboards</button>
+          <button type="button" class="btn small" data-access-none="${escapeHtml(user.id)}" data-kind="view">Clear dashboards</button>
+        </div>
+        <h4 style="margin:18px 0 8px">Admin Push areas they can use</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${pushChecks}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn small" data-access-all="${escapeHtml(user.id)}" data-kind="push">Select all push</button>
+          <button type="button" class="btn small" data-access-none="${escapeHtml(user.id)}" data-kind="push">Clear push</button>
         </div>
       </article>`;
     }).join("");
@@ -1181,15 +1228,30 @@
 
   function collectViewerAccess() {
     const next = Auth.emptyAccess();
-    document.querySelectorAll("#viewer-access-host input[data-viewer][data-dash]:checked").forEach((box) => {
+    document.querySelectorAll("#viewer-access-host input[data-viewer][data-kind][data-id]:checked").forEach((box) => {
       const id = box.getAttribute("data-viewer");
-      const dash = box.getAttribute("data-dash");
-      if (next[id] && dash) next[id].push(dash);
+      const kind = box.getAttribute("data-kind");
+      const value = box.getAttribute("data-id");
+      if (!next[id] || !value || (kind !== "view" && kind !== "push")) return;
+      next[id][kind].push(value);
     });
     return Auth.sanitizeAccess(next);
   }
 
+  function firstAllowedAdminPanel() {
+    const order = ["uploads", "contact", "ytd", "targets", "allocation", "gec", "bonotifications", "notifications", "access"];
+    return order.find((id) => {
+      if (id === "access") return isFullAdmin;
+      if (id === "contact" || id === "ytd") return Auth.canPushArea(id, currentUser) || Auth.canPushSection("uploads", currentUser);
+      return Auth.canPushSection(id, currentUser);
+    }) || "uploads";
+  }
+
   function showAdminPanel(which) {
+    if (which === "access" && !isFullAdmin) which = firstAllowedAdminPanel();
+    if (which !== "access" && which !== "contact" && which !== "ytd" && !Auth.canPushSection(which === "uploads" ? "uploads" : which, currentUser)) {
+      which = firstAllowedAdminPanel();
+    }
     const uploads = $("#panel-uploads");
     const targets = $("#panel-targets");
     const allocation = $("#panel-allocation");
@@ -1197,19 +1259,24 @@
     const boNotif = $("#panel-bonotifications");
     const notifPanel = $("#panel-notifications");
     const accessPanel = $("#panel-access");
-    const focusContact = which === "contact";
-    const focusYtd = which === "ytd";
-    if (focusContact || focusYtd) which = "uploads";
+    const focusContact = which === "contact" && Auth.canPushArea("contact", currentUser);
+    const focusYtd = which === "ytd" && Auth.canPushArea("ytd", currentUser);
+    if ((which === "contact" || which === "ytd") && Auth.canPushSection("uploads", currentUser)) which = "uploads";
+    else if (which === "contact" || which === "ytd") which = firstAllowedAdminPanel();
     uploads.hidden = which !== "uploads";
     targets.hidden = which !== "targets";
     if (allocation) allocation.hidden = which !== "allocation";
     if (gec) gec.hidden = which !== "gec";
     if (boNotif) boNotif.hidden = which !== "bonotifications";
     if (notifPanel) notifPanel.hidden = which !== "notifications";
-    if (accessPanel) accessPanel.hidden = which !== "access";
+    if (accessPanel) accessPanel.hidden = which !== "access" || !isFullAdmin;
+    const contactCard = document.getElementById("contact-files");
+    const ytdCard = document.getElementById("ytd-sales-files");
+    if (contactCard) contactCard.hidden = !Auth.canPushArea("contact", currentUser) && !isFullAdmin;
+    if (ytdCard) ytdCard.hidden = !Auth.canPushArea("ytd", currentUser) && !isFullAdmin;
     if (which === "bonotifications") initBoNotifications();
     if (which === "notifications") initNotificationsPanel();
-    if (which === "access") {
+    if (which === "access" && isFullAdmin) {
       Auth.fetchAccess().then(paintViewerAccess).catch(paintViewerAccess);
     }
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
@@ -1218,7 +1285,7 @@
     });
     if (which === "allocation") renderAllocationPanel();
     if (which === "gec") { renderGecControl(); renderGecFound(); }
-    if ((which === "uploads" || focusContact) && window.ContactPerformance) {
+    if ((which === "uploads" || focusContact) && window.ContactPerformance && (isFullAdmin || Auth.canPushArea("contact", currentUser))) {
       window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));
     }
     if (focusContact) {
@@ -1960,7 +2027,13 @@
   $("#slots").addEventListener("change", (e) => {
     const input = e.target.closest("input[type=file]");
     if (!input) return;
-    onFileChosen(input.dataset.slot, input.files[0]);
+    const slotId = input.dataset.slot;
+    if (!Auth.canPushSlot(slotId, currentUser)) {
+      setStatus("That file slot is not assigned to you", "err");
+      input.value = "";
+      return;
+    }
+    onFileChosen(slotId, input.files[0]);
   });
   $("#gec-ctl-grid").addEventListener("change", (e) => {
     const t = e.target.closest("[data-gec-toggle]");
@@ -2029,9 +2102,15 @@
     accessHost.addEventListener("click", (event) => {
       const all = event.target.closest("[data-access-all]");
       const none = event.target.closest("[data-access-none]");
-      const userId = (all && all.getAttribute("data-access-all")) || (none && none.getAttribute("data-access-none"));
+      const btn = all || none;
+      if (!btn) return;
+      const userId = all ? all.getAttribute("data-access-all") : none.getAttribute("data-access-none");
+      const kind = btn.getAttribute("data-kind") || "";
       if (!userId) return;
-      accessHost.querySelectorAll(`input[data-viewer="${userId}"]`).forEach((box) => {
+      const sel = kind
+        ? `input[data-viewer="${userId}"][data-kind="${kind}"]`
+        : `input[data-viewer="${userId}"]`;
+      accessHost.querySelectorAll(sel).forEach((box) => {
         box.checked = !!all;
       });
     });
@@ -2044,7 +2123,7 @@
       if (note) note.textContent = "Saving…";
       try {
         await Auth.saveAccess(collectViewerAccess());
-        if (note) note.textContent = "Saved · viewers see the selected dashboards after refresh.";
+        if (note) note.textContent = "Saved · view and push rights apply after their next refresh.";
         setStatus("Viewer access saved", "ok");
       } catch (err) {
         if (note) note.textContent = err.message || "Save failed";
@@ -2055,13 +2134,20 @@
     });
   }
 
-  showAdminPanel("uploads");
+  applyPushPermissions();
+  Auth.fetchAccess().then(() => {
+    applyPushPermissions();
+    showAdminPanel(firstAllowedAdminPanel());
+    renderSlots();
+  }).catch(() => {
+    applyPushPermissions();
+    showAdminPanel(firstAllowedAdminPanel());
+  });
   renderTargetsPanel();
   renderAllocationPanel();
-  Auth.fetchAccess().catch(() => {});
   hydrateFromStore().then(() => {
     renderSlots();
-    if (!$("#panel-gec").hidden) { renderGecControl(); renderGecFound(); }
+    if ($("#panel-gec") && !$("#panel-gec").hidden) { renderGecControl(); renderGecFound(); }
   });
 })();
 </script>

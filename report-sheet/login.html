@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
-  <script src="auth.js?v=20261030auth1"></script>
+  <script src="auth.js?v=20261030auth2"></script>
   <style>
     :root {
       --bg: #070b14;
@@ -116,12 +116,10 @@
       </div>
     </div>
     <h1>Sign in</h1>
-    <p class="sub">Khayri sees every dashboard and Admin Push. Mohammed and Ziyad see only the dashboards Khayri assigns.</p>
+    <p class="sub">Sign in with your own account. Access is set by Khayri.</p>
     <div class="field">
-      <label for="user">User</label>
-      <select id="user" name="username" required>
-        <option value="">Choose your name</option>
-      </select>
+      <label for="user">Username</label>
+      <input id="user" name="username" type="text" autocomplete="username" required placeholder="Your username" />
     </div>
     <div class="field">
       <label for="password">Password</label>
@@ -130,10 +128,6 @@
     <label class="remember"><input id="remember" type="checkbox" /> Remember me on this browser</label>
     <p class="error" id="error"></p>
     <button type="submit">Sign in</button>
-    <p class="hint">
-      Demo passwords match the username:<br />
-      <b>khayri</b> · <b>mohammed</b> · <b>ziyad</b>
-    </p>
   </form>
   <script>
     (function () {
@@ -143,13 +137,6 @@
         location.replace(Auth.homeFor(existing));
         return;
       }
-      const select = document.getElementById("user");
-      Auth.USERS.forEach((user) => {
-        const opt = document.createElement("option");
-        opt.value = user.username;
-        opt.textContent = user.name + (user.role === "admin" ? " (Admin)" : "");
-        select.appendChild(opt);
-      });
       document.getElementById("login-form").addEventListener("submit", (event) => {
         event.preventDefault();
         const error = document.getElementById("error");

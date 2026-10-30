@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="auth.js?v=20261030auth1"></script>
+  <script src="auth.js?v=20261030auth2"></script>
   <script src="data-store.js?v=20261018ytd1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
@@ -8635,9 +8635,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
     Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
     const adminLink = document.getElementById("nav-admin-push");
     const uploaderLink = document.getElementById("nav-data-uploader");
-    const showAdmin = Auth.isAdmin(currentUser);
-    if (adminLink) adminLink.hidden = !showAdmin;
-    if (uploaderLink) uploaderLink.hidden = !showAdmin;
+    if (adminLink) adminLink.hidden = !Auth.canPushAnything(currentUser);
+    if (uploaderLink) uploaderLink.hidden = !Auth.isAdmin(currentUser);
     const logout = document.getElementById("logout-btn");
     if (logout) logout.onclick = () => Auth.logout();
   }
@@ -8653,6 +8652,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   }
 
   Auth.fetchAccess().then(() => {
+    paintAuthChrome();
     const panels = visiblePanels();
     if (!panels.some((p) => p.id === activePanel)) {
       activePanel = panels[0] ? panels[0].id : "salesreport";

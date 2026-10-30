@@ -373,17 +373,35 @@ const REPORT_VIEWER_DASHBOARDS = [
   'summary', 'salesreport', 'ytdsales', 'gec', 'contact', 'delivery', 'lexus', 'b2c',
   'bodashboard', 'boerrors', 'boallocstock', 'plantracker', 'reservedvehicles'
 ];
+const REPORT_VIEWER_PUSH_AREAS = [
+  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec-file', 'gecVisitors',
+  'lexusB2c', 'toyotaB2c', 'reserved', 'contact', 'ytd', 'targets', 'allocation', 'gec',
+  'bonotifications', 'notifications'
+];
+
+function uniqueAllowedList(list, allowed) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [])
+    .map((x) => String(x || '').trim())
+    .filter((x) => allowed.has(x) && !seen.has(x) && (seen.add(x) || true));
+}
 
 function sanitizeViewerAccess(input) {
   const out = {};
-  REPORT_VIEWER_IDS.forEach((id) => { out[id] = []; });
+  const viewAllowed = new Set(REPORT_VIEWER_DASHBOARDS);
+  const pushAllowed = new Set(REPORT_VIEWER_PUSH_AREAS);
   const src = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
-  const allowed = new Set(REPORT_VIEWER_DASHBOARDS);
   REPORT_VIEWER_IDS.forEach((id) => {
-    const seen = new Set();
-    out[id] = (Array.isArray(src[id]) ? src[id] : [])
-      .map((x) => String(x || '').trim())
-      .filter((x) => allowed.has(x) && !seen.has(x) && (seen.add(x) || true));
+    const raw = src[id];
+    if (Array.isArray(raw)) {
+      out[id] = { view: uniqueAllowedList(raw, viewAllowed), push: [] };
+      return;
+    }
+    const row = raw && typeof raw === 'object' ? raw : {};
+    out[id] = {
+      view: uniqueAllowedList(row.view != null ? row.view : row.dashboards, viewAllowed),
+      push: uniqueAllowedList(row.push, pushAllowed)
+    };
   });
   return out;
 }
