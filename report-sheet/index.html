@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="auth.js?v=20261030auth3"></script>
+  <script src="auth.js?v=20261031auth4"></script>
   <script src="data-store.js?v=20261018ytd1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
@@ -24,6 +24,8 @@
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261019swap5"></script>
   <script src="contact-performance.js?v=20261031cp3"></script>
+  <script src="evaluation-data.js?v=20261031ev2"></script>
+  <script src="evaluation.js?v=20261031ev2"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -40,6 +42,7 @@
   <link rel="stylesheet" href="sales-cockpit.css?v=20261019ds2" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261019alloc7" />
   <link rel="stylesheet" href="contact-performance.css?v=20261031cp3" />
+  <link rel="stylesheet" href="evaluation.css?v=20261031ev2" />
   <style id="executive-skin">
 /* =====================================================================
    EXECUTIVE SKIN · Toyota ALJ Report Sheet
@@ -1616,6 +1619,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   </style>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <link rel="stylesheet" href="rv-redesign.css?v=20261031rv3" />
+  <link rel="stylesheet" href="unified-layout.css?v=20261031u2" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -1705,6 +1709,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       <div class="panel-section" id="panel-gec" style="display:none"><div id="gec-host"></div></div>
 
       <div class="panel-section" id="panel-contact" style="display:none"><div id="contact-performance-host"></div></div>
+      <div class="panel-section" id="panel-evaluation" style="display:none"><div id="evaluation-host"></div></div>
 
       <!-- PANEL: Delivery · view of delivery-transformation/admin.html -->
       <div class="panel-section" id="panel-delivery" style="display:none">
@@ -8572,6 +8577,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     { id: "ytdsales", label: "YTD Sales" },
     { id: "gec", label: "GEC Dashboard" },
     { id: "contact", label: "Contact Performance" },
+    { id: "evaluation", label: "Evaluation Criteria" },
     { id: "delivery", label: "Delivery" },
     { id: "lexus", label: "Lexus Tracker" },
     { id: "b2c", label: "B2C Tracker" },
@@ -9271,7 +9277,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (activePanel === "boerrors" && panelId !== "boerrors") {
       const boeWrap = document.getElementById("boe-table-wrap");
       if (boeWrap) boeWrap.textContent = "";
-      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "contact"];
+      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "contact", "evaluation"];
       if (!window._data && typeof hasAnyPushedFiles === "function" && !hasAnyPushedFiles() && !keepsDashboard.includes(panelId)) {
         const dash = $("#dashboard");
         const wait = $("#wait-section");
@@ -9295,6 +9301,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     document.body.classList.toggle("bo-dash-mode", panelId === "bodashboard");
     document.body.classList.toggle("delivery-mode", panelId === "delivery");
     document.body.classList.toggle("cp-mode", panelId === "contact");
+    document.body.classList.toggle("ev-mode", panelId === "evaluation");
     document.body.classList.toggle("rv-mode", panelId === "reservedvehicles");
     if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
@@ -9308,6 +9315,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       ytdsales: "Y",
       gec: "✦",
       contact: "☎",
+      evaluation: "★",
       delivery: "D",
       lexus: "L",
       b2c: "T",
@@ -9380,6 +9388,15 @@ body.live-app #panel-salesreport .sr-emp-sum {
       }
       if (wait) wait.style.display = "none";
       if (window.ContactPerformance) window.ContactPerformance.mount(document.getElementById("contact-performance-host"));
+    }
+    if (panelId === "evaluation") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) { dash.classList.add("show"); dash.style.display = ""; }
+      if (wait) wait.style.display = "none";
+      const evHost = document.getElementById("evaluation-host");
+      if (window.EvaluationCriteria) window.EvaluationCriteria.mount(evHost);
+      else if (evHost && !evHost.children.length) evHost.innerHTML = '<p style="padding:24px;color:#8b9ab1">Evaluation Criteria files (evaluation.js, evaluation-data.js, evaluation.css) were not found next to index.html.</p>';
     }
     if (panelId === "lexus" && window.LexusTracker) {
       const lxHost = $("#lexus-tracker-host");

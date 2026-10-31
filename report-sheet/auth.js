@@ -14,6 +14,7 @@
     { id: "ytdsales", label: "YTD Sales" },
     { id: "gec", label: "GEC Dashboard" },
     { id: "contact", label: "Contact Performance" },
+    { id: "evaluation", label: "Evaluation Criteria" },
     { id: "delivery", label: "Delivery" },
     { id: "lexus", label: "Lexus Tracker" },
     { id: "b2c", label: "B2C Tracker" },

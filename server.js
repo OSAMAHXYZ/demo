@@ -370,7 +370,7 @@ function sanitizeChannelTargets(input) {
 
 const REPORT_VIEWER_IDS = ['mohammed', 'ziyad'];
 const REPORT_VIEWER_DASHBOARDS = [
-  'summary', 'salesreport', 'ytdsales', 'gec', 'contact', 'delivery', 'lexus', 'b2c',
+  'summary', 'salesreport', 'ytdsales', 'gec', 'contact', 'evaluation', 'delivery', 'lexus', 'b2c',
   'bodashboard', 'boerrors', 'boallocstock', 'plantracker', 'reservedvehicles'
 ];
 const REPORT_VIEWER_PUSH_AREAS = [
