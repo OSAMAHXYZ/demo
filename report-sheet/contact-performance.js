@@ -2,12 +2,41 @@
   "use strict";
 
   const COLORS = {
-    contacted: "#16A34A",
-    not_contacted: "#DC2626",
-    in_progress: "#F59E0B",
-    unknown: "#98A2B3",
-    unmatched: "#7C3AED",
+    contacted: "#34D399",
+    not_contacted: "#FB4B5C",
+    in_progress: "#FBBF24",
+    unknown: "#64748B",
+    unmatched: "#A78BFA",
   };
+  const ICONS = {
+    total: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+    matched: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    contacted: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    not_contacted: '<path d="M6 6l12 12M18 6L6 18"/>',
+    in_progress: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+    rate: '<path d="M4 18l5-6 4 3 7-9"/><path d="M15 6h5v5"/>',
+    unknown: '<circle cx="12" cy="12" r="8"/><path d="M9.8 9.5a2.3 2.3 0 1 1 3.2 2.1c-.7.4-1 .8-1 1.6M12 16.5v.1"/>',
+  };
+
+  function icon(name) {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ICONS.total}</svg>`;
+  }
+
+  function initials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    return ((parts[0][0] || "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+  }
+
+  function hue(name) {
+    let h = 0;
+    String(name || "").split("").forEach((ch) => { h = (h * 31 + ch.charCodeAt(0)) % 360; });
+    return h;
+  }
+
+  function avatar(name) {
+    return `<span class="cp-av" style="--h:${hue(name)}">${esc(initials(name))}</span>`;
+  }
   const CONTACT_OPTIONS = [
     ["", "All CRM leads"],
     ["matched", "Matched"],
@@ -75,9 +104,13 @@
     host.dataset.cpMounted = "1";
     host.innerHTML = `<div class="cp-app">
       <header class="cp-header">
-        <div>
-          <h2>Toyota Contact Performance Dashboard</h2>
-          <p id="cp-sub">Waiting for a published dataset</p>
+        <div class="cp-hero-copy">
+          <div class="cp-logo" aria-hidden="true"><img src="../images/logo/toyota.png" alt="" width="30" height="30" decoding="async" onerror="this.style.display='none'" /></div>
+          <div class="cp-hero-text">
+            <p class="cp-eyebrow">ALJ Digital Retail · CRM follow-up</p>
+            <h2>Contact Performance</h2>
+            <p id="cp-sub">Waiting for a published dataset</p>
+          </div>
         </div>
         <div class="cp-header-side">
           <span class="cp-pill" id="cp-fresh"><i></i><span>No dataset</span></span>
@@ -93,14 +126,14 @@
       <p class="cp-note" id="cp-equation"></p>
       <div class="cp-charts">
         <section class="cp-card">
-          <h3>Contact Status Distribution</h3>
+          <div class="cp-section-head"><h3>Contact Status Distribution</h3><span class="cp-count">Click a slice to filter</span></div>
           <div class="cp-chart-row">
-            <div class="cp-chart-box"><canvas id="cp-donut"></canvas></div>
+            <div class="cp-chart-box cp-donut-box"><canvas id="cp-donut"></canvas><div class="cp-donut-center" id="cp-donut-center"></div></div>
             <ul class="cp-legend" id="cp-donut-legend"></ul>
           </div>
         </section>
         <section class="cp-card">
-          <h3>CRM Status Breakdown</h3>
+          <div class="cp-section-head"><h3>CRM Status Breakdown</h3><span class="cp-count">Click a bar to filter</span></div>
           <div class="cp-chart-box" id="cp-bar-box"><canvas id="cp-bars"></canvas></div>
         </section>
       </div>
@@ -122,7 +155,7 @@
         <div class="cp-table-wrap" id="cp-emp-wrap"></div>
       </section>
       <section class="cp-card cp-leads">
-        <h3>Lead detail</h3>
+        <div class="cp-section-head"><h3>Lead detail</h3><span class="cp-count">Open a row for the full record</span></div>
         <div class="cp-table-wrap" id="cp-lead-wrap"></div>
         <div class="cp-pager" id="cp-pager"></div>
       </section>
@@ -251,7 +284,7 @@
       if (summary.empty) {
         const lastError = state.lastError || (state.diagnostic && state.diagnostic.lastError);
         sub.textContent = lastError ? `Last import failed ${stamp(lastError.at)}: ${lastError.message}` : missingMessage();
-        fresh.className = "cp-pill";
+        fresh.className = "cp-pill is-stale";
         fresh.innerHTML = "<i></i><span>Not published</span>";
       } else {
         const historical = summary.publicationId && state.activeId && summary.publicationId !== state.activeId;
@@ -341,22 +374,28 @@
         return;
       }
       const kpis = state.summary.kpis || {};
-      const cards = [
-        ["", "Total CRM Leads", fmt(kpis.totalCrm), "Unique transactions", ""],
-        ["matched", "Matched Leads", fmt(kpis.matched), "Same lead identifier in both files", "info"],
-        ["contacted", "Contacted Leads", fmt(kpis.exportContacted), `${pct(kpis.contactedOfCrm)} of CRM total`, "ok"],
-        ["not_contacted", "Not Contacted Leads", fmt(kpis.exportNotContacted), `${pct(kpis.notContactedOfCrm)} of CRM total`, "bad"],
-        ["in_progress", "In Progress Leads", fmt(kpis.inProgress), "Matched, in progress", "wait"],
-        ["contacted", "Contact Rate", pct(kpis.contactRate), "Contacted ÷ matched", ""],
-      ];
+      const total = Number(kpis.totalCrm) || 0;
+      const share = (value) => (total > 0 ? Math.max(0, Math.min(100, (Number(value) || 0) / total * 100)) : 0);
       const unknownItem = (state.summary.distribution || []).find((item) => item.key === "unknown");
-      if (unknownItem) cards.push(["unknown", "Unknown / Missing Status", fmt(unknownItem.count), `${Number(unknownItem.pct || 0).toFixed(1)}% · status not recognised`, "unknown"]);
+      // [filter key, label, value, sub, tone, icon, bar % (null = no bar)]
+      const cards = [
+        ["", "Total CRM Leads", fmt(kpis.totalCrm), "Unique transactions", "total", "total", 100],
+        ["matched", "Matched Leads", fmt(kpis.matched), "Same lead identifier in both files", "info", "matched", share(kpis.matched)],
+        ["contacted", "Contacted", fmt(kpis.exportContacted), `${pct(kpis.contactedOfCrm)} of CRM total`, "ok", "contacted", share(kpis.exportContacted)],
+        ["not_contacted", "Not Contacted", fmt(kpis.exportNotContacted), `${pct(kpis.notContactedOfCrm)} of CRM total`, "bad", "not_contacted", share(kpis.exportNotContacted)],
+        ["in_progress", "In Progress", fmt(kpis.inProgress), "Matched, in progress", "wait", "in_progress", share(kpis.inProgress)],
+        ["contacted", "Contact Rate", pct(kpis.contactRate), "Contacted ÷ matched", "rate", "rate", kpis.contactRate == null ? null : Math.max(0, Math.min(100, Number(kpis.contactRate) || 0))],
+      ];
+      if (unknownItem) cards.push(["unknown", "Unknown / Missing", fmt(unknownItem.count), `${Number(unknownItem.pct || 0).toFixed(1)}% · status not recognised`, "unknown", "unknown", Math.max(0, Math.min(100, Number(unknownItem.pct) || 0))]);
       host.querySelector("#cp-kpis").innerHTML = cards.map((card, index) => {
         const on = (index < 5 || card[0] === "unknown") && state.filters.contact === card[0] && card[0] !== "";
+        const bar = card[6] == null ? "" : `<span class="bar"><i style="width:${card[6].toFixed(1)}%"></i></span>`;
         return `<button type="button" class="cp-kpi ${card[4]}${on ? " is-on" : ""}" data-kpi="${esc(card[0])}" data-kpi-index="${index}">
+          <span class="ico">${icon(card[5])}</span>
           <span class="lab">${esc(card[1])}</span>
           <span class="val">${esc(card[2])}</span>
           <span class="sub">${esc(card[3])}</span>
+          ${bar}
         </button>`;
       }).join("");
     }
@@ -390,11 +429,15 @@
             labels: distribution.map((item) => item.label),
             datasets: [{
               data: distribution.map((item) => item.count),
-              backgroundColor: distribution.map((item) => COLORS[item.key] || "#98A2B3"),
+              backgroundColor: distribution.map((item) => COLORS[item.key] || "#64748B"),
               borderWidth: 0,
+              spacing: 3,
+              borderRadius: 6,
+              hoverOffset: 6,
             }],
           },
           options: {
+            cutout: "74%",
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
@@ -404,14 +447,19 @@
             },
           },
         }));
+        const centre = host.querySelector("#cp-donut-center");
+        if (centre) {
+          const totalLeads = distribution.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+          centre.innerHTML = `<b>${fmt(totalLeads)}</b><span>CRM leads</span>`;
+        }
         const bars = summary.crmBars || [];
         const box = host.querySelector("#cp-bar-box");
-        box.style.height = `${Math.max(160, bars.length * 26)}px`;
+        box.style.height = `${Math.max(160, bars.length * 30)}px`;
         state.charts.push(new global.Chart(host.querySelector("#cp-bars"), {
           type: "bar",
           data: {
             labels: bars.map((item) => item.label),
-            datasets: [{ data: bars.map((item) => item.count), backgroundColor: "#3563E9", borderRadius: 4, maxBarThickness: 16 }],
+            datasets: [{ data: bars.map((item) => item.count), backgroundColor: "#60A5FA", hoverBackgroundColor: "#93C5FD", borderRadius: 6, borderSkipped: false, maxBarThickness: 18 }],
           },
           options: {
             indexAxis: "y",
@@ -419,8 +467,8 @@
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { precision: 0, color: "#8d9bb0" }, grid: { color: "rgba(148, 163, 184, 0.16)" } },
-              y: { ticks: { color: "#e8eef7", font: { size: 11 }, autoSkip: false }, grid: { display: false } },
+              x: { ticks: { precision: 0, color: "#8d9bb0" }, grid: { color: "rgba(148, 163, 184, 0.10)" }, border: { display: false } },
+              y: { ticks: { color: "#e8eef7", font: { size: 11.5 }, autoSkip: false }, grid: { display: false }, border: { display: false } },
             },
             onClick: (_evt, elements) => {
               if (!elements.length) return;
@@ -457,7 +505,7 @@
       <ul class="cp-ach-list">${rows.map((row) => {
         const part = (count, color) => (count > 0 && row.total > 0 ? `<i style="width:${(count / row.total) * 100}%;background:${color}"></i>` : "");
         return `<li>
-          <span class="cp-ach-name" title="${esc(row.name)}">${esc(row.name)}</span>
+          <span class="cp-ach-name" title="${esc(row.name)}">${avatar(row.name)}<em>${esc(row.name)}</em></span>
           <span class="cp-ach-bar" title="Contacted ${fmt(row.contacted)} · Not Contacted ${fmt(row.notContacted)} (${share(row.notContactedPct)}) · In Progress ${fmt(row.inProgress)} (${share(row.inProgressPct)}) · Unknown ${fmt(row.unknown)}">${part(row.contacted, COLORS.contacted)}${part(row.notContacted, COLORS.not_contacted)}${part(row.inProgress, COLORS.in_progress)}${part(row.unknown, COLORS.unknown)}</span>
           <span class="cp-ach-total">${fmt(row.total)}</span>
           <b class="cp-ach-pct">${achLabel(row)}</b>
@@ -481,8 +529,8 @@
       if (count) count.textContent = `Showing ${fmt(rows.length)} of ${fmt(all.length)} employees`;
       const head = (key, label) => `<th><button type="button" data-emp-sort="${esc(key)}">${esc(label)}</button></th>`;
       const body = rows.length ? rows.map((row) => `<tr class="is-pick${state.filters.employee === row.key ? " is-on" : ""}" data-employee="${esc(row.key)}">
-        <td class="num">${row.rank}</td>
-        <td title="${esc(row.name)}">${esc(row.name)}</td>
+        <td class="num"><span class="cp-rank r${row.rank <= 3 ? row.rank : 0}">${row.rank}</span></td>
+        <td title="${esc(row.name)}"><span class="cp-emp">${avatar(row.name)}<span>${esc(row.name)}</span></span></td>
         <td>${esc(row.number || "—")}</td>
         <td class="num">${fmt(row.matched)}</td>
         <td class="num">${fmt(row.contacted)}</td>
@@ -490,7 +538,7 @@
         <td class="num">${fmt(row.inProgress)}</td>
         <td class="num">${esc(pct(row.contactRate))}</td>
         <td>N/A</td>
-        <td><span class="cp-meter" title="Contact rate from matched leads"><span style="width:${Math.max(0, Math.min(100, row.contactRate || 0))}%"></span></span>${esc(pct(row.contactRate))} <span class="cp-vol">${fmt(row.matched)} leads</span></td>
+        <td><span class="cp-meter ${row.contactRate == null ? "" : row.contactRate >= 80 ? "hi" : row.contactRate >= 50 ? "mid" : "lo"}" title="Contact rate from matched leads"><span style="width:${Math.max(0, Math.min(100, row.contactRate || 0))}%"></span></span><span class="cp-vol">${fmt(row.matched)} leads</span></td>
       </tr>`).join("") : `<tr><td colspan="10"><div class="cp-empty">${state.summary && state.summary.empty ? esc(missingMessage()) : (all.length ? "No employees match that search." : "No employees for the current filters.")}</div></td></tr>`;
       host.querySelector("#cp-emp-wrap").innerHTML = `<table class="cp-table">
         <thead><tr>
