@@ -1,0 +1,362 @@
+/* =====================================================================
+   Live sheet · "Virtual Excel"
+   Makes #panel-sheet look and behave like a real Excel workbook window:
+   green title bar, ribbon tabs, name box + formula bar, lettered column
+   header, numbered rows, gridlines, selected-cell outline, sheet tabs at
+   the bottom and a green status bar with zoom.
+   Loaded after reserved-orders-skin.css; every rule is scoped to
+   #admin-app #panel-sheet and uses !important to beat the dark skin.
+   ===================================================================== */
+
+#admin-app #panel-sheet {
+  --xl-green: #217346;
+  --xl-green-dark: #185c37;
+  --xl-green-soft: #e2efda;
+  --xl-grid: #d4d4d4;
+  --xl-head: #f3f3f3;
+  --xl-head-line: #c6c6c6;
+  --xl-text: #1f1f1f;
+  --xl-font: Calibri, "Segoe UI", "Tajawal", Arial, sans-serif;
+  padding: 0 !important;
+  background: #fff !important;
+  border: 1px solid #8a8a8a !important;
+  border-radius: 6px !important;
+  overflow: hidden;
+  color: var(--xl-text) !important;
+  font-family: var(--xl-font) !important;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45) !important;
+}
+#admin-app #panel-sheet.xlw:not(.hidden) { display: flex !important; flex-direction: column; }
+#admin-app #panel-sheet * { font-family: var(--xl-font); }
+
+/* ---- Title bar ---- */
+#admin-app #panel-sheet .xl-titlebar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--xl-green) !important; color: #fff !important;
+  padding: 6px 12px; min-height: 40px;
+}
+#admin-app #panel-sheet .xl-appicon {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 4px;
+  background: #fff; color: var(--xl-green); font: 900 15px/1 var(--xl-font);
+}
+#admin-app #panel-sheet .xl-autosave { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #e6f2ea; }
+#admin-app #panel-sheet .xl-toggle {
+  position: relative; display: inline-block; width: 30px; height: 14px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+#admin-app #panel-sheet .xl-toggle::after {
+  content: ""; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--xl-green);
+}
+#admin-app #panel-sheet .xl-filename { font-size: 13px; color: #fff; flex: 1 1 220px; min-width: 0; }
+#admin-app #panel-sheet .xl-filename b { font-weight: 700; }
+#admin-app #panel-sheet .xl-filename small { color: #cfe6d8; font-size: 12px; }
+#admin-app #panel-sheet .xl-search { margin: 0 !important; padding: 0 !important; background: none !important; border: 0 !important; flex: 0 1 340px; }
+#admin-app #panel-sheet .xl-search .search,
+#admin-app #panel-sheet #sheet-search {
+  width: 100% !important; max-width: none !important; min-height: 28px !important; height: 28px;
+  padding: 0 10px !important; margin: 0 !important;
+  background: #fff !important; color: #222 !important; -webkit-text-fill-color: #222;
+  border: 1px solid #b7d4c3 !important; border-radius: 4px !important;
+  font: 400 13px var(--xl-font) !important; box-shadow: none !important;
+}
+#admin-app #panel-sheet #sheet-search::placeholder { color: #6b7280 !important; opacity: 1; }
+#admin-app #panel-sheet #sheet-search:focus { outline: 2px solid #fff !important; outline-offset: 0; }
+
+/* ---- Ribbon tabs (decorative) ---- */
+#admin-app #panel-sheet .xl-menutabs {
+  display: flex; gap: 2px; padding: 0 8px; background: var(--xl-green-dark) !important; overflow-x: auto;
+}
+#admin-app #panel-sheet .xl-menutabs span {
+  padding: 6px 13px; font-size: 12.5px; color: #e9f5ee; white-space: nowrap; cursor: default; border-radius: 4px 4px 0 0;
+}
+#admin-app #panel-sheet .xl-menutabs span.on { background: #f3f3f3; color: var(--xl-green-dark); font-weight: 700; }
+#admin-app #panel-sheet .xl-menutabs span:not(.on):hover { background: rgba(255, 255, 255, 0.12); }
+
+/* ---- Formula bar ---- */
+#admin-app #panel-sheet .xl-formulabar {
+  display: flex; align-items: stretch; gap: 0; background: #f3f3f3 !important;
+  border-bottom: 1px solid var(--xl-head-line); padding: 4px 6px; gap: 6px;
+}
+#admin-app #panel-sheet .xl-namebox {
+  flex: 0 0 92px; min-height: 24px; display: flex; align-items: center; padding: 0 8px;
+  background: #fff; border: 1px solid #c6c6c6; font-size: 13px; color: var(--xl-text);
+}
+#admin-app #panel-sheet .xl-fxbtns { display: inline-flex; align-items: center; gap: 10px; padding: 0 4px; color: #8a8a8a; font-size: 13px; }
+#admin-app #panel-sheet .xl-fxbtns i { font-style: normal; }
+#admin-app #panel-sheet .xl-fxbtns i:nth-child(2) { color: var(--xl-green); }
+#admin-app #panel-sheet .xl-fxbtns em { font: italic 700 13px "Times New Roman", serif; color: #444; padding-left: 8px; border-left: 1px solid #c6c6c6; }
+#admin-app #panel-sheet .xl-formula {
+  flex: 1; min-width: 0; min-height: 24px; display: flex; align-items: center; padding: 0 8px;
+  background: #fff; border: 1px solid #c6c6c6; font-size: 13px; color: var(--xl-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- Message bar (was the grey note) ---- */
+#admin-app #panel-sheet .xl-msgbar {
+  margin: 0 !important; padding: 4px 12px !important; background: #fff8dc !important;
+  border-bottom: 1px solid #e6d9a2; color: #5c4a00 !important; font-size: 12px !important; line-height: 1.4 !important;
+}
+
+/* ---- The grid scroller ---- */
+#admin-app #panel-sheet .excel-live {
+  flex: 1 1 auto; min-height: 320px; max-height: calc(100vh - 330px) !important;
+  background: #fff !important; border: 0 !important; border-radius: 0 !important;
+  overflow: auto; outline: none; color: var(--xl-text) !important;
+}
+#admin-app #panel-sheet .excel-live.hidden { display: none !important; }
+#admin-app #panel-sheet .excel-live table.xl-grid {
+  border-collapse: separate !important; border-spacing: 0 !important;
+  width: max-content !important; min-width: 0 !important; background: #fff !important;
+  font: 400 13px var(--xl-font) !important; color: var(--xl-text) !important;
+}
+#admin-app #panel-sheet .excel-live th,
+#admin-app #panel-sheet .excel-live td { font-family: var(--xl-font) !important; box-sizing: border-box; }
+
+/* lettered column header (A, B, C ...) */
+#admin-app #panel-sheet .excel-live .xl-letters th {
+  position: sticky !important; top: 0 !important; z-index: 6 !important; height: 22px; padding: 0 10px !important;
+  background: var(--xl-head) !important; color: #444 !important; text-align: center; font: 400 12px var(--xl-font) !important;
+  border: 0 !important; border-right: 1px solid var(--xl-head-line) !important; border-bottom: 1px solid var(--xl-head-line) !important;
+  letter-spacing: 0 !important; cursor: pointer; user-select: none;
+}
+#admin-app #panel-sheet .excel-live .xl-letters th.xl-corner {
+  left: 0 !important; z-index: 8 !important; width: 44px; min-width: 44px; cursor: default;
+  background: linear-gradient(135deg, var(--xl-head) 55%, #bdbdbd 56%, #bdbdbd 66%, var(--xl-head) 67%) !important;
+}
+#admin-app #panel-sheet .excel-live .xl-letters th.xl-active {
+  background: #cfe8d9 !important; color: var(--xl-green-dark) !important; font-weight: 700;
+  border-bottom: 2px solid var(--xl-green) !important;
+}
+
+/* row 1 = header row of the data */
+#admin-app #panel-sheet .excel-live .xl-head th {
+  position: sticky !important; top: 22px !important; z-index: 5 !important;
+  background: var(--xl-green-soft) !important; color: #1a3d28 !important;
+  padding: 3px 8px !important; height: 24px; text-align: left; font: 700 13px var(--xl-font) !important;
+  letter-spacing: 0 !important; text-transform: none !important;
+  border: 0 !important; border-right: 1px solid #b9d3a9 !important; border-bottom: 2px solid var(--xl-green) !important;
+}
+#admin-app #panel-sheet .excel-live .xl-head th.xl-rn { top: 22px !important; left: 0 !important; z-index: 7 !important; }
+#admin-app #panel-sheet .excel-live th .col-letter {
+  display: inline !important; min-width: 0; height: auto; margin: 0 0 0 6px; padding: 0 !important; border-radius: 0; background: none !important;
+  color: #5b7a67 !important; font: 400 10px var(--xl-font) !important; vertical-align: super;
+}
+#admin-app #panel-sheet .excel-live th .col-letter::before { content: "["; }
+#admin-app #panel-sheet .excel-live th .col-letter::after { content: "]"; }
+
+/* row-number gutter */
+#admin-app #panel-sheet .excel-live th.xl-rn {
+  position: sticky !important; left: 0 !important; z-index: 4 !important;
+  min-width: 44px; width: 44px; padding: 0 6px !important; text-align: center; vertical-align: middle;
+  background: var(--xl-head) !important; color: #444 !important; font: 400 12px var(--xl-font) !important;
+  border: 0 !important; border-right: 1px solid var(--xl-head-line) !important; border-bottom: 1px solid var(--xl-head-line) !important;
+  user-select: none; cursor: pointer;
+}
+#admin-app #panel-sheet .excel-live .xl-head th.xl-rn { background: var(--xl-head) !important; cursor: default; }
+#admin-app #panel-sheet .excel-live tbody th.xl-rn.xl-active {
+  background: #cfe8d9 !important; color: var(--xl-green-dark) !important; font-weight: 700;
+  border-right: 2px solid var(--xl-green) !important;
+}
+
+/* cells */
+#admin-app #panel-sheet .excel-live tbody td,
+#admin-app #panel-sheet .excel-live tbody tr:nth-child(even) td,
+#admin-app #panel-sheet .excel-live tbody tr:hover td {
+  position: relative !important; left: auto !important;
+  background: #fff !important; color: var(--xl-text) !important;
+  border: 0 !important; border-right: 1px solid var(--xl-grid) !important; border-bottom: 1px solid var(--xl-grid) !important;
+  padding: 2px 8px !important; height: 22px; font: 400 13px var(--xl-font) !important;
+  font-variant-numeric: normal; white-space: nowrap; vertical-align: middle;
+}
+#admin-app #panel-sheet .excel-live tbody td.xl-num { text-align: right; }
+#admin-app #panel-sheet .excel-live tbody td.col-queue { text-align: center; }
+
+/* selected cell: green outline + fill handle */
+#admin-app #panel-sheet .excel-live tbody td.xl-sel,
+#admin-app #panel-sheet .excel-live tbody tr:nth-child(even) td.xl-sel,
+#admin-app #panel-sheet .excel-live tbody tr:hover td.xl-sel {
+  outline: 2px solid var(--xl-green) !important; outline-offset: -2px; z-index: 2;
+}
+#admin-app #panel-sheet .excel-live tbody td.xl-sel::after {
+  content: ""; position: absolute; right: -4px; bottom: -4px; width: 7px; height: 7px;
+  background: var(--xl-green); border: 1px solid #fff; z-index: 3; pointer-events: none;
+}
+
+/* Excel "Good / Bad / Neutral" cell styles for flagged rows and cells */
+#admin-app #panel-sheet .excel-live tbody tr.is-novin td,
+#admin-app #panel-sheet .excel-live tbody tr.is-novin:hover td { background: #ffeb9c !important; color: #9c5700 !important; }
+#admin-app #panel-sheet .excel-live tbody tr.row-cancelled > td,
+#admin-app #panel-sheet .excel-live tbody tr.row-cancelled:hover > td { background: #ffc7ce !important; color: #9c0006 !important; }
+#admin-app #panel-sheet .excel-live tbody td.cell-retail-ok,
+#admin-app #panel-sheet .excel-live tbody tr:nth-child(even) td.cell-retail-ok,
+#admin-app #panel-sheet .excel-live tbody tr:hover td.cell-retail-ok,
+#admin-app #panel-sheet .excel-live tbody tr.row-cancelled > td.cell-retail-ok { background: #c6efce !important; color: #006100 !important; font-weight: 400; }
+#admin-app #panel-sheet .excel-live tbody td.cell-retail-bad,
+#admin-app #panel-sheet .excel-live tbody tr:nth-child(even) td.cell-retail-bad,
+#admin-app #panel-sheet .excel-live tbody tr:hover td.cell-retail-bad,
+#admin-app #panel-sheet .excel-live tbody tr.row-cancelled > td.cell-retail-bad { background: #ffc7ce !important; color: #9c0006 !important; font-weight: 400; }
+#admin-app #panel-sheet .excel-live tbody td.cell-retail-empty,
+#admin-app #panel-sheet .excel-live tbody tr:nth-child(even) td.cell-retail-empty,
+#admin-app #panel-sheet .excel-live tbody tr:hover td.cell-retail-empty,
+#admin-app #panel-sheet .excel-live tbody tr.row-cancelled > td.cell-retail-empty { background: #f2f2f2 !important; color: #7f7f7f !important; }
+
+/* timer cell */
+#admin-app #panel-sheet .excel-live .timer-cell { font: 700 13px Consolas, "Courier New", monospace !important; color: #006100 !important; }
+#admin-app #panel-sheet .excel-live .timer-cell.is-ok { color: #006100 !important; }
+#admin-app #panel-sheet .excel-live .timer-cell.is-warn { color: #9c5700 !important; background: #ffeb9c !important; }
+#admin-app #panel-sheet .excel-live .timer-cell.is-bad { color: #9c0006 !important; background: #ffc7ce !important; }
+
+/* pills collapse to plain cell text with an Excel conditional-format fill */
+#admin-app #panel-sheet .excel-live .q-pill {
+  display: inline !important; min-width: 0; height: auto; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  background: none !important; color: var(--xl-text) !important; font: 700 13px var(--xl-font) !important;
+}
+#admin-app #panel-sheet .excel-live .s-pill,
+#admin-app #panel-sheet .excel-live .col-status .s-pill {
+  display: block; margin: -2px -8px; padding: 2px 8px; border: 0 !important; border-radius: 0 !important;
+  background: #ddebf7 !important; color: #1f4e78 !important; font: 400 13px var(--xl-font) !important; min-height: 22px;
+}
+#admin-app #panel-sheet .excel-live .s-pill.is-ok { background: #c6efce !important; color: #006100 !important; }
+#admin-app #panel-sheet .excel-live .s-pill.is-bad { background: #ffc7ce !important; color: #9c0006 !important; }
+#admin-app #panel-sheet .excel-live .s-pill.is-hold { background: #ffeb9c !important; color: #9c5700 !important; }
+#admin-app #panel-sheet .excel-live .s-pill.is-none { background: #f2f2f2 !important; color: #7f7f7f !important; }
+#admin-app #panel-sheet .excel-live .source-pill {
+  display: block; margin: -2px -8px; padding: 2px 8px; border: 0 !important; border-radius: 0 !important; min-height: 22px;
+  font: 400 13px var(--xl-font) !important;
+}
+#admin-app #panel-sheet .excel-live .source-pill.is-esales { background: #ddebf7 !important; color: #1f4e78 !important; }
+#admin-app #panel-sheet .excel-live .source-pill.is-reserved { background: #fce4d6 !important; color: #833c0b !important; }
+#admin-app #panel-sheet .excel-live .source-pill.is-both { background: #c6efce !important; color: #006100 !important; }
+
+/* controls inside cells, light themed */
+#admin-app #panel-sheet .excel-live .admin-status-select,
+#admin-app #panel-sheet .excel-live select {
+  width: 100%; min-width: 130px; max-width: 220px; height: 22px !important; min-height: 0 !important; line-height: 1.2 !important;
+  padding: 0 4px !important; margin: 0 !important; appearance: auto; -webkit-appearance: menulist;
+  background: #fff !important; color: var(--xl-text) !important; -webkit-text-fill-color: var(--xl-text);
+  border: 1px solid #a6a6a6 !important; border-radius: 0 !important; box-shadow: none !important; font: 400 13px var(--xl-font) !important;
+}
+#admin-app #panel-sheet .excel-live .admin-status-select.is-saved { border-color: var(--xl-green) !important; box-shadow: inset 0 0 0 1px var(--xl-green) !important; }
+#admin-app #panel-sheet .excel-live .sheet-leader-note {
+  background: #fff !important; color: var(--xl-text) !important; -webkit-text-fill-color: var(--xl-text);
+  border: 1px solid #a6a6a6 !important; border-radius: 0 !important; min-height: 44px; font: 400 12.5px var(--xl-font) !important;
+}
+#admin-app #panel-sheet .excel-live .sheet-leader-save {
+  min-height: 22px; padding: 0 10px !important; background: #f3f3f3 !important; color: var(--xl-green-dark) !important;
+  border: 1px solid #a6a6a6 !important; border-radius: 0 !important; font: 600 12px var(--xl-font) !important; box-shadow: none !important;
+}
+#admin-app #panel-sheet .excel-live .sheet-leader-save:hover { background: var(--xl-green-soft) !important; }
+
+/* Rich cells stay on one line like real spreadsheet rows (thin rows, no stacked blocks) */
+#admin-app #panel-sheet .excel-live .col-updated-by,
+#admin-app #panel-sheet .excel-live .col-notes,
+#admin-app #panel-sheet .excel-live .col-ahead { vertical-align: middle !important; white-space: nowrap !important; min-width: 0 !important; max-width: none !important; }
+#admin-app #panel-sheet .excel-live .col-updated-by b,
+#admin-app #panel-sheet .excel-live .col-updated-by small,
+#admin-app #panel-sheet .excel-live .col-updated-by .saudi-time { display: inline !important; margin: 0 !important; font-size: 13px !important; }
+#admin-app #panel-sheet .excel-live .col-updated-by small::before,
+#admin-app #panel-sheet .excel-live .col-updated-by .saudi-time::before { content: " \00B7  "; color: #8a8a8a; }
+#admin-app #panel-sheet .excel-live .col-leader-note { white-space: nowrap !important; }
+#admin-app #panel-sheet .excel-live .col-leader-note .sheet-leader-note {
+  display: inline-block; vertical-align: middle; width: 210px !important; height: 22px !important; min-height: 22px !important;
+  padding: 2px 6px !important; resize: none !important; overflow: hidden; line-height: 16px; white-space: nowrap;
+}
+#admin-app #panel-sheet .excel-live .col-leader-note .sheet-leader-note:focus {
+  position: absolute; z-index: 9; width: 280px !important; height: 70px !important; white-space: normal; overflow: auto;
+  outline: 2px solid var(--xl-green); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+}
+#admin-app #panel-sheet .excel-live .col-leader-note .sheet-leader-save { margin: 0 0 0 4px !important; vertical-align: middle; }
+#admin-app #panel-sheet .excel-live .col-leader-note small { display: inline !important; margin: 0 0 0 8px !important; font-size: 11.5px !important; }
+#admin-app #panel-sheet .excel-live .ahead-stack { display: inline-flex !important; flex-direction: row; align-items: center; gap: 8px !important; }
+#admin-app #panel-sheet .excel-live .ahead-chips { flex-wrap: nowrap !important; gap: 4px !important; }
+#admin-app #panel-sheet .excel-live .ahead-chip { flex-direction: row !important; align-items: center; gap: 5px !important; padding: 0 6px !important; max-width: none !important; font-size: 12px !important; line-height: 18px !important; }
+#admin-app #panel-sheet .excel-live .col-updated-by b { color: var(--xl-text) !important; }
+#admin-app #panel-sheet .excel-live .col-updated-by small { color: #6b6b6b !important; }
+#admin-app #panel-sheet .excel-live .saudi-time,
+#admin-app #panel-sheet .excel-live .col-updated-by .saudi-time { color: #9c5700 !important; font-weight: 400 !important; }
+#admin-app #panel-sheet .excel-live .s-pill { font-size: 13px !important; line-height: 18px; }
+#admin-app #panel-sheet .excel-live .ahead-pos { color: #6b6b6b !important; }
+#admin-app #panel-sheet .excel-live .ahead-empty { color: #8a8a8a !important; }
+#admin-app #panel-sheet .excel-live .ahead-chip,
+#admin-app #panel-sheet #live-sheet-reserved.excel-live .ahead-chip,
+#admin-app #panel-sheet #live-sheet-merged.excel-live .ahead-chip {
+  border-radius: 0 !important; background: #ddebf7 !important; border: 1px solid #9dc3e6 !important; color: #1f4e78 !important;
+}
+#admin-app #panel-sheet #live-sheet-reserved.excel-live .ahead-chip { background: #fce4d6 !important; border-color: #f4b183 !important; color: #833c0b !important; }
+#admin-app #panel-sheet #live-sheet-merged.excel-live .ahead-chip { background: #e2efda !important; border-color: #a9d08e !important; color: #375623 !important; }
+#admin-app #panel-sheet .excel-live .ahead-chip b,
+#admin-app #panel-sheet #live-sheet-reserved.excel-live .ahead-chip b,
+#admin-app #panel-sheet #live-sheet-merged.excel-live .ahead-chip b { color: inherit !important; }
+#admin-app #panel-sheet .excel-live .ahead-chip span { color: inherit !important; }
+#admin-app #panel-sheet .excel-live .ahead-chip i { color: #6b6b6b !important; }
+#admin-app #panel-sheet .excel-live .sheet-team-note { border-bottom-color: #d4d4d4 !important; }
+#admin-app #panel-sheet .excel-live .sheet-team-note b { color: var(--xl-green-dark) !important; }
+#admin-app #panel-sheet .excel-live .sheet-team-note span { color: #6b6b6b !important; }
+#admin-app #panel-sheet .excel-live .sheet-team-note p { color: var(--xl-text) !important; }
+#admin-app #panel-sheet .excel-live .col-leader-note small { color: #6b6b6b !important; }
+#admin-app #panel-sheet .excel-live .empty {
+  margin: 0; padding: 40px 20px; background: #fff !important; color: #6b6b6b !important; text-align: center; font-size: 14px;
+}
+
+/* ---- Sheet tabs (the source switcher) ---- */
+#admin-app #panel-sheet .xl-sheettabs {
+  display: flex !important; gap: 0 !important; align-items: flex-end; margin: 0 !important; padding: 0 8px !important;
+  background: #e9e9e9 !important; border-top: 1px solid #b4b4b4; border-bottom: 0 !important; grid-template-columns: none !important;
+  overflow-x: auto; min-height: 30px;
+}
+#admin-app #panel-sheet .xl-sheettabs .sheet-source,
+#admin-app #panel-sheet .xl-sheettabs .sheet-source[data-sheet] {
+  display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; min-width: 0 !important;
+  padding: 5px 16px !important; margin: 0 -1px 0 0; border: 1px solid #b4b4b4 !important; border-top: 0 !important;
+  border-radius: 0 0 6px 6px !important; background: transparent !important; color: #444 !important;
+  font: 400 13px var(--xl-font) !important; box-shadow: none !important; cursor: pointer; transform: none !important;
+}
+#admin-app #panel-sheet .xl-sheettabs .sheet-source strong { color: inherit !important; font: inherit !important; font-weight: 400 !important; }
+#admin-app #panel-sheet .xl-sheettabs .sheet-source:hover { background: #f5f5f5 !important; }
+#admin-app #panel-sheet .xl-sheettabs .sheet-source.active,
+#admin-app #panel-sheet .xl-sheettabs .sheet-source[data-sheet].active {
+  background: #fff !important; color: var(--xl-green-dark) !important; font-weight: 700;
+  border-bottom: 3px solid var(--xl-green) !important; position: relative; z-index: 1;
+}
+#admin-app #panel-sheet .xl-sheettabs .sheet-source.active strong { font-weight: 700 !important; }
+#admin-app #panel-sheet .xl-sheettabs .sheet-source-count,
+#admin-app #panel-sheet .xl-sheettabs .sheet-source.active .sheet-source-count {
+  min-width: 0 !important; height: auto !important; padding: 1px 6px !important; border-radius: 9px !important; border: 0 !important;
+  background: #d9d9d9 !important; color: #444 !important; font: 400 11px var(--xl-font) !important;
+}
+#admin-app #panel-sheet .xl-sheettabs .sheet-source.active .sheet-source-count { background: var(--xl-green) !important; color: #fff !important; }
+#admin-app #panel-sheet .xl-sheettabs .sheet-source-kicker { display: none !important; }
+
+/* ---- Status bar ---- */
+#admin-app #panel-sheet .xl-statusbar {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 3px 12px; min-height: 26px;
+  background: var(--xl-green) !important; color: #fff !important; font-size: 12px;
+}
+#admin-app #panel-sheet .xl-statusbar .xl-ready { font-weight: 700; }
+#admin-app #panel-sheet .xl-statusbar .xl-novin { flex: 1; color: #fff3b0; }
+#admin-app #panel-sheet .xl-statusbar .sheet-novin-toggle {
+  margin-left: 6px; min-height: 0 !important; padding: 0 8px !important; height: 18px; border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-radius: 3px !important; background: transparent !important; color: #fff !important; font: 400 11.5px var(--xl-font) !important; cursor: pointer; box-shadow: none !important;
+}
+#admin-app #panel-sheet .xl-statusbar .sheet-novin-toggle:hover { background: rgba(255, 255, 255, 0.18) !important; }
+#admin-app #panel-sheet .xl-statusbar .xl-zoom { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+#admin-app #panel-sheet .xl-statusbar .xl-zoom label { color: #e6f2ea !important; margin: 0 !important; font-size: 12px !important; }
+#admin-app #panel-sheet .xl-statusbar .xl-zoom b { min-width: 38px; text-align: right; font-weight: 400; }
+#admin-app #panel-sheet .xl-statusbar input[type="range"] {
+  width: 110px !important; min-height: 0 !important; height: 14px; padding: 0 !important; margin: 0 !important; background: transparent !important;
+  border: 0 !important; accent-color: #fff; box-shadow: none !important;
+}
+
+/* ---- Scrollbars like Excel ---- */
+#admin-app #panel-sheet .excel-live { scrollbar-color: #b1b1b1 #f3f3f3; scrollbar-width: auto; }
+#admin-app #panel-sheet .excel-live::-webkit-scrollbar { width: 16px; height: 16px; }
+#admin-app #panel-sheet .excel-live::-webkit-scrollbar-track { background: #f3f3f3; }
+#admin-app #panel-sheet .excel-live::-webkit-scrollbar-thumb { background: #c1c1c1; border: 3px solid #f3f3f3; border-radius: 8px; }
+#admin-app #panel-sheet .excel-live::-webkit-scrollbar-thumb:hover { background: #8f8f8f; }
+#admin-app #panel-sheet .excel-live::-webkit-scrollbar-corner { background: #f3f3f3; }
+
+@media (max-width: 720px) {
+  #admin-app #panel-sheet .xl-menutabs, #admin-app #panel-sheet .xl-autosave, #admin-app #panel-sheet .xl-fxbtns { display: none !important; }
+  #admin-app #panel-sheet .xl-search { flex: 1 1 100%; }
+  #admin-app #panel-sheet .excel-live { max-height: calc(100vh - 280px) !important; }
+}

@@ -5595,9 +5595,9 @@ app.post('/api/report-sheet/push', async (req, res) => {
     };
     saveReportSheetMeta(meta);
     broadcastReportSheetUpdate(at);
-    try { refreshReservedOrdersFromAdminPush(fileNames); } catch (reservedErr) {
-      console.error('[reserved-orders] rebuild from admin push', reservedErr);
-    }
+    // The Reserved Orders Live sheet (reserved-orders-admin.html) is fed ONLY by its own
+    // "Push live" (POST /api/reserved-orders/push). The Report Sheet admin push must not
+    // rebuild it, so refreshReservedOrdersFromAdminPush() is intentionally not called here.
     return res.json({
       ok: true,
       at,

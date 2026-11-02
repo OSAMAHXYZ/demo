@@ -842,6 +842,11 @@
                     ? 'Search merged sheet'
                     : 'Search Stock E-Sales';
         }
+        const fileName = $('xl-filename');
+        if (fileName) {
+            fileName.textContent = sheetSource === 'reserved' ? 'Reserved Order File.xlsx'
+                : sheetSource === 'merged' ? 'Merged sheet.xlsx' : 'Stock E-Sales.xlsx';
+        }
         renderSheet();
     }
     function renderOneSheet(box, source, list) {
@@ -863,9 +868,9 @@
                     ? (titles[label] || RESERVED_SHEET_NAMES[label] || label)
                     : (SHEET_NAMES[label] || titles[label] || label);
             if (/^[A-Z]{1,3}$/.test(label) && named && source !== 'merged') {
-                return `<th title="Column ${esc(label)}"><span class="col-letter">${esc(label)}</span>${esc(named)}</th>`;
+                return `<th class="xl-h" title="Source column ${esc(label)}">${esc(named)}<span class="col-letter">${esc(label)}</span></th>`;
             }
-            return `<th>${esc(named || label)}</th>`;
+            return `<th class="xl-h">${esc(named || label)}</th>`;
         };
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
@@ -925,23 +930,92 @@
                 const ok = retailOk(value);
                 return `<td class="cell-retail ${ok ? 'cell-retail-ok' : 'cell-retail-bad'}">${esc(value)}</td>`;
             }
-            return `<td>${esc(value)}</td>`;
+            const plain = String(value == null ? '' : value).trim();
+            return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
         };
         const emptyMsg = source === 'merged'
             ? 'No merged rows yet. Push Stock E-Sales and/or the Reserved Order File.'
             : source === 'reserved'
                 ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
                 : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
-        const note = noVin ? `<div class="sheet-novin">${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} (totals or extra tables in the file) <button type="button" class="ghost sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button></div>` : '';
+        const note = noVin ? `${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} <button type="button" class="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button>` : '';
+        // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
         box.innerHTML = rows.length
-            ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => {
+            ? `<table class="xl-grid"><thead>
+                <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}">${xlLetter(index)}</th>`).join('')}</tr>
+                <tr class="xl-head"><th class="xl-rn">1</th>${cols.map(head).join('')}</tr>
+            </thead><tbody>${rows.map((order, rowIndex) => {
                 const classes = [
                     hasVin(order) ? '' : 'is-novin',
                     isCancelledStatus(order) ? 'row-cancelled' : ''
                 ].filter(Boolean).join(' ');
-                return `<tr class="${classes}">${cols.map((label) => cell(order, label)).join('')}</tr>`;
+                return `<tr class="${classes}"><th class="xl-rn" data-r="${rowIndex}">${rowIndex + 2}</th>${cols.map((label) => cell(order, label)).join('')}</tr>`;
             }).join('')}</tbody></table>`
-            : `${note}<p class="empty">${emptyMsg}</p>`;
+            : `<p class="empty">${emptyMsg}</p>`;
+        const grid = box.querySelector('.xl-grid');
+        if (grid && xlZoom !== 100) grid.style.zoom = String(xlZoom / 100);
+        if (source === sheetSource) {
+            const stat = $('xl-stat');
+            if (stat) stat.textContent = rows.length ? `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} columns` : 'No data';
+            const novin = $('xl-novin');
+            if (novin) novin.innerHTML = note;
+        }
+        xlRestoreSelection(box, source);
+    }
+    // ---- Virtual Excel helpers (selection, formula bar, zoom) ----
+    let xlZoom = 100;
+    const xlSelected = {};
+    function xlLetter(index) {
+        let n = index + 1;
+        let out = '';
+        while (n > 0) {
+            const rem = (n - 1) % 26;
+            out = String.fromCharCode(65 + rem) + out;
+            n = Math.floor((n - 1) / 26);
+        }
+        return out;
+    }
+    function xlCellText(td) {
+        if (!td) return '';
+        const select = td.querySelector('select');
+        if (select) return select.value || '';
+        const area = td.querySelector('textarea');
+        if (area) return area.value || '';
+        return String(td.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    function xlSelect(box, r, c, scroll) {
+        const source = box && box.dataset.source;
+        const body = box && box.querySelector('.xl-grid tbody');
+        if (!body || !body.rows.length) return;
+        const rowMax = body.rows.length - 1;
+        const colMax = body.rows[0].cells.length - 2;
+        r = Math.max(0, Math.min(rowMax, r));
+        c = Math.max(0, Math.min(colMax, c));
+        xlSelected[source] = { r, c };
+        box.querySelectorAll('.xl-sel').forEach((el) => el.classList.remove('xl-sel'));
+        box.querySelectorAll('.xl-active').forEach((el) => el.classList.remove('xl-active'));
+        const tr = body.rows[r];
+        const td = tr && tr.cells[c + 1];
+        if (!td) return;
+        td.classList.add('xl-sel');
+        if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
+        const letters = box.querySelector('.xl-letters');
+        if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
+        const name = $('xl-name');
+        if (name) name.textContent = xlLetter(c) + (r + 2);
+        const formula = $('xl-formula');
+        if (formula) formula.textContent = xlCellText(td);
+        if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    function xlRestoreSelection(box, source) {
+        const sel = xlSelected[source];
+        if (sel) xlSelect(box, sel.r, sel.c, false);
+        else if (source === sheetSource) {
+            const name = $('xl-name');
+            const formula = $('xl-formula');
+            if (name) name.textContent = 'A1';
+            if (formula) formula.textContent = '';
+        }
     }
     function renderSheet() {
         const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
@@ -1352,10 +1426,60 @@
                 adminSaveLeaderNote(save.dataset.key, input ? input.value : '', save);
                 return;
             }
-            if (!event.target.closest('.sheet-novin-toggle')) return;
-            showNoVinRows = !showNoVinRows;
-            renderSheet();
+            // Click a cell to select it (like Excel); controls inside cells keep working normally.
+            const td = event.target.closest('.xl-grid tbody td');
+            if (td) {
+                const tr = td.parentElement;
+                xlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
+                if (!event.target.closest('select, textarea, input, button, a')) box.focus({ preventScroll: true });
+                return;
+            }
+            const rn = event.target.closest('.xl-grid tbody th.xl-rn');
+            if (rn) { xlSelect(box, rn.parentElement.sectionRowIndex, (xlSelected[box.dataset.source] || { c: 0 }).c, false); return; }
+            const col = event.target.closest('.xl-grid .xl-col');
+            if (col) xlSelect(box, (xlSelected[box.dataset.source] || { r: 0 }).r, Number(col.dataset.c) || 0, false);
         });
+        box.addEventListener('keydown', (event) => {
+            if (event.target !== box) {
+                // Inside a cell control: Escape returns to the grid.
+                if (event.key === 'Escape') box.focus({ preventScroll: true });
+                return;
+            }
+            const sel = xlSelected[box.dataset.source] || { r: 0, c: 0 };
+            const move = {
+                ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+                Enter: [event.shiftKey ? -1 : 1, 0], Tab: [0, event.shiftKey ? -1 : 1],
+                PageUp: [-15, 0], PageDown: [15, 0]
+            }[event.key];
+            if (move) {
+                event.preventDefault();
+                xlSelect(box, sel.r + move[0], sel.c + move[1], true);
+            } else if (event.key === 'Home') {
+                event.preventDefault();
+                xlSelect(box, event.ctrlKey ? 0 : sel.r, 0, true);
+            } else if (event.key === 'End') {
+                event.preventDefault();
+                const body = box.querySelector('.xl-grid tbody');
+                xlSelect(box, event.ctrlKey && body ? body.rows.length - 1 : sel.r, 9999, true);
+            } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
+                const td = box.querySelector('.xl-sel');
+                if (td && navigator.clipboard) navigator.clipboard.writeText(xlCellText(td)).catch(() => {});
+            }
+        });
+    });
+    // No-VIN toggle now lives in the Excel status bar.
+    const xlPanel = $('panel-sheet');
+    if (xlPanel) xlPanel.addEventListener('click', (event) => {
+        if (!event.target.closest('.sheet-novin-toggle')) return;
+        showNoVinRows = !showNoVinRows;
+        renderSheet();
+    });
+    const xlZoomInput = $('xl-zoom');
+    if (xlZoomInput) xlZoomInput.addEventListener('input', () => {
+        xlZoom = Number(xlZoomInput.value) || 100;
+        const label = $('xl-zoom-val');
+        if (label) label.textContent = `${xlZoom}%`;
+        document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = String(xlZoom / 100); });
     });
     async function adminSetStatus(key, status, selectEl) {
         if (!key || !status) return;

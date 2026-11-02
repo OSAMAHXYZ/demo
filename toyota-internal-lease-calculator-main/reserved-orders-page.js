@@ -150,7 +150,7 @@
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
-        if (payload === loadLive.last && document.querySelector('#cards .lane')) return tickTimers();
+        if (payload === loadLive.last && document.querySelector('#cards .rc-tile')) return tickTimers();
         loadLive.last = payload;
         fillFilters();
         render();
@@ -247,7 +247,9 @@
             ['completed', 'Completed / Invoiced', source.filter(isCompleted).length, 'info'],
             ['soon', 'Approaching Deadline', soon, 'warn']
         ].map(([key, label, value, cls]) => `<button type="button" class="kpi ${cls}${activeKey === key ? ' on' : ''}" data-kpi="${key}"><em>${label}</em><strong>${value}</strong></button>`).join('');
-        $('cards').innerHTML = list.length ? list.map((order) => cardHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
+        $('cards').classList.toggle('rc-grid', list.length > 0);
+        $('cards').innerHTML = list.length ? list.map((order) => tileHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
+        paintOrderModal();
     }
     function retailMatch(value) {
         const text = String(value || '').trim().toLowerCase();
@@ -491,6 +493,89 @@
         if (personKey(session.name) === advisor) return true;
         return personKey(session.employeeNumber) === advisor;
     }
+    // ---- Small order tiles: car + employee. Click opens the full card (same markup, same status select). ----
+    let openOrderKey = '';
+    function tileInfo(order) {
+        const reservedOnly = isReservedFileOrder(order);
+        let sfx;
+        let product;
+        let advisor;
+        if (reservedOnly) {
+            sfx = reservedField(order, 'F');
+            const rawProduct = reservedField(order, 'E') || (!looksLikeVinText(order.vehicle) ? order.vehicle : '');
+            product = productOnly(rawProduct, sfx);
+            advisor = '';
+        } else {
+            sfx = columnText(order, 'J');
+            if (looksLikeDateText(sfx)) sfx = '';
+            product = productOnly(columnText(order, 'I'), sfx);
+            if (looksLikeVinText(product)) product = productName(order) || '';
+            advisor = columnText(order, 'T');
+        }
+        if (!advisor || String(advisor).toLowerCase() === 'unassigned') advisor = '';
+        return { product, sfx, advisor };
+    }
+    function personInitials(name) {
+        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return '?';
+        return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+    }
+    function tileHtml(order) {
+        const info = tileInfo(order);
+        const deadline = columnDeadline(order);
+        const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
+        const img = carImage(info.product);
+        const initial = info.product ? info.product.slice(0, 1) : '';
+        const carName = info.product || 'Car not named';
+        const status = order.status || 'محجوز';
+        const timeText = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
+        const tone = ms == null ? '' : timerClass(ms);
+        return `<button type="button" class="rc-tile${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}" data-tile-key="${esc(order.key)}" aria-label="Open details for ${esc(carName)}">
+            <span class="rc-top"><span class="rc-q">${queueLabel(order.queueNumber)}</span><span class="badge ${badge(order.status)}" dir="auto">${esc(status)}</span></span>
+            <span class="rc-car">
+                <span class="rc-thumb">${img ? `<img src="${img}" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rc-fallback" hidden>${esc(initial)}</span>` : `<span class="rc-fallback">${esc(initial)}</span>`}</span>
+                <span class="rc-name"><b dir="auto" title="${esc(carName)}">${esc(carName)}</b>${info.sfx ? `<small dir="auto">${esc(info.sfx)}</small>` : ''}</span>
+            </span>
+            <span class="rc-foot">
+                <span class="rc-who${info.advisor ? '' : ' none'}"><span class="rc-av">${esc(info.advisor ? personInitials(info.advisor) : '–')}</span><span dir="auto" title="${esc(info.advisor || 'Unassigned')}">${esc(info.advisor || 'Unassigned')}</span></span>
+                <span class="rc-time ${tone}" data-deadline="${esc(deadline || '')}">${esc(timeText)}</span>
+            </span>
+        </button>`;
+    }
+    function paintOrderModal() {
+        const modal = $('order-modal');
+        const body = $('order-modal-body');
+        if (!modal || !body) return;
+        const order = openOrderKey ? orders.find((item) => item.key === openOrderKey) : null;
+        if (!order) {
+            openOrderKey = '';
+            modal.classList.add('hidden');
+            body.innerHTML = '';
+            return;
+        }
+        const panel = modal.querySelector('.overlay-panel');
+        const scroll = panel ? panel.scrollTop : 0;
+        const wasExpanded = Boolean(body.querySelector('.excel-row:not(.hidden)'));
+        body.innerHTML = cardHtml(order);
+        if (wasExpanded) {
+            const row = body.querySelector('.excel-row');
+            const toggle = body.querySelector('.bo-toggle');
+            if (row) row.classList.remove('hidden');
+            if (toggle) { toggle.setAttribute('aria-expanded', 'true'); toggle.textContent = 'Hide Full BO Details'; }
+        }
+        modal.classList.remove('hidden');
+        if (panel) panel.scrollTop = scroll;
+    }
+    function openOrderModal(key) {
+        openOrderKey = key;
+        paintOrderModal();
+        const close = document.querySelector('#order-modal .rc-close');
+        if (close) close.focus({ preventScroll: true });
+    }
+    function closeOrderModal() {
+        openOrderKey = '';
+        paintOrderModal();
+    }
     function cardHtml(order) {
         const deadline = columnDeadline(order);
         const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
@@ -594,6 +679,14 @@
     }
     function tickTimers() {
         paintSession();
+        document.querySelectorAll('.rc-tile .rc-time').forEach((el) => {
+            const end = parseLocal(el.dataset.deadline);
+            const ms = end ? end.getTime() - Date.now() : null;
+            el.textContent = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
+            el.className = `rc-time ${ms == null ? '' : timerClass(ms)}`;
+            const tile = el.closest('.rc-tile');
+            if (tile && !tile.classList.contains('cancelled')) tile.classList.toggle('expired', ms != null && ms <= 0);
+        });
         document.querySelectorAll('.timer').forEach((el) => {
             const end = parseLocal(el.dataset.deadline);
             const ms = end ? end.getTime() - Date.now() : null;
@@ -1145,7 +1238,7 @@
         const button = event.target.closest('[data-kpi]');
         if (button) applyKpi(button.dataset.kpi);
     });
-    $('cards').addEventListener('click', (event) => {
+    function toggleBoDetails(event) {
         const toggle = event.target.closest('.bo-toggle');
         if (!toggle) return;
         const row = toggle.nextElementSibling;
@@ -1153,7 +1246,20 @@
         const collapsed = row.classList.toggle('hidden');
         toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         toggle.textContent = collapsed ? 'View Full BO Details' : 'Hide Full BO Details';
+    }
+    $('cards').addEventListener('click', (event) => {
+        const tile = event.target.closest('.rc-tile');
+        if (tile) openOrderModal(tile.dataset.tileKey);
     });
+    if ($('order-modal')) {
+        $('order-modal').addEventListener('click', (event) => {
+            if (event.target === $('order-modal') || event.target.closest('.rc-close')) { closeOrderModal(); return; }
+            toggleBoDetails(event);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && openOrderKey) closeOrderModal();
+        });
+    }
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
     if ($('marketing-form')) $('marketing-form').addEventListener('submit', checkMarketing);
     if ($('marketing-sent-list')) $('marketing-sent-list').addEventListener('click', (event) => {
@@ -1322,6 +1428,96 @@
         });
         $('mc-sent').addEventListener('click', () => confirmSent(row.ruleId, row.order.boNumber, field.value.trim()));
     }
+    // ---- Laptop (desktop) pop-up notifications ----
+    // Uses only the browser's own Notification API: nothing is sent to email, chat apps or any outside service.
+    // Fires for messages admin sends to this employee (Notifications + BO / order-error messages).
+    const NOTIFIED_CAP = 300;
+    function desktopSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+    function notifiedStoreKey(session) { return 'ro-desktop-notified-v1-' + (session && (session.recordId || session.employeeNumber) || 'x'); }
+    function readNotified(session) {
+        try { return JSON.parse(localStorage.getItem(notifiedStoreKey(session)) || 'null'); } catch (e) { return null; }
+    }
+    function writeNotified(session, list) {
+        try { localStorage.setItem(notifiedStoreKey(session), JSON.stringify(list.slice(-NOTIFIED_CAP))); } catch (e) { /* storage full or blocked */ }
+    }
+    function paintDesktopButton() {
+        const button = $('notif-toggle');
+        if (!button) return;
+        if (!desktopSupported()) { button.hidden = true; return; }
+        button.hidden = false;
+        const permission = Notification.permission;
+        button.classList.toggle('is-on', permission === 'granted');
+        button.classList.toggle('is-blocked', permission === 'denied');
+        if (permission === 'granted') {
+            button.textContent = 'Laptop alerts on';
+            button.title = 'You get a pop-up on this laptop when admin sends you a message. Click to send a test.';
+        } else if (permission === 'denied') {
+            button.textContent = 'Laptop alerts blocked';
+            button.title = 'Notifications are blocked for this site. Allow them in the browser address-bar site settings, then reload.';
+        } else {
+            button.textContent = 'Enable laptop alerts';
+            button.title = 'Get a pop-up on this laptop when admin sends you a message.';
+        }
+    }
+    function showDesktopNotification(title, body, tag) {
+        if (!desktopSupported() || Notification.permission !== 'granted') return;
+        try {
+            const note = new Notification(title, { body, tag, renotify: false, icon: 'images/logo/toyota.png', dir: 'auto' });
+            note.onclick = () => {
+                window.focus();
+                try { showView('inbox'); } catch (e) { /* view may not be ready */ }
+                note.close();
+            };
+        } catch (e) { /* some browsers only allow notifications from a service worker */ }
+    }
+    // First run for a person only records what already exists (no flood of old items); later runs pop up the new ones.
+    function pushDesktopAlerts(session, candidates) {
+        if (!session || !candidates.length) return;
+        const stored = readNotified(session);
+        const seenKeys = Array.isArray(stored) ? stored : null;
+        const known = new Set(seenKeys || []);
+        const fresh = candidates.filter((item) => !known.has(item.key));
+        if (!fresh.length) { if (!seenKeys) writeNotified(session, []); return; }
+        if (seenKeys) {
+            if (fresh.length > 3) {
+                showDesktopNotification(`${fresh.length} new messages from admin`, fresh.slice(0, 3).map((item) => item.title).join(' · ') + ' …', 'ro-batch');
+            } else {
+                fresh.forEach((item) => showDesktopNotification(item.title, item.body, item.key));
+            }
+        }
+        writeNotified(session, Array.from(known).concat(fresh.map((item) => item.key)));
+    }
+    function desktopCandidates(notifications, alerts) {
+        const list = [];
+        (notifications || []).filter((item) => !item.seen).forEach((item) => {
+            list.push({ key: 'n:' + item.id, title: item.title || 'Notification from admin', body: String(item.message || '').slice(0, 180) });
+        });
+        (alerts || []).forEach((alert) => {
+            (alert.orders || []).filter((order) => !order.status || order.status === 'new').forEach((order) => {
+                list.push({
+                    key: 'a:' + alert.ruleId + '::' + order.boNumber,
+                    title: 'Admin message · order ' + order.boNumber,
+                    body: String(alert.name || alert.message || 'Open Messages to read and send it.').slice(0, 180)
+                });
+            });
+        });
+        return list;
+    }
+    function paintUnreadTitle(count) {
+        const base = document.title.replace(/^\(\d+\)\s*/, '');
+        document.title = count > 0 ? `(${count}) ${base}` : base;
+    }
+    async function toggleDesktopAlerts() {
+        if (!desktopSupported()) return;
+        if (Notification.permission === 'default') {
+            try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
+            paintDesktopButton();
+            if (Notification.permission === 'granted') showDesktopNotification('Laptop alerts are on', 'You will get a pop-up here when admin sends you a message.', 'ro-test');
+            return;
+        }
+        if (Notification.permission === 'granted') showDesktopNotification('Test notification', 'This is how admin messages will appear on this laptop.', 'ro-test');
+        paintDesktopButton();
+    }
     async function paintMyAlerts() {
         const session = readSession();
         if (!session) return;
@@ -1342,6 +1538,9 @@
             if (!res.ok) return;
             const data = await res.json();
             const items = data.notifications || [];
+            const candidates = desktopCandidates(items, boAlerts);
+            pushDesktopAlerts(session, candidates);
+            paintUnreadTitle(candidates.length);
             box.hidden = !items.length;
             if (!items.length) { box.innerHTML = ''; return; }
             box.innerHTML = items.map((item) => {
@@ -1395,6 +1594,23 @@
         });
     } catch (e) { /* polling remains */ }
     setInterval(() => { if (readSession()) loadLive(); }, 8000);
+    // Safety net when the live socket is down: re-check admin messages every 30 s, repaint only if something changed.
+    let lastMessagesStamp = '';
+    setInterval(async () => {
+        const session = readSession();
+        if (!session) return;
+        try {
+            const [mine, notes] = await Promise.all([
+                fetch('/api/reserved-orders/my-bo-corrections?token=' + encodeURIComponent(session.token)).then((res) => (res.ok ? res.text() : '')),
+                fetch('/api/reserved-orders/my-notifications?token=' + encodeURIComponent(session.token)).then((res) => (res.ok ? res.text() : ''))
+            ]);
+            const stamp = mine + '|' + notes;
+            if (lastMessagesStamp && stamp !== lastMessagesStamp) paintMyAlerts();
+            lastMessagesStamp = stamp;
+        } catch (e) { /* offline: try again next tick */ }
+    }, 30000);
+    if ($('notif-toggle')) $('notif-toggle').addEventListener('click', toggleDesktopAlerts);
+    paintDesktopButton();
     loadNames();
     loadCars();
     if (readSession()) openApp();

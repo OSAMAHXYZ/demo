@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
     <link rel="stylesheet" href="reserved-orders-skin.css?v=20261025audit1">
+    <link rel="stylesheet" href="reserved-orders-excel.css?v=20261102xl1">
 </head>
 <body>
     <section id="gate" class="login-screen">
@@ -95,31 +96,48 @@
                     <div id="marketing-rows"></div>
                 </section>
             </section>
-            <section id="panel-sheet" class="hidden">
-                <div class="sheet-sources" role="tablist" aria-label="Live sheet source">
+            <section id="panel-sheet" class="hidden xlw">
+                <!-- Virtual Excel window: title bar, ribbon tabs, formula bar, grid, sheet tabs, status bar -->
+                <div class="xl-titlebar">
+                    <span class="xl-appicon" aria-hidden="true">X</span>
+                    <span class="xl-autosave" aria-hidden="true">AutoSave <i class="xl-toggle"></i></span>
+                    <span class="xl-filename"><b id="xl-filename">Stock E-Sales.xlsx</b> <small>· Saved to Reserved Orders</small></span>
+                    <div class="toolbar sheet-toolbar xl-search">
+                        <input class="search" id="sheet-search" type="search" placeholder="Search Stock E-Sales" aria-label="Search this sheet">
+                    </div>
+                </div>
+                <div class="xl-menutabs" aria-hidden="true">
+                    <span>File</span><span class="on">Home</span><span>Insert</span><span>Page Layout</span><span>Formulas</span><span>Data</span><span>Review</span><span>View</span>
+                </div>
+                <div class="xl-formulabar">
+                    <div class="xl-namebox" id="xl-name" title="Name Box">A1</div>
+                    <span class="xl-fxbtns" aria-hidden="true"><i>&#10005;</i><i>&#10003;</i><em>fx</em></span>
+                    <div class="xl-formula" id="xl-formula" title="Selected cell value"></div>
+                </div>
+                <p class="sheet-note xl-msgbar" id="sheet-note">Leader note is admin-only. Updated by shows who changed status and the Saudi date/time.</p>
+                <div class="excel-live sheet-esales" id="live-sheet-esales" data-source="esales" tabindex="0"></div>
+                <div class="excel-live sheet-reserved hidden" id="live-sheet-reserved" data-source="reserved" tabindex="0"></div>
+                <div class="excel-live sheet-merged hidden" id="live-sheet-merged" data-source="merged" tabindex="0"></div>
+                <div class="sheet-sources xl-sheettabs" role="tablist" aria-label="Live sheet source">
                     <button class="sheet-source active" type="button" data-sheet="esales" role="tab" aria-selected="true">
-                        <span class="sheet-source-kicker">Stock</span>
                         <strong>E-Sales</strong>
                         <span class="sheet-source-count" id="sheet-count-esales">0</span>
                     </button>
                     <button class="sheet-source" type="button" data-sheet="reserved" role="tab" aria-selected="false">
-                        <span class="sheet-source-kicker">Reserved</span>
-                        <strong>Order File</strong>
+                        <strong>Reserved Order File</strong>
                         <span class="sheet-source-count" id="sheet-count-reserved">0</span>
                     </button>
                     <button class="sheet-source" type="button" data-sheet="merged" role="tab" aria-selected="false">
-                        <span class="sheet-source-kicker">Combined</span>
                         <strong>Merged sheet</strong>
                         <span class="sheet-source-count" id="sheet-count-merged">0</span>
                     </button>
                 </div>
-                <div class="toolbar sheet-toolbar">
-                    <input class="search" id="sheet-search" placeholder="Search this sheet">
+                <div class="xl-statusbar">
+                    <span class="xl-ready">Ready</span>
+                    <span class="xl-stat" id="xl-stat"></span>
+                    <span class="xl-novin" id="xl-novin"></span>
+                    <span class="xl-zoom"><label for="xl-zoom">Zoom</label><input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom"><b id="xl-zoom-val">100%</b></span>
                 </div>
-                    <p class="sheet-note" id="sheet-note">Leader note is admin-only. Updated by shows who changed status and the Saudi date/time.</p>
-                <div class="excel-live sheet-esales" id="live-sheet-esales" data-source="esales"></div>
-                <div class="excel-live sheet-reserved hidden" id="live-sheet-reserved" data-source="reserved"></div>
-                <div class="excel-live sheet-merged hidden" id="live-sheet-merged" data-source="merged"></div>
             </section>
             <section id="panel-employees" class="hidden">
                 <div class="admin-grid">
@@ -140,7 +158,7 @@
             <section id="panel-push" class="hidden">
                 <section class="panel stack">
                     <h2>Push live</h2>
-                    <p>The <b>Reserved Order File</b> can be pushed here any time, the same as the Admin Push in Report Sheet admin. Its VINs are merged once: a VIN already in E-Sales keeps one order and takes the Reserved File data (column J, blank fields, expiry date); a new VIN is added with a blank assign date. When no Reserved File is chosen, the last stored one is checked again on this push.</p>
+                    <p>The <b>Reserved Order File</b> can be pushed here any time. This push is the only thing that updates the Live sheet; the Admin Push in Report Sheet admin no longer changes it. Its VINs are merged once: a VIN already in E-Sales keeps one order and takes the Reserved File data (column J, blank fields, expiry date); a new VIN is added with a blank assign date. When no Reserved File is chosen, the last stored one is checked again on this push.</p>
                     <p id="push-source"></p>
                     <label>Stock E-Sales<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
                     <label>Back Order<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
@@ -188,6 +206,6 @@
         </main>
         <aside id="drawer" class="drawer hidden"></aside>
     </div>
-    <script src="reserved-orders-admin.js?v=20261025audit1"></script>
+    <script src="reserved-orders-admin.js?v=20261102xl1"></script>
     <script src="bo-rules-ui.js?v=20261021np1"></script>
 </body></html>
