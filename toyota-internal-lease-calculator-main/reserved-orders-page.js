@@ -1,5 +1,6 @@
 (function () {
-    let STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
+    // Employees choose one of only three statuses, and write a note with it.
+    const STATUSES = ['Payment', 'In progress', 'Cancelled'];
     const CARS = [
         ['Camry', 'images/cars/camry.png'], ['Corolla', 'images/cars/corolla.png'], ['Crown', 'images/cars/crown.png'],
         ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux double cab.png'],
@@ -68,8 +69,8 @@
         return 'expired';
     }
     function isExpired(order) { const ms = remainingMs(order); return ms != null && ms <= 0; }
-    function isCompleted(order) { return order.status === 'تم الفوترة'; }
-    function isCancelled(order) { return order.status === 'الغاء'; }
+    function isCompleted(order) { return order.status === 'تم الفوترة' || order.status === 'Payment'; }
+    function isCancelled(order) { return order.status === 'الغاء' || order.status === 'Cancelled'; }
     function isActive(order) { return !isExpired(order) && !isCompleted(order) && !isCancelled(order); }
     function isSoon(order) {
         if (isCancelled(order) || isCompleted(order)) return false;
@@ -83,9 +84,9 @@
         return '#' + (Number.isFinite(num) ? pad(num) : n);
     }
     function badge(status) {
-        if (status === 'تم الفوترة') return 'done';
-        if (status === 'الغاء') return 'cancel';
-        if (status === 'محجوز' || status === 'انتظار تحويل' || status === 'انتظار رد الضيف') return 'wait';
+        if (status === 'تم الفوترة' || status === 'Payment') return 'done';
+        if (status === 'الغاء' || status === 'Cancelled') return 'cancel';
+        if (status === 'محجوز' || status === 'In progress' || status === 'انتظار تحويل' || status === 'انتظار رد الضيف') return 'wait';
         return '';
     }
     function show(value, missing) { return value ? value : missing; }
@@ -169,7 +170,6 @@
         }
         const next = Array.isArray(data.orders) ? data.orders : [];
         orders = next;
-        if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
@@ -521,7 +521,8 @@
         const session = readSession();
         if (!session || !order) return false;
         if (isOrder5Editor(session) && orderNumberStartsWith5(order)) return true;
-        const advisor = personKey(columnText(order, 'T') || order.salesAdvisor);
+        // Reserved Order File rows: the salesman is column A of that file.
+        const advisor = personKey(isReservedFileOrder(order) ? order.salesAdvisor : (columnText(order, 'T') || order.salesAdvisor));
         if (!advisor || advisor === 'unassigned') return false;
         if (personKey(session.name) === advisor) return true;
         return personKey(session.employeeNumber) === advisor;
@@ -537,7 +538,7 @@
             sfx = reservedField(order, 'F');
             const rawProduct = reservedField(order, 'E') || (!looksLikeVinText(order.vehicle) ? order.vehicle : '');
             product = productOnly(rawProduct, sfx);
-            advisor = '';
+            advisor = reservedField(order, 'A') || order.salesAdvisor || '';
         } else {
             sfx = columnText(order, 'J');
             if (looksLikeDateText(sfx)) sfx = '';
@@ -574,9 +575,10 @@
             </span>
         </button>`;
     }
-    // ---- Excel-style sheet: same look and columns as the admin Live sheet. Everyone sees every row; the status
-    // can be changed only on your own orders (the server checks this too). Double-click a row for the full card. ----
-    const SHEET_COLS = ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry date', 'Time left', 'Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area', 'Share level', 'RTL stock'];
+    // ---- Excel-style sheet: same look as the admin Live sheet. Everyone sees every row; only the advisor of an
+    // order can set its status (Payment / In progress / Cancelled) and must write a note with it. Double-click a row
+    // for the full card. ----
+    const SHEET_COLS = ['Queue position', 'Order status', 'Note', 'Updated', 'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'RTL status', 'Allocation age', 'Area', 'Share level'];
     const sheetSel = { r: 0, c: 0 };
     function viewMode() {
         try { return localStorage.getItem('ro-orders-view') === 'cards' ? 'cards' : 'sheet'; } catch (e) { return 'sheet'; }
@@ -592,129 +594,84 @@
         return out;
     }
     function realText(value) { return isBlankValue(value) ? '' : String(value).replace(/\u00a0/g, ' ').trim(); }
+    // value of an RTL Stock column of the order's VIN (M status, K allocation age, N area, H share level)
+    function rtlCol(order, letter) {
+        const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === letter);
+        return hit ? realText(hit.value) : '';
+    }
+    function statusKey(value) {
+        const text = String(value || '').trim().toLowerCase();
+        return STATUSES.find((item) => item.toLowerCase() === text) || '';
+    }
+    function statusOptionsHtml(current) {
+        const key = statusKey(current);
+        return (key ? '' : '<option value="" selected disabled>Choose status…</option>')
+            + STATUSES.map((item) => `<option value="${esc(item)}"${item === key ? ' selected' : ''}>${esc(item)}</option>`).join('');
+    }
     function sheetValues(order) {
         const info = tileInfo(order);
-        const reservedOnly = isReservedFileOrder(order);
-        const ms = remainingMs(Object.assign({}, order, { deadline: columnDeadline(order) }));
-        const customer = realText(order.customerName) || (reservedOnly ? realText(reservedField(order, 'B')) : '');
+        const pick = (letter) => realText(reservedField(order, letter));
+        const vinText = pick('I');
+        const orderNo = pick('C') || (order.orderNumber && order.orderNumber !== 'NO ORDER' ? String(order.orderNumber) : '');
         return {
-            Source: reservedOnly ? 'Reserved' : (order.inReservedFile ? 'Both' : 'E-Sales'),
-            VIN: looksLikeVinText(order.vin) ? String(order.vin).trim() : '',
-            Order: order.orderNumber && order.orderNumber !== 'NO ORDER' ? String(order.orderNumber) : '',
-            Customer: looksLikeVinText(customer) || looksLikeDateText(customer) ? '' : customer,
-            Product: info.product || cleanVehicleName(order.vehicle),
-            'Model Year': realText(order.modelYear) || realText(reservedOnly ? reservedField(order, 'D') : columnText(order, 'K')),
-            SFX: info.sfx,
-            Exterior: realText(order.exterior) || realText(reservedOnly ? reservedField(order, 'G') : columnText(order, 'M')),
-            Interior: realText(order.interior) || realText(reservedOnly ? reservedField(order, 'H') : columnText(order, 'N')),
-            Advisor: info.advisor,
-            Payment: order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN' ? order.paymentLabel : '',
-            Area: realText(order.searchArea),
-            'Share level': realText(order.shareLevel),
-            'RTL stock': order.inRtl === true ? 'In RTL stock' : order.inRtl === false ? 'Not in RTL' : '',
-            'Expiry date': expiryText(order) || '',
-            'Time left': ms == null ? '' : formatRemain(ms),
-            _ms: ms
+            'Salesman name': pick('A') || info.advisor,
+            'Customer name': pick('B') || realText(order.customerName),
+            'Order number': orderNo,
+            'Model year': pick('D') || realText(order.modelYear),
+            Product: pick('E') || info.product || cleanVehicleName(order.vehicle),
+            'ALJ suffix': pick('F') || info.sfx,
+            'Exterior color': pick('G') || realText(order.exterior),
+            'Interior color': pick('H') || realText(order.interior),
+            VIN: looksLikeVinText(vinText) ? vinText : (looksLikeVinText(order.vin) ? String(order.vin).trim() : ''),
+            'Expiry date': expiryText(order) || pick('J'),
+            'RTL status': rtlCol(order, 'M'),
+            'Allocation age': rtlCol(order, 'K'),
+            Area: rtlCol(order, 'N') || realText(order.searchArea),
+            'Share level': rtlCol(order, 'H') || realText(order.shareLevel)
         };
     }
-    function sheetRtlCols(list) {
-        const seen = new Set();
-        const cols = [];
-        list.forEach((order) => (order.rtlFields || []).forEach((field) => {
-            const col = String(field.col || '').trim().toUpperCase();
-            if (!col || seen.has(col)) return;
-            seen.add(col);
-            cols.push({ col, label: String(field.label || '').trim() || col });
-        }));
-        const index = (letter) => letter.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
-        cols.sort((a, b) => index(a.col) - index(b.col));
-        const taken = new Set(SHEET_COLS.map((label) => label.toLowerCase()));
-        const out = [];
-        cols.forEach(({ col, label }) => {
-            const has = list.some((order) => {
-                const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === col);
-                return hit && !isBlankValue(hit.value);
-            });
-            if (!has) return;
-            const title = taken.has(label.toLowerCase()) ? 'RTL ' + label : label;
-            taken.add(title.toLowerCase());
-            out.push({ key: 'rtl:' + col, title });
-        });
-        return out;
-    }
-    function sheetRtlValue(order, col) {
-        const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === col);
-        return hit && !isBlankValue(hit.value) ? String(hit.value).trim() : '';
-    }
-    function sheetAheadCell(order) {
-        const ahead = Array.isArray(order.ahead) ? order.ahead : [];
-        let meta = '';
-        if (order.boQueuePosition != null) meta = `<span class="ahead-pos">BO #${esc(String(order.boQueuePosition))}${order.boQueueSize != null ? '/' + esc(String(order.boQueueSize)) : ''}</span>`;
-        else if (order.boQueueSize != null) meta = `<span class="ahead-pos">BO queue · ${esc(String(order.boQueueSize))}</span>`;
-        if (!ahead.length && !meta) return '<td class="col-ahead"><span class="ahead-empty">—</span></td>';
-        const chips = ahead.map((item) => {
-            const rank = item.boPosition != null ? item.boPosition : item.queueNumber;
-            const orderNo = item.orderNumber && item.orderNumber !== 'NO ORDER' ? String(item.orderNumber) : '';
-            const who = item.salesAdvisor || '';
-            return `<span class="ahead-chip" title="${esc(['#' + (rank == null ? '' : rank), orderNo, who].filter(Boolean).join(' '))}"><b>#${esc(String(rank == null ? '' : rank))}</b>${orderNo ? `<span>${esc(orderNo)}</span>` : ''}${who ? `<i>${esc(who)}</i>` : ''}</span>`;
-        }).join('');
-        return `<td class="col-ahead"><div class="ahead-stack">${meta}<div class="ahead-chips">${chips}</div></div></td>`;
-    }
-    function sheetStatusPill(status) {
-        const value = String(status || '').trim();
-        const tone = value === 'الغاء' ? 'is-bad' : value === 'تم الفوترة' ? 'is-ok' : value === 'محجوز' ? 'is-hold' : value ? 'is-info' : 'is-none';
-        return `<span class="s-pill ${tone}">${esc(value || '—')}</span>`;
-    }
-    function sheetTimerTone(ms) {
-        const tone = timerClass(ms);
-        return tone === 'ok' ? 'is-ok' : tone === 'soon' ? 'is-warn' : tone === 'expired' ? 'is-bad' : '';
+    function sheetStatusPill(order) {
+        const key = statusKey(order.status);
+        const tone = key === 'Cancelled' ? 'is-bad' : key === 'Payment' ? 'is-ok' : key === 'In progress' ? 'is-hold' : 'is-none';
+        return `<span class="s-pill ${tone}">${esc(key || 'Not updated')}</span>`;
     }
     function sheetCell(order, label, values, mine) {
-        if (label === 'Queue') return `<td class="col-queue">${order.queueNumber == null ? '' : `<span class="q-pill">${esc(queueLabel(order.queueNumber))}</span>`}</td>`;
-        if (label === 'Status') {
-            const status = order.status || 'محجوز';
-            if (!mine) return `<td class="col-status">${sheetStatusPill(status)}</td>`;
-            const options = STATUSES.map((item) => `<option value="${esc(item)}"${item === status ? ' selected' : ''}>${esc(item)}</option>`).join('')
-                + (status && !STATUSES.includes(status) ? `<option value="${esc(status)}" selected>${esc(status)}</option>` : '');
-            return `<td class="col-status"><select class="xl-status-select admin-status-select" data-key="${esc(order.key)}" aria-label="Change status of your order">${options}</select></td>`;
+        if (label === 'Queue position') {
+            const pos = order.boQueuePosition;
+            if (pos == null) return '<td class="col-queue" title="Not found in the Toyota Back Order file"><span class="ahead-empty">—</span></td>';
+            const size = order.boQueueSize != null ? `<small class="q-of"> / ${esc(String(order.boQueueSize))}</small>` : '';
+            return `<td class="col-queue" title="Back Order queue position"><span class="q-pill">#${esc(String(pos))}</span>${size}</td>`;
         }
-        if (label === 'Leader note') {
-            const note = String(order.leaderNote || '').trim();
-            return `<td class="col-leader-note">${note ? esc(note) : ''}</td>`;
+        if (label === 'Order status') {
+            if (!mine) return `<td class="col-status">${sheetStatusPill(order)}</td>`;
+            return `<td class="col-status"><select class="xl-status-select admin-status-select" data-key="${esc(order.key)}" aria-label="Choose the status of your order">${statusOptionsHtml(order.status)}</select></td>`;
         }
-        if (label === 'Updated by') {
-            const who = order.statusChangedBy || '';
-            const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusChangedDisplay || '');
-            if (!who && !when) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
+        if (label === 'Note') {
+            const note = String(order.statusNote || '').trim();
+            const edit = mine && statusKey(order.status)
+                ? `<button type="button" class="xl-note-edit" data-key="${esc(order.key)}" title="Edit the note" aria-label="Edit the note">&#9998;</button>`
+                : '';
+            return `<td class="col-note" title="${esc(note)}">${note ? `<span class="xl-note-text" dir="auto">${esc(note)}</span>` : '<span class="ahead-empty">—</span>'}${edit}</td>`;
+        }
+        if (label === 'Updated') {
+            const who = order.statusNoteBy || order.statusChangedBy || '';
+            const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusNoteDisplay || order.statusChangedDisplay || '');
+            if (!statusKey(order.status) || (!who && !when)) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
             return `<td class="col-updated-by">${who ? `<b>${esc(who)}</b>` : ''}${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}</td>`;
         }
-        if (label === 'BO ahead') return sheetAheadCell(order);
-        if (label === 'Expiry date') return `<td class="col-expiry">${esc(values['Expiry date'] || '—')}</td>`;
-        if (label === 'Time left') {
-            const deadline = columnDeadline(order);
-            return `<td class="timer-cell ${sheetTimerTone(values._ms)}" data-deadline="${esc(deadline || '')}">${esc(values['Time left'] || '—')}</td>`;
+        if (label === 'RTL status') {
+            const value = values['RTL status'];
+            return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
         }
-        if (label === 'Source') {
-            const tone = values.Source === 'Both' ? 'is-both' : values.Source === 'Reserved' ? 'is-reserved' : 'is-esales';
-            return `<td class="col-source"><span class="source-pill ${tone}">${esc(values.Source)}</span></td>`;
-        }
-        if (label === 'RTL stock') {
-            const value = values['RTL stock'];
-            if (!value) return '<td class="col-source"></td>';
-            return `<td class="col-source"><span class="source-pill ${value === 'In RTL stock' ? 'is-both' : 'is-reserved'}">${esc(value)}</span></td>`;
-        }
-        if (label === 'Advisor') return `<td class="col-advisor">${values.Advisor ? (mine ? `<b>${esc(values.Advisor)}</b>` : esc(values.Advisor)) : ''}</td>`;
-        const value = String(label).startsWith('rtl:') ? sheetRtlValue(order, label.slice(4)) : (values[label] == null ? '' : values[label]);
+        if (label === 'Salesman name') return `<td class="col-advisor">${values[label] ? (mine ? `<b>${esc(values[label])}</b>` : esc(values[label])) : ''}</td>`;
+        const value = values[label] == null ? '' : values[label];
         const plain = String(value).trim();
         return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
     }
     function paintSheet(list) {
         const box = $('emp-sheet');
         if (!box) return;
-        const rtlCols = sheetRtlCols(list);
-        const cols = SHEET_COLS.concat(rtlCols.map((item) => item.key));
-        const titles = {};
-        rtlCols.forEach((item) => { titles[item.key] = item.title; });
+        const cols = SHEET_COLS;
         const keepTop = box.scrollTop;
         const keepLeft = box.scrollLeft;
         const mineCount = list.filter(canUpdateOrder).length;
@@ -724,12 +681,12 @@
             const rows = list.map((order, rowIndex) => {
                 const mine = canUpdateOrder(order);
                 const values = sheetValues(order);
-                const classes = [mine ? 'is-mine' : '', isCancelled(order) ? 'row-cancelled' : ''].filter(Boolean).join(' ');
+                const classes = [mine ? 'is-mine' : '', statusKey(order.status) === 'Cancelled' || isCancelled(order) ? 'row-cancelled' : ''].filter(Boolean).join(' ');
                 return `<tr class="${classes}" data-key="${esc(order.key)}"><th class="xl-rn" data-r="${rowIndex}">${rowIndex + 2}</th>${cols.map((label) => sheetCell(order, label, values, mine)).join('')}</tr>`;
             }).join('');
             box.innerHTML = `<table class="xl-grid"><thead>
                 <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}">${sheetLetter(index)}</th>`).join('')}</tr>
-                <tr class="xl-head"><th class="xl-rn">1</th>${cols.map((label) => `<th class="xl-h">${esc(titles[label] || label)}</th>`).join('')}</tr>
+                <tr class="xl-head"><th class="xl-rn">1</th>${cols.map((label) => `<th class="xl-h">${esc(label)}</th>`).join('')}</tr>
             </thead><tbody>${rows}</tbody></table>`;
         }
         box.scrollTop = keepTop;
@@ -772,6 +729,39 @@
         const b = $('view-cards');
         if (a) { a.classList.toggle('is-on', sheet); a.setAttribute('aria-pressed', sheet ? 'true' : 'false'); }
         if (b) { b.classList.toggle('is-on', !sheet); b.setAttribute('aria-pressed', sheet ? 'false' : 'true'); }
+    }
+    // ---- Note dialog: choosing a status always asks for a note first; nothing is saved until the note is written. ----
+    let noteTarget = null;
+    function requestStatus(key, status, select) {
+        const order = orders.find((item) => item.key === key);
+        if (!order || !statusKey(status)) { if (select) render(); return; }
+        const chosen = statusKey(status);
+        noteTarget = { key, status: chosen };
+        const modal = $('note-modal');
+        if (!modal) { changeStatus(key, chosen, ''); return; }
+        $('note-modal-status').textContent = chosen;
+        $('note-modal-order').textContent = [order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'Order ' + order.orderNumber : '', looksLikeVinText(order.vin) ? order.vin : ''].filter(Boolean).join(' · ');
+        $('note-text').value = statusKey(order.status) === chosen ? String(order.statusNote || '') : '';
+        $('note-error').textContent = '';
+        $('note-save').disabled = false;
+        modal.classList.remove('hidden');
+        setTimeout(() => { try { $('note-text').focus(); } catch (e) { /* ignore */ } }, 30);
+    }
+    function closeNoteDialog() {
+        const modal = $('note-modal');
+        if (modal) modal.classList.add('hidden');
+        noteTarget = null;
+        render();            // puts every status dropdown back to what is saved
+    }
+    async function saveNoteDialog() {
+        if (!noteTarget) return;
+        const text = $('note-text').value.trim();
+        if (!text) { $('note-error').textContent = 'Write a note first. It is required with every status.'; return; }
+        $('note-save').disabled = true;
+        const error = await changeStatus(noteTarget.key, noteTarget.status, text);
+        if (error) { $('note-error').textContent = error; $('note-save').disabled = false; return; }
+        $('note-modal').classList.add('hidden');
+        noteTarget = null;
     }
     function paintOrderModal() {
         const modal = $('order-modal');
@@ -888,7 +878,7 @@
                     <small>${esc(order.statusChangedBy || 'No update yet')}${order.statusChangedAt ? ' · ' + esc(statusWhen(order.statusChangedAt)) : ''}</small>
                 </div>
                 ${canUpdateOrder(order)
-                    ? `<div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option value="${esc(status)}"${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}${order.status && !STATUSES.includes(order.status) ? `<option value="${esc(order.status)}" selected>${esc(order.status)}</option>` : ''}</select></div>`
+                    ? `<div class="status-row"><select class="status-select" aria-label="Choose status">${statusOptionsHtml(order.status)}</select></div>`
                     : '<p class="status-lock">Only the assigned advisor can update</p>'}
             </div>
             </div>
@@ -910,14 +900,6 @@
     }
     function tickTimers() {
         paintSession();
-        document.querySelectorAll('#emp-sheet .timer-cell').forEach((cell) => {
-            const end = parseLocal(cell.dataset.deadline);
-            const ms = end ? end.getTime() - Date.now() : null;
-            cell.textContent = ms == null ? '—' : formatRemain(ms);
-            cell.classList.remove('is-ok', 'is-warn', 'is-bad');
-            const tone = ms == null ? '' : sheetTimerTone(ms);
-            if (tone) cell.classList.add(tone);
-        });
         document.querySelectorAll('.rc-tile .rc-time').forEach((el) => {
             const end = parseLocal(el.dataset.deadline);
             const ms = end ? end.getTime() - Date.now() : null;
@@ -940,27 +922,32 @@
             if (block && !block.classList.contains('cancelled')) block.classList.toggle('expired', expired);
         });
     }
-    async function changeStatus(key, status) {
+    // Saves the status together with its note. Returns '' on success or the error text.
+    async function changeStatus(key, status, note) {
         const session = readSession();
-        if (!session) return endSession('logout');
+        if (!session) { endSession('logout'); return 'Session ended.'; }
         const res = await fetch('/api/reserved-orders/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: session.token, key, status })
+            body: JSON.stringify({ token: session.token, key, status, note: note || '' })
         });
-        if (res.status === 401) return endSession('logout');
+        if (res.status === 401) { endSession('logout'); return 'Session expired. Sign in again.'; }
         touch();
-        loadLive.last = '';
-        await loadLive();
+        let error = '';
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            const note = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
-            if (note) note.textContent = data.error || 'Only the assigned advisor can update this order.';
-            const bar = $('emp-sheet-msg');
-            if (bar) bar.textContent = data.error || 'Only the assigned advisor can update this order.';
+            error = data.error || 'Only the assigned advisor can update this order.';
         }
+        loadLive.last = '';
+        await loadLive();
+        if (error) {
+            const lock = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
+            if (lock) lock.textContent = error;
+            const bar = $('emp-sheet-msg');
+            if (bar) bar.textContent = error;
+        }
+        return error;
     }
-
     async function loadAlertRules() {
         try {
             const data = await fetch('/api/reserved-orders/alert-rules').then((res) => res.json());
@@ -1461,7 +1448,7 @@
         if (!select) return;
         const card = select.closest('.lane');
         if (!card) return;
-        changeStatus(card.dataset.key, select.value);
+        requestStatus(card.dataset.key, select.value, select);
     });
     ['search', 'filter-status', 'filter-payment', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'filter-state', 'sort'].forEach((id) => {
         $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
@@ -1508,7 +1495,13 @@
         });
         $('emp-sheet').addEventListener('change', (event) => {
             const select = event.target.closest('.xl-status-select');
-            if (select) changeStatus(select.dataset.key, select.value);
+            if (select) requestStatus(select.dataset.key, select.value, select);
+        });
+        $('emp-sheet').addEventListener('click', (event) => {
+            const edit = event.target.closest('.xl-note-edit');
+            if (!edit) return;
+            const order = orders.find((item) => item.key === edit.dataset.key);
+            if (order && statusKey(order.status)) requestStatus(order.key, order.status, null);
         });
         $('emp-sheet').addEventListener('keydown', (event) => {
             if (event.target.closest('select')) return;
@@ -1516,6 +1509,17 @@
             if (!moves[event.key]) return;
             event.preventDefault();
             sheetSelect(sheetSel.r + moves[event.key][0], sheetSel.c + moves[event.key][1], true);
+        });
+    }
+    if ($('note-modal')) {
+        $('note-save').addEventListener('click', saveNoteDialog);
+        $('note-cancel').addEventListener('click', closeNoteDialog);
+        $('note-modal').addEventListener('click', (event) => { if (event.target === $('note-modal')) closeNoteDialog(); });
+        $('note-text').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveNoteDialog(); }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !$('note-modal').classList.contains('hidden')) closeNoteDialog();
         });
     }
     if ($('view-sheet')) $('view-sheet').addEventListener('click', () => setViewMode('sheet'));

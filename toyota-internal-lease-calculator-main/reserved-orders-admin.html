@@ -36,16 +36,15 @@
         <main class="wrap">
             <nav class="admin-nav" id="admin-nav">
                 <button class="ghost active" type="button" data-panel="overview">Overview</button>
-                <button class="ghost" type="button" data-panel="orders">Orders</button>
+                <button class="ghost" type="button" data-panel="orders" hidden style="display:none">Orders</button>
                 <button class="ghost" type="button" data-panel="sold">Sold VINs</button>
                 <button class="ghost" type="button" data-panel="marketing">طلبات التسويق</button>
                 <button class="ghost" type="button" data-panel="sheet">Live sheet</button>
                 <button class="ghost" type="button" data-panel="employees">Employees</button>
                 <button class="ghost" type="button" data-panel="push">Data push</button>
-                <a class="ghost" href="bo-message-builder.html">BO Message Builder</a>
                 <button class="ghost" type="button" data-panel="archive">Archive</button>
                 <button class="ghost" type="button" data-panel="audit">Audit logs</button>
-                <button class="ghost" type="button" data-panel="reports">Reports</button>
+                <button class="ghost" type="button" data-panel="reports" hidden style="display:none">Reports</button>
                 <button class="ghost" type="button" data-panel="settings">Settings</button>
             </nav>
             <section id="panel-overview">
@@ -180,10 +179,10 @@
             <section id="panel-push" class="hidden">
                 <section class="panel stack">
                     <h2>Push live</h2>
-                    <p>Push the <b>Reserved Order File</b> and the <b>RTL Stock</b> here. This push is the only thing that updates the Live sheet; the Admin Push in Report Sheet admin does not change it. Every VIN in the Reserved Order File becomes one row, and each VIN is checked in the RTL Stock: when it is found, all of its car details (every RTL Stock column) are shown on that row. When a file is not chosen, the last stored one is used again on this push.</p>
+                    <p>Push the <b>Reserved Order File</b> and the <b>RTL Stock</b> here. Every VIN in the Reserved Order File becomes one row, and each VIN is checked in the RTL Stock: when it is found, all of its car details (every RTL Stock column) are shown on that row. When a file is not chosen, the last stored one is used again on this push.</p>
                     <p id="push-source"></p>
                     <label>RTL Stock<input id="rtl-file" type="file" accept=".xlsx,.xls,.csv"></label>
-                    <p class="muted">The Back Order file is not pushed here. It comes only from the Report Sheet admin push, and this push reads the latest one.</p>
+                    <p class="muted">Queue position uses the <b>Toyota Back Order</b> file uploaded on the <a href="/bo-hub/bo-data-admin.html" target="_blank" rel="noopener">BO hub admin page</a>. Nothing to upload here for it; the newest file is read automatically.</p>
                     <label>Reserved Order File<input id="reserved-file" type="file" accept=".xlsx,.xls,.csv"></label>
                     <button class="solid" id="push-live" type="button">PUSH LIVE</button>
                     <div class="err" id="push-error"></div>
@@ -242,5 +241,5 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261103bmb1"></script>
+    <script src="reserved-orders-admin.js?v=20261103bo2"></script>
 </body></html>

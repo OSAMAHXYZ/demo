@@ -707,11 +707,12 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            const meta = ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left'];
+            const meta = ['Queue', 'Status', 'Employee note', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left'];
             const titles = {
                 Expiry: 'Expiry date',
                 'Time left': 'Time left',
                 Source: 'Source',
+                'Employee note': 'Employee note',
                 'Leader note': 'Leader note',
                 'Updated by': 'Updated by'
             };
@@ -805,6 +806,7 @@
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
         if (label === 'Leader note') return order.leaderNote || '';
+        if (label === 'Employee note') return order.statusNote || '';
         if (label === 'BO ahead') return aheadText(order);
         if (label === 'Updated by' || label === 'Team notes' || label === 'Updated at') {
             const who = order.statusChangedBy || '';
@@ -1349,7 +1351,7 @@
                 ? ` · VINs found in RTL Stock ${rep.rtlMatched || 0} of ${(rep.rtlMatched || 0) + (rep.rtlMissing || 0)}`
                 : '';
             source.textContent = data.rtlName || data.boName
-                ? `Live files: RTL Stock ${data.rtlName || '—'} · Back Order (from Report Sheet admin) ${data.boName || '—'}${rtlCheck}`
+                ? `Live files: RTL Stock ${data.rtlName || '—'} · Back Order ${data.boName || '—'}${rtlCheck}`
                 : 'No RTL Stock or Back Order pushed yet.';
         }
         const status = $('admin-status');

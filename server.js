@@ -8495,11 +8495,35 @@ app.get('/', (_req, res) => {
 
 loadStore();
 
+/**
+ * Toyota Back Order file uploaded on bo-hub/bo-data-admin.html (stored by bo-data-api as bo-data/bo-data.json).
+ * Reserved Orders reads it for the queue position; the Report Sheet's own Back Order slot is only the fallback.
+ */
+function readBoHubToyota() {
+  try {
+    const file = path.join(PERSISTENT_ROOT, 'bo-data', 'bo-data.json');
+    if (!fs.existsSync(file)) return null;
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!data || !Array.isArray(data.rows) || !data.rows.length) return null;
+    return {
+      headers: Array.isArray(data.headers) ? data.headers : [],
+      rows: data.rows,
+      sheetName: data.sheetName || '',
+      fileName: data.filename || '',
+      updatedAt: data.uploadedAt || ''
+    };
+  } catch {
+    return null;
+  }
+}
+
 reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
   storeDir: REPORT_SHEET_DIR,
   adminPassword: END_OF_MONTH_PASSWORD,
   broadcast: broadcastReservedOrdersUpdate,
   readStoredBackOrder() {
+    const hub = readBoHubToyota();
+    if (hub) return { headers: hub.headers, rows: hub.rows };
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
     return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
@@ -8523,6 +8547,8 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     return saveReservedFilesToReportSheet(files || {});
   },
   readAnalysisBackOrder() {
+    const hub = readBoHubToyota();
+    if (hub) return hub;
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [], fileName: '', updatedAt: '', sheetName: '' };
     const stat = fs.statSync(boPath);

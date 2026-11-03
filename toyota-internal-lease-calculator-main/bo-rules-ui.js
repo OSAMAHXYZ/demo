@@ -227,7 +227,7 @@
                 <div><b>Rows</b><span>${file.rowCount || 0}</span></div>
                 <div><b>Updated</b><span>${esc(stamp(file.updatedAt))}</span></div>
             </section>
-            <p class="muted br-file-note">The Back Order file is pushed only from Report Sheet admin (Admin Push). This page reads that file. It does not use the upload time as an order date.</p>
+            <p class="muted br-file-note">The Back Order file is pushed from Report Sheet admin (Admin Push) or Reserved Orders admin (Data push). This page reads the latest one. It does not use the upload time as an order date.</p>
             ${summaryCards()}
             <div class="br-workspace">
             <section class="panel br-rules-panel">

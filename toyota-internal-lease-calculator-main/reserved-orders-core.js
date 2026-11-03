@@ -20,8 +20,13 @@ const DEFAULT_STATUSES = [
     'التزام زميل اخر',
     'DB',
     'ابيان',
-    'ان اساين'
+    'ان اساين',
+    'Payment',
+    'In progress',
+    'Cancelled'
 ];
+// Employees choose only one of these three; a note is required with every choice.
+const EMPLOYEE_STATUSES = ['Payment', 'In progress', 'Cancelled'];
 
 let STATUSES = DEFAULT_STATUSES.slice();
 let STATUS_SET = new Set(STATUSES.map((s) => s.toLowerCase()));
@@ -406,6 +411,16 @@ function pickRtlSheet(sheets) {
     return list.find((sheet) => /rtl/i.test(String(sheet && sheet.name || ''))) || list[0] || null;
 }
 
+/** RTL Stock: the VIN is in column E. Another column is used only when column E holds no VIN at all. */
+function rtlVinColumn(grid, headerIdx, headers) {
+    const eIndex = columnIndex('E');
+    for (let r = headerIdx + 1; r < grid.length; r++) {
+        const vin = normalizeVin(cell(grid[r] || [], eIndex));
+        if (vin && /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vin)) return eIndex;
+    }
+    return findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
+}
+
 function indexRtlAging(sheets) {
     const map = new Map();
     const sheet = pickRtlSheet(sheets);
@@ -413,13 +428,13 @@ function indexRtlAging(sheets) {
     const grid = sheet.grid || [];
     const headerIdx = detectHeaderRow(grid);
     const headers = grid[headerIdx] || [];
-    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
+    const vinCol = rtlVinColumn(grid, headerIdx, headers);
     const ageCol = findHeaderByPriority([
         [/vin\s*allocation\s*ag[ei]ing/, /allocation\s*ag[ei]ing/, /allocation\s*age/],
         [/^ag[ei]ing$/, /^age$/, /stock\s*age/]
     ], headers);
     const vinIndex = vinCol >= 0 ? vinCol : columnIndex('E');
-    const ageIndex = ageCol >= 0 ? ageCol : columnIndex('J');
+    const ageIndex = ageCol >= 0 ? ageCol : columnIndex('K');
     for (let r = headerIdx + 1; r < grid.length; r++) {
         const line = grid[r] || [];
         const vin = normalizeVin(cell(line, vinIndex));
@@ -458,7 +473,7 @@ function indexRtlStockRows(sheets) {
     const grid = sheet.grid || [];
     const headerIdx = detectHeaderRow(grid);
     const headers = grid[headerIdx] || [];
-    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
+    const vinCol = rtlVinColumn(grid, headerIdx, headers);
     const vinIndex = vinCol >= 0 ? vinCol : columnIndex('E');
     for (let r = headerIdx + 1; r < grid.length; r++) {
         const line = grid[r] || [];
@@ -675,22 +690,24 @@ function extractReservedOrderFileRows(grid) {
     for (let r = headerIdx + 1; r < grid.length; r++) {
         const line = grid[r] || [];
         if (!line.some((v) => cleanText(v))) continue;
+        // The Reserved Order File has a fixed layout: A salesman, B customer, C order number, D model year,
+        // E product, F ALJ suffix, G exterior, H interior, I VIN, J expiry date.
         rows.push({
             rowIndex: r + 1,
-            vin: cell(line, vinCol >= 0 ? vinCol : columnIndex('I')),
-            orderNumber: cell(line, orderCol >= 0 ? orderCol : columnIndex('C')),
-            vehicle: cell(line, productCol >= 0 ? productCol : columnIndex('E')),
-            suffix: cell(line, suffixCol >= 0 ? suffixCol : columnIndex('F')),
-            exterior: cell(line, exteriorCol >= 0 ? exteriorCol : columnIndex('G')),
-            interior: cell(line, interiorCol >= 0 ? interiorCol : columnIndex('H')),
-            modelYear: cell(line, yearCol >= 0 ? yearCol : columnIndex('D')),
-            salesAdvisor: '',
-            customerName: customerCol >= 0 ? cell(line, customerCol) : cell(line, columnIndex('B')),
+            vin: cell(line, columnIndex('I')),
+            orderNumber: cell(line, columnIndex('C')),
+            vehicle: cell(line, columnIndex('E')),
+            suffix: cell(line, columnIndex('F')),
+            exterior: cell(line, columnIndex('G')),
+            interior: cell(line, columnIndex('H')),
+            modelYear: cell(line, columnIndex('D')),
+            salesAdvisor: cleanText(cell(line, columnIndex('A'))),
+            customerName: cell(line, columnIndex('B')),
             createdRaw: '',
             assignRaw: '',
             paymentRaw: '',
             statusRaw: '',
-            expiryRaw: expiryCol >= 0 ? cell(line, expiryCol) : cell(line, columnIndex('J')),
+            expiryRaw: cell(line, columnIndex('J')),
             searchArea: '',
             shareLevel: '',
             reservationAge: '',
@@ -918,8 +935,42 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         const orderNo = cleanText(row.orderNumber).toLowerCase();
         return (vin && previousByKey.get(`vin:${vin}`)) || (orderNo && orderNo !== 'no order' && previousByKey.get(`order:${orderNo}`)) || null;
     }
+    function sameSalesman(a, b) {
+        const norm = (value) => cleanText(value).toLowerCase().replace(/\s+/g, ' ');
+        return norm(a) === norm(b);
+    }
     function carryForward(prev, record) {
         if (!prev) return record;
+        // Same VIN pushed again for ANOTHER salesman: take the new name and info and start over with a blank
+        // status (no old status, note, history or clock). A VIN still with the same salesman keeps everything.
+        if (!sameSalesman(prev.salesAdvisor, record.salesAdvisor)) {
+            const assignmentHistory = Array.isArray(prev.assignmentHistory) ? prev.assignmentHistory.slice() : [];
+            assignmentHistory.push({
+                salesAdvisor: record.salesAdvisor,
+                assignDate: record.assignDisplay || record.assignDate,
+                at: localStamp(new Date())
+            });
+            return {
+                ...record,
+                key: prev.key || record.key,
+                status: normalizeStatus(''),
+                statusChangedBy: '',
+                statusChangedAt: '',
+                statusChangedDisplay: '',
+                statusChangedEmployeeNumber: '',
+                statusNote: '',
+                statusNoteBy: '',
+                statusNoteAt: '',
+                statusNoteDisplay: '',
+                history: [],
+                assignmentHistory,
+                leaderNote: '',
+                leaderNoteBy: '',
+                leaderNoteAt: '',
+                leaderNoteDisplay: '',
+                timerStartedAt: record.assignDate || localStamp(new Date())
+            };
+        }
         const assignmentHistory = Array.isArray(prev.assignmentHistory) ? prev.assignmentHistory.slice() : [];
         if (prev.salesAdvisor !== record.salesAdvisor || prev.assignDate !== record.assignDate) {
             assignmentHistory.push({
@@ -938,6 +989,10 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             statusChangedAt: prev.statusChangedAt || '',
             statusChangedDisplay: prev.statusChangedDisplay || '',
             statusChangedEmployeeNumber: prev.statusChangedEmployeeNumber || '',
+            statusNote: prev.statusNote || '',
+            statusNoteBy: prev.statusNoteBy || '',
+            statusNoteAt: prev.statusNoteAt || '',
+            statusNoteDisplay: prev.statusNoteDisplay || '',
             history: Array.isArray(prev.history) ? prev.history : [],
             assignmentHistory,
             leaderNote: prev.leaderNote || '',
@@ -1150,10 +1205,23 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         order.rtlFields = rtl ? rtl.fields : [];
         order.rtlSheetName = rtl ? rtl.sheetName : '';
         order.rtlRowIndex = rtl ? rtl.rowIndex : null;
+        // Car details from the RTL row: M status, K allocation age, N area, H share level.
+        const rtlCol = (letter) => {
+            const hit = rtl && (rtl.fields || []).find((field) => String(field.col || '').toUpperCase() === letter);
+            const text = hit ? cleanText(hit.value) : '';
+            return text === '—' ? '' : text;
+        };
+        order.rtlStatus = rtlCol('M');
+        order.rtlAllocationAge = rtlCol('K');
+        order.rtlArea = rtlCol('N');
+        order.rtlShareLevel = rtlCol('H');
         if (!rtl) return;
         rtlMatched += 1;
         if (!cleanText(order.vehicle) && rtl.product) order.vehicle = rtl.product;
-        if (!cleanText(order.searchArea) || order.searchArea === '—') order.searchArea = rtl.searchArea || order.searchArea || '';
+        order.searchArea = order.rtlArea;
+        order.shareLevel = order.rtlShareLevel;
+        const rtlAge = parseAgingDays(order.rtlAllocationAge);
+        if (rtlAge != null) order.allocationAging = rtlAge;
     });
 
     const orders = applyQueue(Array.from(byVin.values()));
@@ -1676,7 +1744,12 @@ function attachReservedOrders(app, options) {
 
     function loadStatuses() {
         const data = readJson(statusesFile, null);
-        if (Array.isArray(data) && data.length) return syncStatusCache(data);
+        if (Array.isArray(data) && data.length) {
+            // Keep the three employee statuses in the shared list so admin screens can show them.
+            const have = new Set(data.map((item) => String(item || '').trim().toLowerCase()));
+            const missing = EMPLOYEE_STATUSES.filter((item) => !have.has(item.toLowerCase()));
+            return missing.length ? saveStatuses(data.concat(missing)) : syncStatusCache(data);
+        }
         const seeded = syncStatusCache(DEFAULT_STATUSES);
         saveStatuses(seeded);
         return seeded;
@@ -1954,6 +2027,12 @@ function attachReservedOrders(app, options) {
         return key === 'reda salah' || key === 'mohammed al fadul';
     }
     function responsibleAdvisor(order) {
+        // Reserved Order File rows: the salesman is column A of that file.
+        if (order && (order.fromReservedFile || (order.inReservedFile && order.inEsales === false))) {
+            const own = cleanText(order.salesAdvisor);
+            if (own && own !== '—' && !/^(unassigned|salesman name)$/i.test(own)) return own;
+            return '';
+        }
         const fields = Array.isArray(order && order.fields) ? order.fields : [];
         const fromColumn = fields.find((field) => String(field && field.col || '').toUpperCase() === 'T');
         const text = cleanText(fromColumn && fromColumn.value) || cleanText(order && order.salesAdvisor);
@@ -2282,6 +2361,7 @@ function attachReservedOrders(app, options) {
             updatedAt: live.updatedAt || '',
             report: live.report || {},
             statuses: loadStatuses(),
+            employeeStatuses: EMPLOYEE_STATUSES.slice(),
             orders: orders.map(publicOrder)
         });
     });
@@ -2316,8 +2396,12 @@ function attachReservedOrders(app, options) {
         const user = sessionUser(req.body?.token);
         if (!user) return res.status(401).json({ error: 'Session expired. Sign in again.' });
         loadStatuses();
-        const rawStatus = String(req.body?.status || '').trim();
-        if (!isKnownStatus(rawStatus)) return res.status(400).json({ error: 'Unknown status.' });
+        // Employees choose one of three statuses and must write a note with it.
+        const chosenStatus = EMPLOYEE_STATUSES.find((item) => item.toLowerCase() === String(req.body?.status || '').trim().toLowerCase());
+        if (!chosenStatus) return res.status(400).json({ error: 'Choose Payment, In progress or Cancelled.' });
+        const rawStatus = chosenStatus;
+        const statusNote = cleanText(req.body?.note).slice(0, 500);
+        if (!statusNote) return res.status(400).json({ error: 'Write a note for this status first.' });
         const live = loadLive();
         const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
         if (!order) return res.status(404).json({ error: 'Order not found.' });
@@ -2344,6 +2428,13 @@ function attachReservedOrders(app, options) {
             recordId: user.recordId,
             source: 'employee'
         });
+        // The note everyone sees in the Live sheet next to the status.
+        const noteAt = new Date();
+        order.statusNote = statusNote;
+        order.statusNoteBy = user.name;
+        order.statusNoteAt = localStamp(noteAt);
+        order.statusNoteDisplay = displayStamp(noteAt);
+        if (Array.isArray(order.history) && order.history.length) order.history[order.history.length - 1].note = statusNote;
         live.updatedAt = new Date().toISOString();
         saveLive(live);
         audit(req, {
@@ -2356,7 +2447,7 @@ function attachReservedOrders(app, options) {
             vin: order.vin,
             orderNumber: order.orderNumber,
             oldValue: oldStatus,
-            newValue: order.status,
+            newValue: `${order.status} — ${statusNote}`,
             source: 'employee'
         });
         notify();
@@ -2468,8 +2559,9 @@ function attachReservedOrders(app, options) {
             // each one is checked in the RTL Stock. (A Stock E-Sales file is still accepted but no longer needed.)
             const rtlPushed = req.body?.rtlBase64 ? Buffer.from(String(req.body.rtlBase64), 'base64') : null;
             const esalesBuffer = req.body?.esalesBase64 ? Buffer.from(String(req.body.esalesBase64), 'base64') : null;
-            // The Back Order file comes only from the Report Sheet admin push; a BO file sent here is ignored.
-            const boBuffer = null;
+            // Back Order: pushed here when chosen (it is also saved into the Report Sheet's Back Order slot through
+            // onSourceFiles below); otherwise the Report Sheet's stored Back Order file is used.
+            const boBuffer = req.body?.boBase64 ? Buffer.from(String(req.body.boBase64), 'base64') : null;
             if (!rtlPushed && !esalesBuffer && !readRtlStockForReserved()) {
                 return res.status(400).json({ error: 'Upload the RTL Stock file first.' });
             }
@@ -2492,7 +2584,7 @@ function attachReservedOrders(app, options) {
             const built = publish(sheets, bo, {
                 esalesName: req.body.esalesName,
                 rtlName: (rtlPushed && rtlPushed.length ? req.body.rtlName : '') || ownRtlStockName(),
-                boName: 'Report Sheet admin',
+                boName: boBuffer && boBuffer.length ? (req.body.boName || 'Back Order') : 'BO hub (Toyota)',
                 reservedSheets,
                 rtlSheets,
                 salesSheets,
@@ -2509,7 +2601,7 @@ function attachReservedOrders(app, options) {
                     esalesBuffer,
                     esalesName: req.body.esalesName,
                     boBuffer,
-                    boName: '',
+                    boName: req.body.boName || '',
                     reservedBuffer: req.body.reservedBase64 ? reservedBuffer : null,
                     reservedName: req.body.reservedName || ''
                 });

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="reserved-orders-skin.css?v=20261025audit1">
     <link rel="stylesheet" href="reserved-orders-cards.css?v=20261103sc1">
     <link rel="stylesheet" href="reserved-orders-excel.css?v=20261103xl3">
-    <link rel="stylesheet" href="reserved-orders-employee-sheet.css?v=20261103es1">
+    <link rel="stylesheet" href="reserved-orders-employee-sheet.css?v=20261103st1">
 </head>
 <body>
     <section id="login" class="login-split">
@@ -144,7 +144,7 @@
                         <div class="xl-titlebar">
                             <span class="xl-appicon" aria-hidden="true">X</span>
                             <span class="xl-autosave" aria-hidden="true">AutoSave <i class="xl-toggle"></i></span>
-                            <span class="xl-filename"><b>Live sheet.xlsx</b> <small>· Everyone sees every order · you edit only your own</small></span>
+                            <span class="xl-filename"><b>Live sheet.xlsx</b> <small>· Everyone sees every order · you update only your own</small></span>
                         </div>
                         <div class="xl-menutabs" aria-hidden="true">
                             <span>File</span><span class="on">Home</span><span>Insert</span><span>Page Layout</span><span>Formulas</span><span>Data</span><span>Review</span><span>View</span>
@@ -154,7 +154,7 @@
                             <span class="xl-fxbtns" aria-hidden="true"><i>&#10005;</i><i>&#10003;</i><em>fx</em></span>
                             <div class="xl-formula" id="emp-xl-formula" title="Selected cell value"></div>
                         </div>
-                        <p class="sheet-note xl-msgbar" id="emp-sheet-msg">Green rows are yours: change the Status dropdown there. Other rows are view-only. Double-click a row for the full card.</p>
+                        <p class="sheet-note xl-msgbar" id="emp-sheet-msg">Green rows are yours: choose Payment, In progress or Cancelled in Order status, then write the note. Everyone sees the status, the note and when it was updated. Other rows are view-only.</p>
                         <div class="excel-live sheet-merged" id="emp-sheet" data-source="merged" tabindex="0"></div>
                         <div class="sheet-sources xl-sheettabs" role="tablist" aria-label="Live sheet source">
                             <button class="sheet-source active" type="button" role="tab" aria-selected="true"><strong>Live sheet</strong></button>
@@ -182,6 +182,20 @@
                 </section>
             </section>
         </main>
+
+        <div id="note-modal" class="note-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
+            <section class="note-panel">
+                <h2 id="note-modal-title">Status: <b id="note-modal-status"></b></h2>
+                <p class="muted" id="note-modal-order"></p>
+                <label for="note-text">Write a note for this status (everyone can see it in the sheet)</label>
+                <textarea id="note-text" rows="4" maxlength="500" placeholder="Why is it Payment / In progress / Cancelled?"></textarea>
+                <div class="err" id="note-error"></div>
+                <div class="note-actions">
+                    <button class="ghost" id="note-cancel" type="button">Cancel</button>
+                    <button class="solid" id="note-save" type="button">Save status and note</button>
+                </div>
+            </section>
+        </div>
 
         <div id="order-modal" class="overlay rc-modal hidden" role="dialog" aria-modal="true" aria-label="Order details">
             <section class="overlay-panel rc-panel">
@@ -244,5 +258,5 @@
         </div>
 
     </div>
-    <script src="reserved-orders-page.js?v=20261103es1"></script>
+    <script src="reserved-orders-page.js?v=20261103st1"></script>
 </body></html>

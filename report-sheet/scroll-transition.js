@@ -13,10 +13,11 @@
   window.__dxScrollTransition = true;
 
   /* ---------- settings ---------- */
-  var WHEEL_PULL = 520;        // wheel delta needed (px)
+  var WHEEL_PULL = 1;          // ONE wheel scroll past the end changes dashboard
+  var GESTURE_GAP_MS = 150;    // the scroll must start after this much wheel silence (not a fling still running)
   var TOUCH_PULL = 200;        // finger drag needed (px)
   var WHEEL_CAP = 120;         // max delta counted per wheel event
-  var END_IGNORE_MS = 160;     // ignore the first moments after reaching the end (trackpad fling)
+  var END_IGNORE_MS = 0;       // no wait after reaching the end
   var IDLE_RESET_MS = 450;     // reset the pull after this long without input
   var COOLDOWN_MS = 700;       // pause after each transition
   var COVER_MS = 820;          // curtain fully covers the screen
@@ -114,9 +115,11 @@
       if (dir > 0 ? (document.body.scrollTop + document.body.clientHeight < document.body.scrollHeight - 2) : (document.body.scrollTop > 1)) return true;
     }
     // the page itself
+    // (a viewport with overflow:hidden cannot be wheel-scrolled, so it never counts as "can still scroll")
+    var vo = hcs.overflowY !== "visible" ? hcs.overflowY : bcs.overflowY;
     var top = root.scrollTop || window.pageYOffset || 0;
     var max = root.scrollHeight - window.innerHeight;
-    if (max > 2) {
+    if (max > 2 && vo !== "hidden" && vo !== "clip") {
       if (dir > 0 ? top < max - 2 : top > 1) return true;
     }
     return false;
@@ -239,6 +242,9 @@
   var cooldownUntil = 0;
   var pull = 0;
   var pullDir = 0;
+  var staleGesture = false;
+  var lastWheelAt = 0;
+  var wheelGap = 9999;
   var endSince = 0;
   var idleTimer = 0;
   var hintVisible = false;
@@ -267,6 +273,9 @@
   /* ---------- input handling ---------- */
   function blocked(target, ev) {
     if (busy) return true;
+    // welcome-screen.js owns the wheel while it is open and for a moment after it closes
+    if (document.body.classList.contains("dx-welcome-open")) return true;
+    if (window.__dxNoPullUntil && Date.now() < window.__dxNoPullUntil) return true;
     if (!dashboardShown()) return true;
     for (var i = 0; i < WIDE_BODY.length; i++) if (document.body.classList.contains(WIDE_BODY[i])) return true;
     if ($(OPEN_SEL)) return true;
@@ -278,7 +287,7 @@
   }
 
   /* delta: positive = scrolling down. weight: delta already converted to "wheel pixels". */
-  function onPullInput(delta, target, ev) {
+  function onPullInput(delta, target, ev, opts) {
     var t = now();
     if (blocked(target, ev)) { if (pull || hintVisible || endSince) resetPull(); return; }
     var dir = delta > 0 ? 1 : -1;
@@ -294,16 +303,20 @@
       pull = 0;
       pullDir = dir;
       endSince = t;
+      // a wheel burst that was still scrolling when it hit the end (fast spin / trackpad fling)
+      // is not a new intent: only a fresh scroll after a short pause changes dashboard
+      staleGesture = !opts.touch && wheelGap < GESTURE_GAP_MS;
     }
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(resetPull, IDLE_RESET_MS);
 
-    if (t - endSince < END_IGNORE_MS) return;     // trackpad fling that just arrived
+    if (staleGesture) return;
+    if (t - endSince < END_IGNORE_MS) return;
     if (t < cooldownUntil) return;
 
     pull += Math.abs(delta);
-    var need = WHEEL_PULL;   // touch drags are already scaled to wheel pixels (TOUCH_PULL -> WHEEL_PULL)
-    if (!reduced()) showHint(dir, next.label, pull / need);
+    var need = opts.need;
+    if (!reduced() && need > 1) showHint(dir, next.label, pull / need);
     if (pull >= need) {
       resetPull();
       goTo(idx + dir, dir);
@@ -317,7 +330,10 @@
     var mult = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? window.innerHeight : 1);
     var d = dy * mult;
     d = Math.sign(d) * Math.min(WHEEL_CAP, Math.abs(d));
-    onPullInput(d, e.target, e);
+    var t = now();
+    wheelGap = t - lastWheelAt;
+    lastWheelAt = t;
+    onPullInput(d, e.target, e, { need: WHEEL_PULL, touch: false });
   }
 
   var touch = null;
@@ -334,7 +350,7 @@
     var step = touch.lastY - p.clientY;                       // finger up = scroll down
     touch.lastY = p.clientY;
     if (totalX > totalY || !step) return;                     // mostly horizontal
-    onPullInput(step * (WHEEL_PULL / TOUCH_PULL), touch.target, e);
+    onPullInput(step, touch.target, e, { need: TOUCH_PULL, touch: true });
   }
   function onTouchEnd() {
     touch = null;
