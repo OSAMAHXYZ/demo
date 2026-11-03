@@ -1,0 +1,511 @@
+/* =====================================================================
+   BO DASHBOARD · one-screen layout + card system
+   Load LAST (after unified-design.css). Visual only: every id, chart
+   and table stays where the scripts expect it; the wrappers
+   (.bo-fit-main, .bo-row) become display:contents so the cards can be
+   placed on a single grid that is sized to the visible panel.
+   ===================================================================== */
+
+body.bo-dash-mode #bo-dash.bo-tower {
+  --bo-ink: #eef3fa;
+  --bo-ink-2: #c7d2e0;
+  --bo-muted: #8d9bb0;
+  --bo-line: rgba(148, 163, 184, 0.14);
+  --bo-line-2: rgba(148, 163, 184, 0.24);
+  --bo-card: linear-gradient(180deg, #111b2d 0%, #0c1422 100%);
+  --bo-blue: #4f9dff;
+  --bo-green: #34d399;
+  --bo-red: #ff4d5e;
+  --bo-amber: #f5b13d;
+  --bo-gap: 10px;
+  --bo-head-h: 46px;
+  --bo-tool-h: 40px;
+  --bo-kpi-h: 76px;
+  --bo-pad-b: 12px;
+  --bo-avail: calc(100dvh - var(--topbar-h, 0px) - 16px);
+  font-variant-numeric: tabular-nums;
+}
+body.dx-fs.bo-dash-mode #bo-dash.bo-tower {
+  --bo-avail: calc(100dvh - 16px);
+  --bo-pad-b: 58px; /* room for the fullscreen Exit / Dashboards dock */
+}
+
+/* ---------- shared card look ---------- */
+body.bo-dash-mode #bo-dash .card:not(details) {
+  display: flex !important;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  background: var(--bo-card) !important;
+  border: 1px solid var(--bo-line) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  color: var(--bo-ink) !important;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+body.bo-dash-mode #bo-dash .bo-tap:hover,
+body.bo-dash-mode #bo-dash .bo-product-panel:hover,
+body.bo-dash-mode #bo-dash .bo-ops-card:hover { border-color: var(--bo-line-2) !important; }
+
+body.bo-dash-mode #bo-dash .pbi-viz-head,
+body.bo-dash-mode #bo-dash .bo-insights-head,
+body.bo-dash-mode #bo-dash .bo-model-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+  flex-wrap: nowrap !important;
+  min-height: 26px;
+  margin: 0 0 8px !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+body.bo-dash-mode #bo-dash .pbi-viz-head > div { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+body.bo-dash-mode #bo-dash .card h2,
+body.bo-dash-mode #bo-dash .card h2 * {
+  margin: 0 !important;
+  color: var(--bo-ink) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.01em;
+  line-height: 1.25 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.bo-dash-mode #bo-dash .card .hint {
+  color: var(--bo-muted) !important;
+  font-size: 11px !important;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.bo-dash-mode #bo-dash .pbi-viz-head > h2 { flex: 1 1 auto; min-width: 0; }
+body.bo-dash-mode #bo-dash .pbi-expand,
+body.bo-dash-mode #bo-dash .bo-view-all {
+  flex: 0 1 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 24px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bo-ink-2) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--bo-line-2) !important;
+  box-shadow: none !important;
+}
+body.bo-dash-mode #bo-dash .pbi-expand:hover,
+body.bo-dash-mode #bo-dash .bo-view-all:hover { color: #fff !important; border-color: var(--bo-blue) !important; }
+
+/* charts sit straight on the dark card (no white plate) */
+body.bo-dash-mode #bo-dash .chart-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+body.bo-dash-mode #bo-dash.bo-tower .chart-scroll { position: relative !important; }
+body.bo-dash-mode #bo-dash.bo-tower .chart-scroll > .chart-box,
+body.bo-dash-mode #bo-dash.bo-tower .chart-scroll > .chart-box.pbi-box,
+body.bo-dash-mode #bo-dash.bo-tower .chart-scroll > .bo-chart-sm,
+body.bo-dash-mode #bo-dash.bo-tower .chart-scroll > .bo-chart-donut {
+  position: absolute !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* tables */
+body.bo-dash-mode #bo-dash .table-wrap {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: auto !important;
+  border: 1px solid var(--bo-line) !important;
+  border-radius: 10px !important;
+  background: rgba(0, 0, 0, 0.12) !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+body.live-app.toyota-theme.bo-dash-mode #bo-dash table { width: 100%; font-size: 12px; border-collapse: separate; border-spacing: 0; }
+body.live-app.toyota-theme.bo-dash-mode #bo-dash th,
+body.live-app.toyota-theme.bo-dash-mode #bo-dash td {
+  height: auto !important;
+  padding: 6px 10px !important;
+  line-height: 1.3 !important;
+  white-space: nowrap;
+}
+body.live-app.toyota-theme.bo-dash-mode #bo-dash th {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #142036 !important;
+}
+body.live-app.toyota-theme.bo-dash-mode #bo-dash td { font-weight: 600; }
+
+/* ---------- header: one row ---------- */
+body.bo-dash-mode #bo-dash .bo-dash-header {
+  display: flex !important;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap !important;
+  min-height: 0 !important;
+  height: var(--bo-head-h);
+  margin: 0 !important;
+  padding: 0 4px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+body.bo-dash-mode #bo-dash .bo-dash-brand { flex: 0 0 auto; gap: 2px; }
+body.bo-dash-mode #bo-dash .bo-dash-title { font-size: 20px !important; font-weight: 800; letter-spacing: -0.01em; }
+body.bo-dash-mode #bo-dash .bo-dash-subtitle { display: none !important; }
+body.bo-dash-mode #bo-dash .bo-dash-eyebrow { line-height: 1.2; }
+body.bo-dash-mode #bo-dash .bo-dash-meta {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap !important;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+body.bo-dash-mode #bo-dash .bo-dash-meta > * { flex: 0 0 auto; white-space: nowrap; }
+body.bo-dash-mode #bo-dash .bo-date-presets button { height: 28px; padding: 0 10px; white-space: nowrap; }
+body.bo-dash-mode #bo-dash .bo-date-custom { display: inline-flex; align-items: center; gap: 6px; }
+body.bo-dash-mode #bo-dash .bo-date-custom input { height: 32px; padding: 0 8px; font-size: 12px; color-scheme: dark; }
+body.bo-dash-mode #bo-dash.bo-tower .bo-dash-meta .bo-dash-daterange {
+  padding: 0 10px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--bo-line-2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--bo-ink-2) !important;
+  font-size: 12px;
+  font-weight: 700;
+}
+body.bo-dash-mode #bo-dash .bo-dash-updated {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto !important;
+  min-width: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+}
+body.bo-dash-mode #bo-dash .bo-dash-updated > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+body.bo-dash-mode #bo-dash .bo-source-line { font-size: 11.5px; }
+body.bo-dash-mode #bo-dash .bo-dash-meta .btn,
+body.bo-dash-mode #bo-dash .bo-dash-meta .btn-primary {
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 14px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  white-space: nowrap;
+}
+@media (max-width: 1680px) {
+  body.bo-dash-mode #bo-dash .bo-source-line,
+  body.bo-dash-mode #bo-dash .bo-dash-daterange { display: none !important; }
+}
+
+/* ---------- filter bar: one row of equal fields ---------- */
+body.bo-dash-mode #bo-dash .bo-toolbar {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(180px, 1.6fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: var(--bo-tool-h);
+  margin: 0 !important;
+  padding: 5px 6px !important;
+  border-radius: 12px !important;
+}
+body.bo-dash-mode #bo-dash .bo-toolbar > [hidden] { display: none !important; }
+body.bo-dash-mode #bo-dash .bo-toolbar select,
+body.bo-dash-mode #bo-dash .bo-toolbar input {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 700;
+}
+body.bo-dash-mode #bo-dash .bo-toolbar .bo-btn-clear { height: 30px !important; padding: 0 12px !important; font-size: 12px !important; white-space: nowrap; }
+
+/* ---------- KPI strip ---------- */
+body.bo-dash-mode #bo-dash .bo-kpis {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  gap: var(--bo-gap) !important;
+  height: var(--bo-kpi-h);
+  margin: 0 !important;
+}
+body.bo-dash-mode #bo-dash .bo-kpi {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  min-height: 0 !important;
+  padding: 8px 12px !important;
+  border: 1px solid var(--bo-line) !important;
+  border-top: 2px solid var(--bo-blue) !important;
+  border-left: 1px solid var(--bo-line) !important;
+  border-radius: 12px !important;
+  background: var(--bo-card) !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+body.bo-dash-mode #bo-dash .bo-kpi.tone-green,
+body.bo-dash-mode #bo-dash .bo-kpi.tone-teal { border-top-color: var(--bo-green) !important; }
+body.bo-dash-mode #bo-dash .bo-kpi.tone-orange,
+body.bo-dash-mode #bo-dash .bo-kpi.tone-red,
+body.bo-dash-mode #bo-dash .bo-kpi.tone-rose { border-top-color: var(--bo-red) !important; }
+body.bo-dash-mode #bo-dash .bo-kpi.tone-slate { border-top-color: var(--bo-amber) !important; }
+body.bo-dash-mode #bo-dash .bo-kpi-icon {
+  position: absolute !important;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 32px !important;
+  height: 32px !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  display: grid;
+  place-items: center;
+}
+body.bo-dash-mode #bo-dash .bo-kpi-icon svg { width: 16px; height: 16px; }
+body.bo-dash-mode #bo-dash .bo-kpi > :not(.bo-kpi-icon) { min-width: 0; padding-right: 38px; }
+body.bo-dash-mode #bo-dash .bo-kpi .lab {
+  margin: 0 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.bo-dash-mode #bo-dash .bo-kpi .val {
+  margin: 1px 0 0 !important;
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.01em;
+}
+body.bo-dash-mode #bo-dash .bo-kpi .sub {
+  margin: 0 !important;
+  font-size: 10.5px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- card contents ---------- */
+body.bo-dash-mode #bo-dash .bo-insights .bo-insights-head { justify-content: flex-start; }
+body.bo-dash-mode #bo-dash .bo-insights-icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; }
+body.bo-dash-mode #bo-dash .bo-insights-icon svg { width: 15px; height: 15px; }
+body.bo-dash-mode #bo-dash .bo-insight-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+body.bo-dash-mode #bo-dash .bo-insight-list li {
+  position: relative;
+  margin: 0;
+  padding: 7px 10px 7px 22px;
+  border: 1px solid var(--bo-line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--bo-ink-2);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+body.bo-dash-mode #bo-dash .bo-insight-list li::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 13px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bo-red);
+}
+body.bo-dash-mode #bo-dash .bo-insight-list li::marker { content: ""; }
+body.bo-dash-mode #bo-dash .bo-insight-list b { color: var(--bo-ink); }
+
+body.bo-dash-mode #bo-dash .bo-status-card.card {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 10px;
+}
+body.bo-dash-mode #bo-dash .bo-status-card > .pbi-viz-head { grid-column: 1 / -1; }
+body.bo-dash-mode #bo-dash .bo-status-card .bo-donut-wrap {
+  grid-column: 1;
+  min-height: 0 !important;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+body.bo-dash-mode #bo-dash .bo-status-card .bo-donut-wrap .chart-scroll {
+  flex: 0 0 auto !important;
+  height: 100% !important;
+  width: auto !important;
+  max-width: 100% !important;
+  aspect-ratio: 1 / 1;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 auto;
+}
+body.bo-dash-mode #bo-dash .bo-status-legend {
+  grid-column: 2;
+  align-self: center;
+  display: flex !important;
+  flex-direction: column;
+  gap: 8px !important;
+  padding: 0 !important;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+body.bo-dash-mode #bo-dash .bo-status-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; vertical-align: -1px; }
+
+body.bo-dash-mode #bo-dash .bo-strategic { flex: 1 1 auto; padding: 0 !important; gap: 6px; scrollbar-width: thin; }
+body.bo-dash-mode #bo-dash .bo-strat { border-radius: 10px !important; }
+body.bo-dash-mode #bo-dash .bo-strat--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-template-areas: "id id id" !important;
+  padding: 8px 10px !important;
+  gap: 6px 8px !important;
+}
+body.bo-dash-mode #bo-dash .bo-strat-metrics > div { padding-left: 7px !important; }
+body.bo-dash-mode #bo-dash .bo-strat-metrics b { font-size: 13px; }
+body.bo-dash-mode #bo-dash .bo-strat-metrics span { font-size: 9px; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+body.bo-dash-mode #bo-dash .bo-quality-card { cursor: pointer; }
+body.bo-dash-mode #bo-dash .bo-quality-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+body.bo-dash-mode #bo-dash .bo-quality-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--bo-line);
+  font-size: 11.5px;
+}
+body.bo-dash-mode #bo-dash .bo-quality-list b { color: var(--bo-ink); font-size: 12.5px; }
+
+/* =====================================================================
+   One-screen grid (desktop). Smaller screens keep the stacked layout.
+   ===================================================================== */
+@media (min-width: 1101px) and (min-height: 640px) {
+  body.bo-dash-mode #panel-bodashboard { overflow: hidden auto !important; }
+
+  body.bo-dash-mode #bo-dash.bo-tower {
+    --bo-chrome: calc(var(--bo-head-h) + var(--bo-tool-h) + var(--bo-kpi-h) + 6 * var(--bo-gap) + var(--bo-pad-b));
+    --bo-row: max(150px, calc((var(--bo-avail) - var(--bo-chrome)) / 3));
+    display: grid !important;
+    grid-template-columns: 1.15fr 1.15fr 1fr 1fr 1fr;
+    grid-template-rows:
+      var(--bo-head-h) var(--bo-tool-h) auto var(--bo-kpi-h)
+      var(--bo-row) var(--bo-row) var(--bo-row);
+    grid-template-areas:
+      "head head head head head"
+      "tool tool tool tool tool"
+      "chip chip chip chip chip"
+      "kpi  kpi  kpi  kpi  kpi"
+      "mdl  mdl  sts  age  ins"
+      "prd  prd  sum  typ  shw"
+      "prd  prd  ppl  old  qlt";
+    grid-auto-rows: auto;
+    gap: var(--bo-gap) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 0 var(--bo-pad-b) !important;
+    overflow: visible !important;
+  }
+  body.bo-dash-mode #bo-dash .bo-fit-main,
+  body.bo-dash-mode #bo-dash .bo-row { display: contents !important; }
+
+  body.bo-dash-mode #bo-dash .bo-dash-header { grid-area: head; }
+  body.bo-dash-mode #bo-dash .bo-toolbar { grid-area: tool; }
+  body.bo-dash-mode #bo-dash #bo-chips { grid-area: chip; margin: 0 !important; }
+  body.bo-dash-mode #bo-dash #bo-chips:empty { display: none !important; }
+  body.bo-dash-mode #bo-dash .bo-kpis { grid-area: kpi; }
+  body.bo-dash-mode #bo-dash [data-chart-id="chart-bo-top5"] { grid-area: mdl; }
+  body.bo-dash-mode #bo-dash .bo-status-card { grid-area: sts; }
+  body.bo-dash-mode #bo-dash .bo-aging-panel { grid-area: age; }
+  body.bo-dash-mode #bo-dash #bo-insights { grid-area: ins; }
+  body.bo-dash-mode #bo-dash .bo-product-panel { grid-area: prd; }
+  body.bo-dash-mode #bo-dash .bo-model-panel { grid-area: sum; }
+  body.bo-dash-mode #bo-dash .bo-row-ops > .bo-ops-card:nth-child(1) { grid-area: typ; }
+  body.bo-dash-mode #bo-dash .bo-row-ops > .bo-ops-card:nth-child(2) { grid-area: shw; }
+  body.bo-dash-mode #bo-dash .bo-row-ops > .bo-ops-card:nth-child(3) { grid-area: ppl; }
+  body.bo-dash-mode #bo-dash .bo-oldest-card { grid-area: old; }
+  body.bo-dash-mode #bo-dash #bo-quality { grid-area: qlt; }
+  /* the attention strip repeats the KPI numbers; the KPI strip already shows them */
+  body.bo-dash-mode #bo-dash #bo-attention { display: none !important; }
+  body.bo-dash-mode #bo-dash .bo-park[hidden] { display: none !important; }
+
+  body.bo-dash-mode #bo-dash .bo-row > .card,
+  body.bo-dash-mode #bo-dash .bo-row > aside,
+  body.bo-dash-mode #bo-dash .bo-fit-main .card,
+  body.bo-dash-mode #bo-dash .bo-fit-main aside {
+    align-self: stretch !important;
+    justify-self: stretch !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+  body.bo-dash-mode #bo-dash .pbi-viz { min-height: 0 !important; }
+  body.bo-dash-mode #bo-dash .bo-kpis,
+  body.bo-dash-mode #bo-dash .bo-toolbar,
+  body.bo-dash-mode #bo-dash .bo-dash-header { align-self: stretch !important; }
+}
