@@ -12,6 +12,9 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" /></noscript>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>/* unified-design: default tick text + grid colour for any chart that does not set its own (no chart data / options change) */
+    if (window.Chart && Chart.defaults) { Chart.defaults.color = "#8d9bb0"; Chart.defaults.borderColor = "rgba(148,163,184,.10)"; }
+  </script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="auth.js?v=20261031auth4"></script>
   <script src="data-store.js?v=20261018ytd1"></script>
@@ -1620,10 +1623,10 @@ body.live-app #panel-salesreport .sr-emp-sum {
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <link rel="stylesheet" href="rv-redesign.css?v=20261031rv3" />
   <link rel="stylesheet" href="unified-layout.css?v=20261031u2" />
+  <link rel="stylesheet" href="unified-design.css?v=20261103ud2" />
 
 </head>
 <body class="live-app toyota-theme">
-<script src="welcome-screen.js"></script>
   <div class="app-frame">
     <aside class="app-sidebar" id="app-sidebar" aria-label="Dashboard navigation">
       <div class="sidebar-brand">
@@ -8575,8 +8578,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
   const PANEL_DEFS = [
     { id: "summary", label: "Summary · Del vs Prof" },
     { id: "salesreport", label: "Sales Dashboard" },
-    { id: "ytdsales", label: "YTD Sales" },
     { id: "gec", label: "GEC Dashboard" },
+    { id: "plantracker", label: "Plan Tracker" },
+    { id: "ytdsales", label: "YTD Sales" },
     { id: "contact", label: "Contact Performance" },
     { id: "evaluation", label: "Evaluation Criteria" },
     { id: "delivery", label: "Delivery" },
@@ -8585,7 +8589,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boerrors", label: "BO Errors" },
     { id: "boallocstock", label: "Allocation" },
-    { id: "plantracker", label: "Plan Tracker" },
     { id: "stockdashboard", label: "Stock Dashboard" },
     { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
@@ -8595,7 +8598,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
   const GEC_VIEW_SLOTS = new Set(["gec", "gecVisitors", "sales", "backorder"]);
   /** lexusb2ctracker.html → index.html?view=lexus: Lexus Tracker only. The tracker loads its own files and reloads on every Admin Push. */
   const LEXUS_VIEW = new URLSearchParams(location.search).get("view") === "lexus";
-  let activePanel = GEC_VIEW ? "gec" : LEXUS_VIEW ? "lexus" : "salesreport";
+  /* Opens the first dashboard of PANEL_DEFS the user can see: "summary" is tried first, and the
+     existing fallbacks (buildDashboard / Auth.fetchAccess) pick the next visible one in the same order. */
+  let activePanel = GEC_VIEW ? "gec" : LEXUS_VIEW ? "lexus" : "summary";
   let panelBeforeGec = "";
   let panelBeforeLexus = "";
   let panelBeforeB2c = "";
@@ -25467,6 +25472,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
 })();
 
 </script>
-<script src="scroll-transition.js"></script>
+<script src="scroll-transition.js?v=20261103nav1"></script>
+<script src="welcome-screen.js?v=20261103nav1"></script>
 </body>
 </html>

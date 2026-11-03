@@ -4,6 +4,10 @@
 
    - Keep scrolling past the end of a dashboard -> red/ink curtain wipe -> next / previous dashboard
    - Pull hint pill, curtain with big type, card reveal, dot rail on the right edge
+   - Order of the dashboards = the order of #panel-tabs [data-panel] (PANEL_DEFS in index.html).
+   - window.dxGoToPanel(id): plays the same curtain and opens dashboard `id` (used by the corner menu).
+   - Top-left corner menu: hover the 24x24 corner (or tap the corner tab on touch) -> dashboards list;
+     Admin Push / Data Uploader are listed for admins only.
    - Touches no existing logic: it only calls window.switchReportPanel(id) and reads the DOM.
    - prefers-reduced-motion: switches instantly, no animation.
    ===================================================================== */
@@ -36,7 +40,7 @@
   var REVEAL_SEL = ".card, .sr-mock-card, .sr-kpi-card, .sr-emp-rail, .bo-kpi, .boe-kpi, .boe-breakdown, .pt-card, .ytd-card, .ytd-kpi, .ytd-trend, .rv-board-card, .rv-audit, .act-header, .kpi";
   var WIDE_BODY = ["pbi-wide-open", "act-section-wide", "act-match-wide"];
   var OPEN_SEL = ".pbi-wide-backdrop.show, .emp-drawer.open, .bo-modal:not([hidden]), .pt-modal:not([hidden]), .pt-drawer:not([hidden])";
-  var BLOCK_TARGET = "select, input, textarea, .app-sidebar, .app-topbar";
+  var BLOCK_TARGET = "select, input, textarea, .app-sidebar, .app-topbar, .dx-menu";
 
   var reducedQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   function reduced() { return !!(reducedQuery && reducedQuery.matches); }
@@ -175,6 +179,23 @@
       ".dx-dot:hover::after,.dx-dot:focus-visible::after{opacity:1;transform:translate(0,-50%)}",
       ".dx-dot:focus-visible{outline:2px solid " + RED + ";outline-offset:3px}",
       "@media (max-width:899px){.dx-rail{display:none}}",
+      "body.dx-welcome-open .dx-hint,body.dx-welcome-open .dx-rail,body.dx-welcome-open .dx-corner-zone,body.dx-welcome-open .dx-corner-tab,body.dx-welcome-open .dx-menu{display:none !important}",
+      /* top-left corner menu (hover on desktop, corner tab on touch) */
+      ".dx-corner-zone{position:fixed;left:0;top:0;width:24px;height:24px;z-index:2147482800;background:transparent}",
+      ".dx-corner-tab{display:none;position:fixed;left:0;top:0;width:26px;height:26px;z-index:2147482800;padding:0;border:0;border-radius:0 0 12px 0;background:rgba(8,14,26,.72);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#fff;font:800 13px/1 Manrope,Outfit,'Segoe UI',system-ui,sans-serif;box-shadow:0 0 0 1px rgba(255,255,255,.1);cursor:pointer}",
+      "@media (hover:none),(pointer:coarse){.dx-corner-zone{display:none}.dx-corner-tab{display:block}}",
+      ".dx-menu{position:fixed;left:12px;top:12px;z-index:2147482900;width:min(300px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;box-sizing:border-box;padding:12px;border-radius:16px;background:rgba(9,15,28,.88);-webkit-backdrop-filter:blur(18px) saturate(1.2);backdrop-filter:blur(18px) saturate(1.2);box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.09);font-family:Manrope,Outfit,'Segoe UI',system-ui,sans-serif;color:#eef3fa;transform:translateX(-112%);opacity:0;visibility:hidden;transition:transform .38s cubic-bezier(.22,1,.36,1),opacity .25s ease,visibility 0s linear .38s}",
+      ".dx-menu.dx-open{transform:none;opacity:1;visibility:visible;transition:transform .38s cubic-bezier(.22,1,.36,1),opacity .25s ease,visibility 0s}",
+      ".dx-menu-head{display:flex;align-items:center;gap:10px;padding:2px 6px 12px;font-weight:800;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.62)}",
+      ".dx-menu-head i{width:8px;height:8px;border-radius:50%;background:" + RED + ";box-shadow:0 0 12px rgba(235,10,30,.8)}",
+      ".dx-menu-list{display:flex;flex-direction:column;gap:3px}",
+      ".dx-menu-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:#d6dfec;font:700 13.5px/1.2 Manrope,Outfit,'Segoe UI',system-ui,sans-serif;text-align:left;text-decoration:none;cursor:pointer;transition:background .15s ease,color .15s ease}",
+      ".dx-menu-item:hover,.dx-menu-item:focus-visible{background:rgba(255,255,255,.08);color:#fff;outline:none}",
+      ".dx-menu-item.dx-current{background:" + RED + ";color:#fff;box-shadow:0 8px 22px -10px rgba(235,10,30,.9)}",
+      ".dx-menu-ico{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.07);font-size:13px;font-weight:800}",
+      ".dx-menu-item.dx-current .dx-menu-ico{background:rgba(255,255,255,.2)}",
+      ".dx-menu-sep{height:1px;margin:8px 4px;background:rgba(255,255,255,.1)}",
+      "@media (prefers-reduced-motion:reduce){.dx-menu{transition:none}}",
       /* card reveal: individual `translate` property so hover lifts (transform) keep working */
       ".dx-rv.dx-rv{opacity:0;translate:0 38px}",
       ".dx-rv.dx-rv-in{animation:dx-rv .8s cubic-bezier(.22,1,.36,1) var(--dx-d,0ms) both}",
@@ -457,6 +478,22 @@
     });
   }
 
+  /* Public entry for other scripts (corner menu): play the curtain and open dashboard `id`.
+     Same path as scrolling past the end, so the order always follows #panel-tabs [data-panel]. */
+  window.dxGoToPanel = function (id) {
+    var tabs = getTabs();
+    var to = -1;
+    for (var i = 0; i < tabs.length; i++) if (tabs[i].id === id) { to = i; break; }
+    var from = activeIndex(tabs);
+    if (to < 0 || to === from) return Promise.resolve();
+    if (from < 0) {                                   // nothing active yet: plain switch
+      try { window.switchReportPanel(id); } catch (e) { /* ignore */ }
+      return Promise.resolve();
+    }
+    return goTo(to, to > from ? 1 : -1);
+  };
+  window.dxCurtainBusy = function () { return busy; };
+
   /* ---------- card reveal ---------- */
   var io = null;
   var scanTimers = [];
@@ -520,14 +557,119 @@
         return '<button type="button" class="dx-dot' + (t.active ? " dx-active" : "") + '" data-i="' + i + '" data-label="' + lab + '" aria-label="' + lab + '"' + (t.active ? ' aria-current="true"' : "") + "></button>";
       }).join("");
     }
-    var visible = tabs.length > 1 && dashboardShown() && window.innerWidth >= 900 && !wideOpen();
+    var visible = tabs.length > 1 && dashboardShown() && window.innerWidth >= 900 && !wideOpen() &&
+      !document.body.classList.contains("dx-welcome-open");
     rail.classList.toggle("dx-hide", !visible);
+  }
+
+  /* ---------- top-left corner menu ---------- */
+  var menu, menuZone, menuTab, menuCloseTimer = 0, menuOpen = false;
+
+  function isAdminUser() {
+    try {
+      var A = window.ReportSheetAuth;
+      return !!(A && A.isAdmin && A.isAdmin(A.current && A.current()));   // same rule as #nav-admin-push
+    } catch (e) { return false; }
+  }
+  function escHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function paintMenu() {
+    var buttons = document.querySelectorAll("#panel-tabs [data-panel]");
+    var html = "";
+    for (var i = 0; i < buttons.length; i++) {
+      var b = buttons[i];
+      var lab = b.querySelector(".side-nav-label");
+      var ico = b.querySelector(".side-nav-icon");
+      var text = ((lab ? lab.textContent : b.getAttribute("title") || b.textContent) || "").replace(/\s+/g, " ").trim();
+      var cur = b.classList.contains("active");
+      html += '<button type="button" class="dx-menu-item' + (cur ? " dx-current" : "") + '" data-go="' + escHtml(b.getAttribute("data-panel")) + '"' + (cur ? ' aria-current="page"' : "") + ">" +
+        '<span class="dx-menu-ico" aria-hidden="true">' + escHtml(ico ? ico.textContent : "\u2022") + "</span><span>" + escHtml(text) + "</span></button>";
+    }
+    if (isAdminUser()) {      // viewers never get these two links
+      html += '<div class="dx-menu-sep"></div>' +
+        '<a class="dx-menu-item" href="admin.html"><span class="dx-menu-ico" aria-hidden="true">\u2699</span><span>Admin Push</span></a>' +
+        '<a class="dx-menu-item" href="data-uploader.html"><span class="dx-menu-ico" aria-hidden="true">\u21EA</span><span>Data Uploader</span></a>';
+    }
+    menuList.innerHTML = html;
+  }
+  var menuList;
+  function openMenu() {
+    if (document.body.classList.contains("dx-welcome-open")) return;
+    clearTimeout(menuCloseTimer);
+    if (menuOpen) return;
+    paintMenu();
+    menuOpen = true;
+    menu.classList.add("dx-open");
+    menu.setAttribute("aria-hidden", "false");
+  }
+  function closeMenu() {
+    clearTimeout(menuCloseTimer);
+    if (!menuOpen) return;
+    menuOpen = false;
+    menu.classList.remove("dx-open");
+    menu.setAttribute("aria-hidden", "true");
+  }
+  function closeMenuSoon() {
+    clearTimeout(menuCloseTimer);
+    menuCloseTimer = setTimeout(closeMenu, 300);       // 300 ms grace period
+  }
+  function buildMenu() {
+    menuZone = document.createElement("div");
+    menuZone.className = "dx-corner-zone";
+    menuZone.setAttribute("aria-hidden", "true");
+    document.body.appendChild(menuZone);
+
+    menuTab = document.createElement("button");
+    menuTab.type = "button";
+    menuTab.className = "dx-corner-tab";
+    menuTab.setAttribute("aria-label", "Open dashboard menu");
+    menuTab.textContent = "\u00bb";
+    document.body.appendChild(menuTab);
+
+    menu = document.createElement("nav");
+    menu.className = "dx-menu";
+    menu.setAttribute("aria-label", "Dashboards");
+    menu.setAttribute("aria-hidden", "true");
+    menu.innerHTML = '<div class="dx-menu-head"><i></i><span>Toyota \u00b7 ALJ Report Sheet</span></div><div class="dx-menu-list"></div>';
+    menuList = menu.querySelector(".dx-menu-list");
+    document.body.appendChild(menu);
+
+    menuZone.addEventListener("mouseenter", openMenu);
+    menuZone.addEventListener("mouseleave", function () { if (menuOpen) closeMenuSoon(); });
+    // the invisible zone must never swallow a click meant for what is underneath (e.g. a narrow-window menu button)
+    menuZone.addEventListener("click", function (e) {
+      menuZone.style.pointerEvents = "none";
+      var under = document.elementFromPoint(e.clientX, e.clientY);
+      menuZone.style.pointerEvents = "";
+      if (under && under !== menuZone && under.click) under.click();
+    });
+    menu.addEventListener("mouseenter", function () { clearTimeout(menuCloseTimer); });
+    menu.addEventListener("mouseleave", closeMenuSoon);
+    menuTab.addEventListener("click", function () { if (menuOpen) closeMenu(); else openMenu(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && menuOpen) closeMenu(); });
+    document.addEventListener("pointerdown", function (e) {      // tap outside closes it on touch screens
+      if (menuOpen && e.pointerType === "touch" && !menu.contains(e.target) && e.target !== menuTab) closeMenu();
+    }, true);
+    menu.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("[data-go]") : null;
+      if (b) {
+        var id = b.getAttribute("data-go");
+        closeMenu();
+        if (typeof window.dxGoToPanel === "function") window.dxGoToPanel(id);
+        return;
+      }
+      if (e.target.closest && e.target.closest("a")) closeMenu();
+    });
   }
 
   /* ---------- init ---------- */
   function init() {
     injectCss();
     buildDom();
+    buildMenu();
 
     window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
