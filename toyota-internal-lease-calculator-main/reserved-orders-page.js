@@ -1326,7 +1326,7 @@
             const allDone = orders.length > 0 && orders.every((order) => (order.status || 'new') === 'completed');
             const rows = orders.map((order) => {
                 const state = oeStatusLabel(order);
-                const wrong = order.currentValue != null && order.currentValue !== '' ? order.currentValue : (order.incorrectValue || 'blank');
+                const wrong = order.incorrectValue || order.currentValue || 'blank';
                 return `<tr>
                     <td><b>${esc(order.boNumber || '—')}</b></td>
                     <td>${esc(order.product || item.product || '—')}</td>
