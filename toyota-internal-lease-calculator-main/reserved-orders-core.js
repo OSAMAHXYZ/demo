@@ -2063,7 +2063,20 @@ function attachReservedOrders(app, options) {
         const y = personKey(b);
         if (!x || !y) return false;
         if (x === y) return true;
-        return x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ');
+        if (x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ')) return true;
+        return shortNameOf(x, y) || shortNameOf(y, x);
+    }
+    // "Samaher Al Amri" in the sheet = login "Samaher Abdulmoghni Al Amri": same first and last name and every
+    // word of the short name is in the full name ("Al Asseri" and "Alasseri" count as the same word).
+    function nameWords(key) {
+        return key.replace(/\b(al|el)\s+(?=\S)/g, '$1').split(' ').filter(Boolean);
+    }
+    function shortNameOf(shortKey, fullKey) {
+        const short = nameWords(shortKey);
+        const full = nameWords(fullKey);
+        if (short.length < 2 || short.length > full.length) return false;
+        if (short[0] !== full[0] || short[short.length - 1] !== full[full.length - 1]) return false;
+        return short.every((word) => full.includes(word));
     }
     function sessionUser(token) {
         const session = sessions.get(String(token || ''));
