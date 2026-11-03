@@ -61,13 +61,19 @@
         if (!all || all.checked) return [];
         return checkedValues('br-cars');
     }
+    const DAY_CHOICES = [0, 1, 2, 3, 5, 6, 7];
     function dateSource() {
         const field = document.getElementById('br-date-source');
-        return field && field.value === 'fixed' ? 'fixed' : 'column';
+        return field && (field.value === 'fixed' || field.value === 'sent') ? field.value : 'column';
     }
     function deadlineChoice() {
         const days = Number(document.getElementById('br-deadline') && document.getElementById('br-deadline').value);
-        return [0, 1, 2, 5].includes(days) ? days : 0;
+        return DAY_CHOICES.includes(days) ? days : 0;
+    }
+    function dayOptions(selected) {
+        const current = Number(selected) || 0;
+        return [0, 1, 3, 5, 6, 7].concat(current === 2 ? [2] : []).sort((a, b) => a - b)
+            .map((days) => `<option value="${days}"${days === current ? ' selected' : ''}>${days ? `+ ${days} day${days === 1 ? '' : 's'}` : 'Same day'}</option>`).join('');
     }
     function initialMode(rule) {
         if (rule.matchMode === 'any' || rule.matchMode === 'all') return rule.matchMode;
@@ -176,16 +182,25 @@
         const rows = pack.rules.filter((rule) => !q || JSON.stringify(rule).toLowerCase().includes(q));
         if (!rows.length) return '<p class="muted">No rules yet. Create one on the right.</p>';
         const activeId = (editing && editing.id) || (detail && detail.rule && detail.rule.id) || '';
-        return `<div class="br-rule-list">${rows.map((rule) => `<div class="br-rule-row ${rule.id === activeId ? 'is-selected' : ''} ${rule.archived ? 'is-archived' : ''}">
+        return `<div class="br-rule-list">${rows.map((rule) => {
+            const conditions = savedConditions(rule).filter((item) => item.column);
+            const mode = initialMode(rule);
+            return `<div class="br-rule-row ${rule.id === activeId ? 'is-selected' : ''} ${rule.archived ? 'is-archived' : ''}">
             <button type="button" class="br-rule" data-open="${esc(rule.id)}">
                 <b>${esc(rule.name)}</b>
-                <span>${esc(rule.product || 'All cars')} · ${esc(rule.column || 'No column')}</span>
-                <span>${esc((rule.incorrectValues || []).join(', ') || 'blank')} → ${esc(rule.correctValue || '—')}</span>
+                <span>${esc(rule.product || 'All cars')} · ${mode === 'any' ? 'any condition' : 'all conditions'}${rule.active === false ? ' · paused' : ''}</span>
+                <ul class="br-rule-conds">${conditions.map((item) => `<li>${esc(describeConditions([item], mode))}</li>`).join('') || '<li>No condition set</li>'}</ul>
+                <span>Correct value: ${esc(rule.correctValue || '—')}</span>
                 <span>${rule.affectedEmployees || 0} employees · ${rule.affectedOrders || 0} orders</span>
                 ${sentLabel(rule)}
             </button>
-            <button type="button" data-archive="${esc(rule.id)}">${rule.archived ? 'Restore' : 'Archive'}</button>
-        </div>`).join('')}</div>`;
+            <div class="br-rule-actions">
+                <button type="button" data-open="${esc(rule.id)}">Edit</button>
+                <button type="button" data-archive="${esc(rule.id)}">${rule.archived ? 'Restore' : 'Archive'}</button>
+                <button type="button" class="br-danger" data-delete="${esc(rule.id)}">Delete</button>
+            </div>
+        </div>`;
+        }).join('')}</div>`;
     }
     function employeeKey(item) {
         return item ? `${item.salesmanId}\u0001${item.salesmanName}` : '';
@@ -252,17 +267,13 @@
                     <div class="br-test-out wide" id="br-test-out"></div>
                     <label><span>Correction value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
                     <label><span>Deadline date</span><select id="br-date-source">
-                        <option value="column"${selected.deadlineSource === 'fixed' ? '' : ' selected'}>From a column in the BO file</option>
+                        <option value="column"${['fixed', 'sent'].includes(selected.deadlineSource) ? '' : ' selected'}>From a column in the BO file</option>
+                        <option value="sent"${selected.deadlineSource === 'sent' ? ' selected' : ''}>The date the employee sends it</option>
                         <option value="fixed"${selected.deadlineSource === 'fixed' ? ' selected' : ''}>A specific date</option>
                     </select></label>
-                    <label id="br-date-column-wrap"${selected.deadlineSource === 'fixed' ? ' hidden' : ''}><span>BO date column</span><select id="br-date-column"><option value="">Order Date</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${selected.deadlineColumn === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <label id="br-date-column-wrap"${['fixed', 'sent'].includes(selected.deadlineSource) ? ' hidden' : ''}><span>BO date column</span><select id="br-date-column"><option value="">Order Date</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${selected.deadlineColumn === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
                     <label id="br-date-fixed-wrap"${selected.deadlineSource === 'fixed' ? '' : ' hidden'}><span>Specific date</span><input id="br-date-fixed" type="date" value="${esc(selected.deadlineDate || '')}"></label>
-                    <label><span>Days to add</span><select id="br-deadline">
-                        <option value="0"${Number(selected.deadlineDays) === 0 ? ' selected' : ''}>Same day</option>
-                        <option value="1"${Number(selected.deadlineDays) === 1 ? ' selected' : ''}>+ 1 day</option>
-                        <option value="2"${Number(selected.deadlineDays) === 2 ? ' selected' : ''}>+ 2 days</option>
-                        <option value="5"${Number(selected.deadlineDays) === 5 ? ' selected' : ''}>+ 5 days</option>
-                    </select></label>
+                    <label><span>Days after</span><select id="br-deadline">${dayOptions(selected.deadlineDays)}</select></label>
                     <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
                     <div class="br-msg wide">
                         <h3>Error notification</h3>
@@ -373,11 +384,14 @@
         return formatClientDate(shown);
     }
     function realBag(rule, person, orders) {
-        const days = [0, 1, 2, 5].includes(Number(rule.deadlineDays)) ? Number(rule.deadlineDays) : 0;
+        const days = DAY_CHOICES.includes(Number(rule.deadlineDays)) ? Number(rule.deadlineDays) : 0;
         const deadlines = [];
         if (rule.deadlineSource === 'fixed') {
             const value = shiftClient(rule.deadlineDate, days);
             if (value) deadlines.push(value);
+        } else if (rule.deadlineSource === 'sent') {
+            const today = new Date();
+            deadlines.push(formatClientDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + days)));
         } else {
             (orders || []).forEach((order) => {
                 const raw = String(order.deadlineRaw || '').trim();
@@ -390,11 +404,14 @@
         const described = describeConditions((rule.conditions && rule.conditions.length ? rule.conditions : [{ column: rule.column, operator: rule.operator || 'equals', values: rule.incorrectValues }]).filter((item) => item.column), mode);
         const column = rule.column || 'Value';
         const correct = rule.correctValue || '—';
+        const dateColumn = rule.deadlineSource === 'fixed' || rule.deadlineSource === 'sent' ? '' : (rule.deadlineColumn || '');
         const lines = (orders || []).map((order) => {
             const number = order.boNumber || 'Order number unavailable';
             const date = String(order.orderDate || '').trim() || 'Date unavailable';
             const incorrect = order.incorrectValue || order.currentValue || 'blank';
-            return `- Order ${number} — Order Date: ${date} — ${column}: ${incorrect} → ${correct}`;
+            const raw = String(order.deadlineRaw || '').trim();
+            const ownDate = dateColumn ? ` — ${dateColumn}: ${raw && parseClientDate(raw) ? shiftClient(raw, days) : 'Date unavailable'}` : '';
+            return `- Order ${number} — Order Date: ${date}${ownDate} — ${column}: ${incorrect} → ${correct}`;
         }).join('\n');
         const deadlineText = deadlines.length ? `Deadline: ${deadlines.join(', ')}.` : 'No deadline date in the BO file.';
         const several = Array.isArray(rule.incorrectValues) ? rule.incorrectValues : String(rule.incorrectValues || '').split(/[\n,;|]/).map((item) => item.trim()).filter(Boolean);
@@ -429,6 +446,7 @@
             correctValue: field('br-good') || base.correctValue || '',
             deadlineDays: deadlineChoice(),
             deadlineSource: dateSource(),
+            deadlineColumn: dateSource() === 'column' ? field('br-date-column') : '',
             deadlineDate: field('br-date-fixed') || base.deadlineDate || ''
         });
     }
@@ -441,7 +459,10 @@
         const days = deadlineChoice();
         const fixed = dateSource() === 'fixed';
         const pickedDate = value('br-date-fixed');
-        const deadline = fixed ? previewFromIso(pickedDate, days) : previewDate(days);
+        const today = new Date();
+        const deadline = fixed
+            ? previewFromIso(pickedDate, days)
+            : (dateSource() === 'sent' ? formatClientDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + days)) : previewDate(days));
         const list = readConditions();
         const first = list[0] || {};
         const mode = document.getElementById('br-match') && document.getElementById('br-match').value === 'any' ? 'any' : 'all';
@@ -558,11 +579,10 @@
         });
         const dateSourceField = document.getElementById('br-date-source');
         if (dateSourceField) dateSourceField.addEventListener('change', () => {
-            const fixed = dateSourceField.value === 'fixed';
             const columnWrap = document.getElementById('br-date-column-wrap');
             const fixedWrap = document.getElementById('br-date-fixed-wrap');
-            if (columnWrap) columnWrap.hidden = fixed;
-            if (fixedWrap) fixedWrap.hidden = !fixed;
+            if (columnWrap) columnWrap.hidden = dateSourceField.value !== 'column';
+            if (fixedWrap) fixedWrap.hidden = dateSourceField.value !== 'fixed';
         });
         const allCars = document.getElementById('br-all-cars');
         const carBox = document.getElementById('br-cars');
@@ -663,6 +683,7 @@
         root.querySelectorAll('[data-run]').forEach((button) => button.addEventListener('click', () => run(button.dataset.run)));
         root.querySelectorAll('[data-push]').forEach((button) => button.addEventListener('click', () => push(button.dataset.push, false)));
         root.querySelectorAll('[data-archive]').forEach((button) => button.addEventListener('click', () => archive(button.dataset.archive)));
+        root.querySelectorAll('[data-delete]').forEach((button) => button.addEventListener('click', () => removeRule(button.dataset.delete)));
         root.querySelectorAll('[data-orders]').forEach((button) => button.addEventListener('click', () => showOrders(button.dataset.orders, button.dataset.name)));
         root.querySelectorAll('[data-wa]').forEach((button) => button.addEventListener('click', () => sendWhatsApp(button.dataset.wa, button.dataset.name, 'prepared')));
     }
@@ -742,6 +763,18 @@
         const rule = pack.rules.find((item) => item.id === id);
         await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(id) + '/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password(), restore: !!(rule && rule.archived) }) });
         await load(id);
+    }
+    async function removeRule(id) {
+        const rule = pack.rules.find((item) => item.id === id);
+        if (!window.confirm(`Delete "${rule ? rule.name : 'this condition'}"? Employees stop seeing its order errors and messages.`)) return;
+        try {
+            await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(id) + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password() }) });
+            if ((editing && editing.id === id) || (detail && detail.rule && detail.rule.id === id)) { editing = null; detail = null; previewKey = ''; lastTest = null; }
+            notice = 'Condition deleted.';
+            await load();
+        } catch (e) {
+            if (e.message !== 'unauthorized') window.alert(e.message);
+        }
     }
     function showOrders(salesmanId, salesmanName) {
         const box = document.getElementById('br-orders');

@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
-  <link rel="stylesheet" href="bo-notifications.css?v=20261021np1" />
+  <link rel="stylesheet" href="bo-notifications.css?v=20261103gm1" />
   <script src="auth.js?v=20261031auth4"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
@@ -499,6 +499,77 @@
               <div class="bo-notif-unlock">
                 <button type="button" class="btn-primary" id="notif-bo-push">Push condition to Order Errors</button>
                 <span class="hint" id="notif-bo-result"></span>
+              </div>
+            </div>
+          </div>
+          <div class="notif-gen">
+            <h3 style="margin:20px 0 6px">Generate message from a condition</h3>
+            <p class="admin-lead" style="margin:0 0 10px">
+              Pick a condition you made in <b>BO Error Condition</b>, write the message, then press <b>Generate message</b>.
+              Each employee receives only <b>his own</b> matching orders in <b>Messages</b> and <b>Order Errors</b> in Reserved Orders.
+            </p>
+            <div class="notif-form">
+              <label>Condition
+                <select id="gen-rule"><option value="">Loading conditions…</option></select>
+              </label>
+              <label>Message
+                <textarea id="gen-message" rows="6" maxlength="2000" placeholder="Hello {employeeName}, please fix these orders before 05.11.2026: {orderLines}"></textarea>
+              </label>
+              <div class="gen-chips" id="gen-chips">
+                <span class="hint">Insert:</span>
+                <button type="button" data-gen-token="{employeeName}">{employeeName}</button>
+                <button type="button" data-gen-token="{affectedOrderCount}">{affectedOrderCount}</button>
+                <button type="button" data-gen-token="{orderLines}">{orderLines}</button>
+                <button type="button" data-gen-token="{deadline}">{deadline}</button>
+                <button type="button" data-gen-token="{correctValue}">{correctValue}</button>
+                <button type="button" data-gen-token="{conditionText}">{conditionText}</button>
+              </div>
+              <div class="bo-notif-unlock">
+                <button type="button" class="btn-primary" id="gen-run">Generate message</button>
+                <span class="hint" id="gen-result"></span>
+              </div>
+              <div class="gen-step" id="gen-date" hidden>
+                <p id="gen-date-found" style="margin:0 0 8px"></p>
+                <fieldset class="notif-audience">
+                  <legend>Take the date from a column in the BO file?</legend>
+                  <label class="notif-radio"><input type="radio" name="gen-date-from" value="column" /> Yes — from a BO file column</label>
+                  <label class="notif-radio"><input type="radio" name="gen-date-from" value="no" /> No</label>
+                </fieldset>
+                <label id="gen-col-wrap" hidden>BO date column <span class="hint">(each order shows the date in this column)</span>
+                  <select id="gen-col"></select>
+                </label>
+                <fieldset class="notif-audience" id="gen-no-wrap" hidden>
+                  <legend>Which date?</legend>
+                  <label class="notif-radio"><input type="radio" name="gen-date-kind" value="sent" checked /> The date the employee sends it</label>
+                  <label class="notif-radio"><input type="radio" name="gen-date-kind" value="fixed" /> A date I choose</label>
+                  <input type="date" id="gen-fixed" hidden />
+                </fieldset>
+                <label id="gen-days-wrap" hidden>Days after
+                  <select id="gen-days">
+                    <option value="0">Same day</option>
+                    <option value="1">+ 1 day</option>
+                    <option value="3">+ 3 days</option>
+                    <option value="5">+ 5 days</option>
+                    <option value="6">+ 6 days</option>
+                    <option value="7">+ 7 days</option>
+                  </select>
+                </label>
+                <div class="bo-notif-unlock">
+                  <button type="button" class="btn" id="gen-apply">Show preview</button>
+                </div>
+              </div>
+              <div class="gen-step" id="gen-preview" hidden></div>
+              <div class="gen-step" id="gen-send-wrap" hidden>
+                <fieldset class="notif-audience">
+                  <legend>Send to</legend>
+                  <label class="notif-radio"><input type="radio" name="gen-audience" value="all" checked /> All employees (each gets his own orders)</label>
+                  <label class="notif-radio"><input type="radio" name="gen-audience" value="selected" /> Selected employees</label>
+                  <div id="gen-staff" class="br-picks" hidden></div>
+                </fieldset>
+                <div class="bo-notif-unlock">
+                  <button type="button" class="btn-primary" id="gen-send">Send to employees</button>
+                  <span class="hint" id="gen-send-result"></span>
+                </div>
               </div>
             </div>
           </div>
@@ -1096,7 +1167,7 @@
     const note = $("#bo-notif-unlock-note");
     if (note) note.textContent = "Loading BO Error Condition…";
     const script = document.createElement("script");
-    script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261021np1";
+    script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261103gm1";
     script.onload = () => { if (note) note.textContent = ""; };
     script.onerror = () => {
       boNotifLoaded = false;
@@ -1140,6 +1211,8 @@
         : '<p class="muted">No employees found.</p>';
       if (staffBox && !staffBox.dataset.filled) { staffBox.dataset.filled = "1"; staffBox.innerHTML = staffHtml; }
       if (boStaffBox && !boStaffBox.dataset.filled) { boStaffBox.dataset.filled = "1"; boStaffBox.innerHTML = staffHtml; }
+      const genStaffBox = $("#gen-staff");
+      if (genStaffBox && !genStaffBox.dataset.filled) { genStaffBox.dataset.filled = "1"; genStaffBox.innerHTML = staffHtml; }
       loadBoRuleOptions();
       const items = data.notifications || [];
       list.innerHTML = items.length ? `<table><thead><tr><th>When</th><th>Notification</th><th>To</th><th>Seen by</th><th></th></tr></thead><tbody>${items.map((item) => {
@@ -1167,8 +1240,13 @@
   }
 
   let boRulesLoaded = false;
+  let genRules = [];
+  let genHeaders = [];
+  let genPayload = null;
+  let genDateUsed = false;
   async function loadBoRuleOptions() {
     const select = $("#notif-bo-rule");
+    const genSelect = $("#gen-rule");
     if (!select || boRulesLoaded) return;
     boRulesLoaded = true;
     try {
@@ -1176,15 +1254,126 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Could not load conditions.");
       const rules = (data.rules || []).filter((rule) => rule && !rule.archived);
-      select.innerHTML = rules.length
+      genRules = rules;
+      genHeaders = (data.file && data.file.headers) || [];
+      const options = rules.length
         ? rules.map((rule) => {
           const state = rule.active === false ? " · paused" : "";
           return `<option value="${escapeHtml(rule.id)}">${escapeHtml(rule.name || "Untitled condition")} · ${Number(rule.affectedEmployees) || 0} employees / ${Number(rule.affectedOrders) || 0} orders${state}</option>`;
         }).join("")
         : '<option value="">No conditions yet — create one in BO Error Condition</option>';
+      select.innerHTML = options;
+      if (genSelect) {
+        const keep = genSelect.value;
+        genSelect.innerHTML = options;
+        if (keep && rules.some((rule) => rule.id === keep)) genSelect.value = keep;
+        else fillGenMessage();
+      }
+      const col = $("#gen-col");
+      if (col) col.innerHTML = '<option value="">Choose a column</option>' + genHeaders.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
     } catch (err) {
       boRulesLoaded = false;
       select.innerHTML = '<option value="">Could not load conditions</option>';
+      if (genSelect) genSelect.innerHTML = '<option value="">Could not load conditions</option>';
+    }
+  }
+  function genRule() {
+    const id = ($("#gen-rule") && $("#gen-rule").value) || "";
+    return genRules.find((rule) => rule.id === id) || null;
+  }
+  function fillGenMessage() {
+    const rule = genRule();
+    const field = $("#gen-message");
+    if (field) field.value = rule ? (rule.message || "") : "";
+    resetGenSteps();
+  }
+  function resetGenSteps() {
+    ["#gen-date", "#gen-preview", "#gen-send-wrap"].forEach((id) => { const node = $(id); if (node) node.hidden = true; });
+    genPayload = null;
+    const result = $("#gen-result");
+    if (result) result.textContent = "";
+    const sent = $("#gen-send-result");
+    if (sent) sent.textContent = "";
+  }
+  const GEN_DATE_LITERAL = /\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b|\b\d{4}-\d{2}-\d{2}\b/g;
+  function findMessageDates(text) {
+    const value = String(text || "");
+    return {
+      literals: [...new Set(value.match(GEN_DATE_LITERAL) || [])],
+      tokens: /\{(deadline|orderDate|orderDateLine)\}/.test(value),
+      words: /\b(date|deadline|due)\b|تاريخ|موعد/i.test(value),
+    };
+  }
+  function genDateChoice() {
+    const from = (document.querySelector('input[name="gen-date-from"]:checked') || {}).value || "";
+    const kind = (document.querySelector('input[name="gen-date-kind"]:checked') || {}).value || "sent";
+    return {
+      from,
+      source: from === "column" ? "column" : (kind === "fixed" ? "fixed" : "sent"),
+      column: ($("#gen-col") && $("#gen-col").value) || "",
+      fixed: ($("#gen-fixed") && $("#gen-fixed").value) || "",
+      days: Number(($("#gen-days") && $("#gen-days").value) || 0) || 0,
+    };
+  }
+  function paintGenDateStep() {
+    const choice = genDateChoice();
+    const colWrap = $("#gen-col-wrap");
+    const noWrap = $("#gen-no-wrap");
+    const daysWrap = $("#gen-days-wrap");
+    const fixed = $("#gen-fixed");
+    if (colWrap) colWrap.hidden = choice.from !== "column";
+    if (noWrap) noWrap.hidden = choice.from !== "no";
+    if (fixed) fixed.hidden = !(choice.from === "no" && choice.source === "fixed");
+    if (daysWrap) daysWrap.hidden = !choice.from;
+  }
+  function buildGenPayload() {
+    const rule = genRule();
+    if (!rule) return null;
+    let message = String(($("#gen-message") && $("#gen-message").value) || "").trim();
+    const payload = Object.assign({}, rule, { message });
+    delete payload.current;
+    if (genDateUsed) {
+      const choice = genDateChoice();
+      const found = findMessageDates(message);
+      found.literals.forEach((literal) => { message = message.split(literal).join("{deadline}"); });
+      if (!/\{(deadline|orderDateLine)\}/.test(message)) message += "\n\nDeadline: {deadline}";
+      if (choice.source === "column" && !/\{(orderLines|orderDateLine)\}/.test(message)) message += "\n{orderLines}";
+      Object.assign(payload, {
+        message,
+        deadlineSource: choice.source,
+        deadlineColumn: choice.source === "column" ? choice.column : "",
+        deadlineDate: choice.source === "fixed" ? choice.fixed : "",
+        deadlineDays: choice.days,
+      });
+    }
+    return payload;
+  }
+  async function showGenPreview() {
+    const box = $("#gen-preview");
+    const result = $("#gen-result");
+    const payload = buildGenPayload();
+    if (!payload || !box) return;
+    if (result) result.textContent = "Checking the condition against the Back Order file…";
+    try {
+      const res = await fetch("/api/reserved-orders/bo-rules/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule: payload }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not build the message.");
+      genPayload = payload;
+      const previews = (data.previews || []).slice(0, 3);
+      box.innerHTML = `<p style="margin:0 0 8px"><b>${Number(data.employeeCount) || 0}</b> employee(s) · <b>${Number(data.orderCount) || 0}</b> order(s) match <i>${escapeHtml(data.conditionText || "")}</i>.</p>`
+        + (previews.length
+          ? previews.map((item) => `<article class="gen-preview-card"><b>${escapeHtml(item.salesmanName)}</b><pre>${escapeHtml(item.message)}</pre></article>`).join("")
+          : '<p class="foot" style="margin:0">No employee has orders matching this condition in the current Back Order file.</p>');
+      box.hidden = false;
+      const sendWrap = $("#gen-send-wrap");
+      if (sendWrap) sendWrap.hidden = !(Number(data.orderCount) > 0);
+      if (result) result.textContent = data.warning || (previews.length ? "Preview of the first employees. Check it, then send." : "");
+    } catch (err) {
+      if (result) result.textContent = err.message || "Could not build the message.";
     }
   }
 
@@ -1875,6 +2064,108 @@
       const checked = document.querySelector('input[name="notif-bo-audience"]:checked');
       if (box) box.hidden = !checked || checked.value !== "selected";
     });
+  });
+  const genRuleSelect = $("#gen-rule");
+  if (genRuleSelect) genRuleSelect.addEventListener("change", fillGenMessage);
+  const genMessageField = $("#gen-message");
+  if (genMessageField) genMessageField.addEventListener("input", resetGenSteps);
+  document.querySelectorAll("[data-gen-token]").forEach((button) => button.addEventListener("click", () => {
+    const field = $("#gen-message");
+    if (!field) return;
+    const token = button.dataset.genToken;
+    const start = field.selectionStart == null ? field.value.length : field.selectionStart;
+    const end = field.selectionEnd == null ? start : field.selectionEnd;
+    field.value = field.value.slice(0, start) + token + field.value.slice(end);
+    field.focus();
+    field.setSelectionRange(start + token.length, start + token.length);
+    resetGenSteps();
+  }));
+  document.querySelectorAll('input[name="gen-date-from"], input[name="gen-date-kind"]').forEach((radio) => radio.addEventListener("change", () => {
+    paintGenDateStep();
+    const preview = $("#gen-preview");
+    const sendWrap = $("#gen-send-wrap");
+    if (preview) preview.hidden = true;
+    if (sendWrap) sendWrap.hidden = true;
+  }));
+  const genRun = $("#gen-run");
+  if (genRun) genRun.addEventListener("click", () => {
+    resetGenSteps();
+    const result = $("#gen-result");
+    const rule = genRule();
+    const message = String(($("#gen-message") && $("#gen-message").value) || "").trim();
+    if (!rule) { if (result) result.textContent = "Create a condition in BO Error Condition first."; return; }
+    if (!message) { if (result) result.textContent = "Write the message first."; return; }
+    const found = findMessageDates(message);
+    genDateUsed = !!(found.literals.length || found.tokens || found.words);
+    if (!genDateUsed) { showGenPreview(); return; }
+    const label = $("#gen-date-found");
+    if (label) {
+      label.innerHTML = found.literals.length
+        ? `There is a date in this message: <b>${found.literals.map(escapeHtml).join(", ")}</b>.`
+        : "This message talks about a date.";
+    }
+    document.querySelectorAll('input[name="gen-date-from"]').forEach((radio) => { radio.checked = false; });
+    paintGenDateStep();
+    const step = $("#gen-date");
+    if (step) step.hidden = false;
+    if (result) result.textContent = "Choose where the date comes from, then press Show preview.";
+  });
+  const genApply = $("#gen-apply");
+  if (genApply) genApply.addEventListener("click", () => {
+    const result = $("#gen-result");
+    const choice = genDateChoice();
+    if (!choice.from) { if (result) result.textContent = "Answer Yes or No for the date first."; return; }
+    if (choice.source === "column" && !choice.column) { if (result) result.textContent = "Choose the BO file column that holds the date."; return; }
+    if (choice.source === "fixed" && !choice.fixed) { if (result) result.textContent = "Choose the date."; return; }
+    showGenPreview();
+  });
+  document.querySelectorAll('input[name="gen-audience"]').forEach((radio) => radio.addEventListener("change", () => {
+    const box = $("#gen-staff");
+    const checked = document.querySelector('input[name="gen-audience"]:checked');
+    if (box) box.hidden = !checked || checked.value !== "selected";
+  }));
+  const genSend = $("#gen-send");
+  if (genSend) genSend.addEventListener("click", async () => {
+    const result = $("#gen-send-result");
+    if (!genPayload) { if (result) result.textContent = "Generate the message first."; return; }
+    const selected = (document.querySelector('input[name="gen-audience"]:checked') || {}).value === "selected";
+    const recordIds = selected ? [...document.querySelectorAll("#gen-staff input:checked")].map((input) => input.value).filter(Boolean) : [];
+    if (selected && !recordIds.length) { if (result) result.textContent = "Pick at least one employee, or send to all employees."; return; }
+    genSend.disabled = true;
+    if (result) result.textContent = "Sending…";
+    try {
+      const saveRes = await fetch("/api/reserved-orders/bo-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule: genPayload, analyze: true }),
+      });
+      const saved = await saveRes.json().catch(() => ({}));
+      if (!saveRes.ok) throw new Error(saved.error || "Could not save the message.");
+      const ruleId = (saved.rule && saved.rule.id) || genPayload.id;
+      const pushOnce = async (confirmRepublish) => {
+        const res = await fetch("/api/reserved-orders/bo-rules/" + encodeURIComponent(ruleId) + "/push-targeted", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordIds, confirmRepublish: !!confirmRepublish }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409 && data.needsConfirm && !confirmRepublish) {
+          if (window.confirm(data.error || "Send the same result again?")) return pushOnce(true);
+          return null;
+        }
+        if (!res.ok) throw new Error(data.error || "Send failed.");
+        return data;
+      };
+      const data = await pushOnce(false);
+      if (result) result.textContent = data
+        ? `Sent — ${data.employeeCount} employee(s), ${data.orderCount} order(s). Each one sees his own message in Messages and Order Errors.`
+        : "Send cancelled.";
+      boRulesLoaded = false;
+      loadBoRuleOptions();
+    } catch (err) {
+      if (result) result.textContent = err.message || "Send failed.";
+    }
+    genSend.disabled = false;
   });
   const notifBoPush = $("#notif-bo-push");
   if (notifBoPush) notifBoPush.addEventListener("click", async () => {

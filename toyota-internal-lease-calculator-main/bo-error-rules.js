@@ -43,6 +43,22 @@ function headerKey(value) {
     return fold(value);
 }
 
+// Same person when the names are equal ignoring case, dots and word order, or when one is a short form of the
+// other ("Samaher Al Amri" = "Samaher Abdulmoghni Al Amri"; "Al Asseri" = "Alasseri").
+function nameWords(value) {
+    return fold(value).replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b(al|el)\s+(?=\S)/g, '$1').split(' ').filter(Boolean);
+}
+function samePersonName(a, b) {
+    const x = nameWords(a);
+    const y = nameWords(b);
+    if (!x.length || !y.length) return false;
+    if (x.join(' ') === y.join(' ') || x.slice().sort().join(' ') === y.slice().sort().join(' ')) return true;
+    const [short, full] = x.length <= y.length ? [x, y] : [y, x];
+    if (short.length < 2) return false;
+    if (short[0] !== full[0] || short[short.length - 1] !== full[full.length - 1]) return false;
+    return short.every((word) => full.includes(word));
+}
+
 function whatsappFromRow(row) {
     if (!row || !Object.prototype.hasOwnProperty.call(row, '__whatsapp')) return '';
     return cellString(row.__whatsapp);
@@ -335,13 +351,20 @@ function shiftDateText(value, days) {
     return formatBoDate(shown);
 }
 
+const DEADLINE_DAYS = [0, 1, 2, 3, 5, 6, 7];
+const DEADLINE_SOURCES = ['column', 'fixed', 'sent'];
+
 function deadlineDays(rule) {
     const days = Number(rule && rule.deadlineDays);
-    return [0, 1, 2, 5].includes(days) ? days : 0;
+    return DEADLINE_DAYS.includes(days) ? days : 0;
+}
+
+function deadlineSource(rule) {
+    return DEADLINE_SOURCES.includes(rule && rule.deadlineSource) ? rule.deadlineSource : 'column';
 }
 
 function deadlineDateHeader(headers, rule) {
-    if (rule && rule.deadlineSource === 'fixed') return findHeader(headers, ['Order Date']);
+    if (deadlineSource(rule) !== 'column') return findHeader(headers, ['Order Date']);
     const named = cellString(rule && rule.deadlineColumn);
     if (named) {
         const exact = findHeader(headers, [named]);
@@ -364,11 +387,15 @@ function uniqueDates(orders, days) {
 function orderRecordLines(orders, rule) {
     const column = cellString(rule && rule.column) || 'Value';
     const correct = cellString(rule && rule.correctValue) || '—';
+    const dateColumn = deadlineSource(rule) === 'column' ? cellString(rule && rule.deadlineColumn) : '';
+    const days = deadlineDays(rule);
     return (orders || []).map((order) => {
         const number = cellString(order.boNumber) || 'Order number unavailable';
         const date = cellString(order.orderDate) || 'Date unavailable';
         const incorrect = cellString(order.incorrectValue) || cellString(order.currentValue) || 'blank';
-        return `- Order ${number} — Order Date: ${date} — ${column}: ${incorrect} → ${correct}`;
+        const raw = cellString(order.deadlineRaw);
+        const ownDate = dateColumn ? ` — ${dateColumn}: ${raw && parseBoDate(raw) ? shiftDateText(raw, days) : 'Date unavailable'}` : '';
+        return `- Order ${number} — Order Date: ${date}${ownDate} — ${column}: ${incorrect} → ${correct}`;
     }).join('\n');
 }
 
@@ -379,9 +406,16 @@ function fixedDeadline(rule, days) {
     return value ? [value] : [];
 }
 
-function messageBag(rule, person, orders) {
+// "The date the employee sends it": the message is built when the employee opens it, so today is that date.
+function sentDeadline(days, now) {
+    const today = now instanceof Date ? now : new Date();
+    return [formatBoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + (Number(days) || 0)))];
+}
+
+function messageBag(rule, person, orders, now) {
     const days = deadlineDays(rule);
-    const deadlines = rule && rule.deadlineSource === 'fixed' ? fixedDeadline(rule, days) : uniqueDates(orders, days);
+    const source = deadlineSource(rule);
+    const deadlines = source === 'fixed' ? fixedDeadline(rule, days) : (source === 'sent' ? sentDeadline(days, now) : uniqueDates(orders, days));
     const lines = orderRecordLines(orders, rule);
     const deadlineText = deadlines.length ? `Deadline: ${deadlines.join(', ')}.` : 'No deadline date in the BO file.';
     const products = [];
@@ -451,8 +485,8 @@ function attachBoErrorRules(app, deps) {
             message: cellString(raw.message),
             whatsappMessage: cellString(raw.whatsappMessage),
             deadlineDays: deadlineDays(raw),
-            deadlineSource: raw.deadlineSource === 'fixed' ? 'fixed' : 'column',
-            deadlineColumn: raw.deadlineSource === 'fixed' ? '' : cellString(raw.deadlineColumn),
+            deadlineSource: deadlineSource(raw),
+            deadlineColumn: deadlineSource(raw) === 'column' ? cellString(raw.deadlineColumn) : '',
             deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(cellString(raw.deadlineDate)) ? cellString(raw.deadlineDate) : '',
             fieldMap: cleanFieldMap(raw),
             active: raw.active !== false,
@@ -557,11 +591,14 @@ function attachBoErrorRules(app, deps) {
         }
     }
     function employeeCanSee(user, item) {
-        if (!user || item.salesmanId === 'UNASSIGNED') return false;
-        if (String(user.employeeNumber) !== String(item.salesmanId)) return false;
-        const twins = deps.loadStaff().filter((person) => String(person.id) === String(user.employeeNumber) && person.active !== false);
-        if (twins.length <= 1) return true;
-        return fold(user.name) === fold(item.salesmanName);
+        if (!user || !item) return false;
+        if (item.salesmanId !== 'UNASSIGNED' && String(user.employeeNumber) === String(item.salesmanId)) {
+            const twins = deps.loadStaff().filter((person) => String(person.id) === String(user.employeeNumber) && person.active !== false);
+            if (twins.length <= 1) return true;
+            return samePersonName(user.name, item.salesmanName);
+        }
+        // The BO Salesman Id is not the login employee number: fall back to the name on the row.
+        return !!item.salesmanName && item.salesmanName !== 'Unassigned' && samePersonName(user.name, item.salesmanName);
     }
     function statusKey(ruleId, item) {
         const salesmanId = typeof item === 'string' ? item : item.salesmanId;
@@ -776,7 +813,7 @@ function attachBoErrorRules(app, deps) {
         const store = loadStore();
         const rule = store.rules.find((item) => item.id === req.params.id);
         if (!rule) return res.status(404).json({ error: 'Rule not found.' });
-        if (!rule.current) applyAnalysis(store, rule, 'targeted-push', req);
+        applyAnalysis(store, rule, 'targeted-push', req);
         const wanted = Array.isArray(req.body?.recordIds)
             ? [...new Set(req.body.recordIds.map((id) => cellString(id)).filter(Boolean))]
             : [];
@@ -785,9 +822,10 @@ function attachBoErrorRules(app, deps) {
         const targeted = wanted.length > 0;
         if (targeted && !chosen.length) return res.status(400).json({ error: 'None of the selected employees could be found.' });
         const employees = ((rule.current && rule.current.employees) || []).filter((item) => {
-            if (!item || item.salesmanId === 'UNASSIGNED') return false;
+            if (!item) return false;
+            if (item.salesmanId === 'UNASSIGNED' && (!item.salesmanName || item.salesmanName === 'Unassigned')) return false;
             if (!targeted) return true;
-            return chosen.some((person) => String(person.id) === String(item.salesmanId) || fold(person.name) === fold(item.salesmanName));
+            return chosen.some((person) => (item.salesmanId !== 'UNASSIGNED' && String(person.id) === String(item.salesmanId)) || samePersonName(person.name, item.salesmanName));
         });
         if (!employees.length) {
             return res.status(400).json({ error: targeted
@@ -835,6 +873,21 @@ function attachBoErrorRules(app, deps) {
         rule.updatedAt = new Date().toISOString();
         saveStore(store);
         deps.audit(req, { user: 'Admin', role: 'admin', action: rule.archived ? 'BO_RULE_ARCHIVED' : 'BO_RULE_RESTORED', entity: 'bo-rule', source: 'admin', details: rule.name });
+        res.json({ ok: true });
+    });
+
+    app.post('/api/reserved-orders/bo-rules/:id/delete', (req, res) => {
+        if (!deps.requireAdmin(req, res)) return;
+        const store = loadStore();
+        const rule = store.rules.find((item) => item.id === req.params.id);
+        if (!rule) return res.status(404).json({ error: 'Rule not found.' });
+        store.rules = store.rules.filter((item) => item.id !== rule.id);
+        store.publications = store.publications.filter((item) => item.ruleId !== rule.id);
+        store.history = store.history.filter((item) => item.ruleId !== rule.id);
+        store.whatsapp = store.whatsapp.filter((item) => item.ruleId !== rule.id);
+        Object.keys(store.statuses).forEach((key) => { if (key.split('\u0001')[0] === rule.id) delete store.statuses[key]; });
+        saveStore(store);
+        deps.audit(req, { user: 'Admin', role: 'admin', action: 'BO_RULE_DELETED', entity: 'bo-rule', source: 'admin', details: rule.name });
         res.json({ ok: true });
     });
 
