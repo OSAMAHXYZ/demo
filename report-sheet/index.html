@@ -8636,8 +8636,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "stockdashboard" || p.id === "dashboard") return false; // hidden from nav; panel code kept
       if (Auth && !Auth.canViewPanel(p.id, currentUser)) return false;
-      if (p.id === "salesreport") return hasSalesReportInputs();
-      if (p.id === "summary") return hasSummaryInputs();
+      if (p.id === "salesreport" || p.id === "summary") return true;
       if (p.id === "reservedvehicles") return true;
       if (p.id === "plantracker") return true;
       if (p.id === "gec") return true;
