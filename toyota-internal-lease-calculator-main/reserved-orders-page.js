@@ -2,12 +2,26 @@
     let STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
     const CARS = [
         ['Camry', 'images/cars/camry.png'], ['Corolla', 'images/cars/corolla.png'], ['Crown', 'images/cars/crown.png'],
-        ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux.png'],
+        ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux double cab.png'],
         ['Land Cruiser', 'images/cars/land cruiser.png'], ['Prado', 'images/cars/prado.png'], ['RAV4', 'images/cars/rav4.png'],
         ['Raize', 'images/cars/raize.png'], ['Yaris', 'images/cars/yaris.png'], ['Innova', 'images/cars/innova.png'],
         ['Veloz', 'images/cars/veloz.png'], ['Urban Cruiser', 'images/cars/urban cruiser.png'], ['Corolla Cross', 'images/cars/corolla cross.png'],
         ['GR86', 'images/cars/gr86.png']
     ];
+    // Extra names for the pictures in images/cars (used only to find a picture). The longest matching name wins,
+    // so "Corolla Cross" is not shown as "Corolla" and "Hilux Single Cab" is not shown as the double cab.
+    const CAR_IMAGE_ALIASES = [
+        ['Hilux Double Cab', 'images/cars/hilux double cab.png'], ['Hilux Single Cab', 'images/cars/Hilux single cab.png'],
+        ['Land Cruiser Hardtop', 'images/cars/land cruiser hard top.png'], ['Land Cruiser Hard Top', 'images/cars/land cruiser hard top.png'],
+        ['Land Cruiser Pickup', 'images/cars/land cruiser pickup.png'], ['Land Cruiser Prado', 'images/cars/prado.png'],
+        ['LC300 HEV', 'images/cars/lc300 hev max.png'], ['LC300', 'images/cars/land cruiser.png'], ['LC 300', 'images/cars/land cruiser.png'],
+        ['Coaster', 'images/cars/coaster.png'], ['Hiace Bus', 'images/cars/hiace bus.png'], ['Hiace Van', 'images/cars/hiace van.png'],
+        ['Hiace', 'images/cars/hiace van.png'], ['Lite Ace', 'images/cars/lite ace.png'], ['Supra', 'images/cars/supra.png'],
+        ['Lexus ES', 'images/cars/lexus es.png'], ['Lexus IS', 'images/cars/lexus is.png'], ['Lexus NX', 'images/cars/lexus nx.png'],
+        ['Lexus RX', 'images/cars/lexus rx.png'], ['Lexus UX', 'images/cars/lexus ux.png'],
+        ['Hilux Single', 'images/cars/Hilux single cab.png'], ['Hilux DC', 'images/cars/hilux double cab.png'], ['Hilux SC', 'images/cars/Hilux single cab.png']
+    ];
+    const CAR_ICON = '<svg class="car-icon" viewBox="0 0 64 32" width="46" height="23" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22v-5l6-2 7-7h22l9 7 9 2v5"/><path d="M5 22h5M19 22h26M54 22h5"/><circle cx="14.5" cy="23" r="4.5"/><circle cx="49.5" cy="23" r="4.5"/><path d="M19 15h27"/></svg>';
     const IDLE_MS = 30 * 60 * 1000;
     const sessionKey = 'reserved-orders-session';
     let orders = [];
@@ -75,10 +89,19 @@
         return '';
     }
     function show(value, missing) { return value ? value : missing; }
-    function carImage(name) {
-        const text = String(name || '').toLowerCase();
-        const hit = CARS.find(([label]) => text.includes(label.toLowerCase()));
-        return hit ? hit[1] : '';
+    function carImage() {
+        // Try each name given (product, vehicle, ...) until one matches a picture; longest matching car name wins.
+        for (let i = 0; i < arguments.length; i += 1) {
+            const text = String(arguments[i] || '').toLowerCase().replace(/[-_/]+/g, ' ').replace(/\s+/g, ' ').trim();
+            if (!text) continue;
+            let best = null;
+            CAR_IMAGE_ALIASES.concat(CARS).forEach(([label, src]) => {
+                const key = label.toLowerCase();
+                if (text.includes(key) && (!best || key.length > best.len)) best = { len: key.length, src };
+            });
+            if (best) return best.src;
+        }
+        return '';
     }
     function readSession() { try { return JSON.parse(sessionStorage.getItem(sessionKey) || 'null'); } catch (e) { return null; } }
     function writeSession(data) { sessionStorage.setItem(sessionKey, JSON.stringify(data)); }
@@ -429,6 +452,10 @@
     function sfxValue(order) {
         return fieldText(order, (label) => label === 'sfx' || label === 'suffix' || label.includes('suffix') || /\bsfx\b/.test(label));
     }
+    function cleanVehicleName(value) {
+        const text = String(value == null ? '' : value).trim();
+        return !text || text === '—' || looksLikeVinText(text) ? '' : text;
+    }
     function productName(order) {
         const sfx = sfxValue(order);
         let vehicle = firstText(order, order.vehicle, (label) => label === 'product' || label === 'vehicle' || label === 'car' || label === 'المنتج');
@@ -524,16 +551,15 @@
         const info = tileInfo(order);
         const deadline = columnDeadline(order);
         const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
-        const img = carImage(info.product);
-        const initial = info.product ? info.product.slice(0, 1) : '';
-        const carName = info.product || 'Car not named';
+        const img = carImage(info.product, order.vehicle, productName(order));
+        const carName = info.product || cleanVehicleName(order.vehicle) || 'Car not named';
         const status = order.status || 'محجوز';
         const timeText = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
         const tone = ms == null ? '' : timerClass(ms);
         return `<button type="button" class="rc-tile${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}" data-tile-key="${esc(order.key)}" aria-label="Open details for ${esc(carName)}">
             <span class="rc-top"><span class="rc-q">${queueLabel(order.queueNumber)}</span><span class="badge ${badge(order.status)}" dir="auto">${esc(status)}</span></span>
             <span class="rc-car">
-                <span class="rc-thumb">${img ? `<img src="${img}" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rc-fallback" hidden>${esc(initial)}</span>` : `<span class="rc-fallback">${esc(initial)}</span>`}</span>
+                <span class="rc-thumb">${img ? `<img src="${img}" alt="${esc(carName)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rc-fallback" hidden>${CAR_ICON}</span>` : `<span class="rc-fallback">${CAR_ICON}</span>`}</span>
                 <span class="rc-name"><b dir="auto" title="${esc(carName)}">${esc(carName)}</b>${info.sfx ? `<small dir="auto">${esc(info.sfx)}</small>` : ''}</span>
             </span>
             <span class="rc-foot">
@@ -617,7 +643,7 @@
         const customer = reservedOnly
             ? (firstText(order, order.customerName, (label) => label === 'name' || label === 'customer' || label === 'customer name' || label === 'العميل') || reservedField(order, 'B'))
             : firstText(order, order.customerName, (label) => label === 'customer' || label === 'customer name' || label === 'العميل');
-        const img = carImage(product);
+        const img = carImage(product, order.vehicle, productName(order));
         const assigned = Boolean(advisor && String(advisor).toLowerCase() !== 'unassigned');
         const orderLabel = order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER';
         const vin = show(order.vin, 'VIN NOT FOUND');
@@ -635,7 +661,7 @@
             <div class="lane${isExpired(order) ? ' expired' : ''}${specs ? '' : ' no-specs'}" data-key="${esc(order.key)}">
             <div class="lane-id">
                 <div class="qmark">${queueLabel(order.queueNumber)}</div>
-                <div class="thumb">${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="thumb-fallback" hidden>${esc(initial)}</span>` : (initial ? `<span class="thumb-fallback">${esc(initial)}</span>` : '')}</div>
+                <div class="thumb">${img ? `<img class="car" src="${img}" alt="${esc(product)}" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="thumb-fallback" hidden>${CAR_ICON}</span>` : `<span class="thumb-fallback">${CAR_ICON}</span>`}</div>
                 <b dir="auto" title="${esc(orderLabel)}">${esc(orderLabel)}</b>
                 <span class="muted" dir="auto" title="${esc(vin)}">VIN ${esc(vin)}</span>
                 ${isBlankValue(customer) ? '' : `<span class="muted" dir="auto" title="${esc(customer)}">${esc(customer)}</span>`}

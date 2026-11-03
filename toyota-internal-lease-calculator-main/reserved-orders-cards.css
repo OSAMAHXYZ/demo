@@ -117,3 +117,8 @@
 #app .notif-toggle[hidden] { display: none; }
 #app .notif-toggle.is-on { border-color: rgba(52, 211, 153, 0.55); color: #6ee7b7; }
 #app .notif-toggle.is-blocked { border-color: rgba(251, 113, 133, 0.5); color: #fb7185; }
+
+/* ---- Car picture fallback icon (when a car has no picture file) ---- */
+#app .rc-fallback, #app .thumb-fallback { display: grid; place-items: center; color: #6b7c97; }
+#app .rc-fallback[hidden], #app .thumb-fallback[hidden] { display: none !important; }
+#app .rc-fallback .car-icon, #app .thumb-fallback .car-icon { opacity: 0.85; }

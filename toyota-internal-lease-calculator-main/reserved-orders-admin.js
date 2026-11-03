@@ -156,7 +156,7 @@
     }
     let salesTypePick = null; // nothing listed until a card is clicked
     let showNoVinRows = false;
-    let sheetSource = 'esales';
+    let sheetSource = 'merged'; // E-Sales and Reserved Order File sheets are hidden; only the Merged sheet is shown
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
@@ -820,7 +820,7 @@
         return field && field.value != null ? String(field.value) : '';
     }
     function setSheetSource(next) {
-        sheetSource = next === 'reserved' || next === 'merged' ? next : 'esales';
+        sheetSource = 'merged'; // the E-Sales and Reserved Order File sheets are hidden from the Live sheet
         document.querySelectorAll('.sheet-source').forEach((button) => {
             const on = button.dataset.sheet === sheetSource;
             button.classList.toggle('active', on);
@@ -853,8 +853,17 @@
         if (!box) return;
         const needle = ($('sheet-search') && $('sheet-search').value || '').trim().toLowerCase();
         const packed = sheetColumns(list, source);
-        const cols = Array.isArray(packed) ? packed : packed.cols;
+        const allCols = Array.isArray(packed) ? packed : packed.cols;
         const titles = Array.isArray(packed) ? {} : (packed.titles || {});
+        const colName = (label) => (source === 'merged'
+            ? (titles[label] || label)
+            : source === 'reserved'
+                ? (titles[label] || RESERVED_SHEET_NAMES[label] || label)
+                : (SHEET_NAMES[label] || titles[label] || label));
+        xlInfo[source] = { all: allCols.slice(), name: colName };
+        // The admin can hide and reorder columns (Columns button / right-click a header); only the visible ones render.
+        const cols = xlVisibleCols(source, allCols);
+        const hiddenCount = allCols.length - cols.length;
         const noVin = list.filter((order) => !hasVin(order)).length;
         // Merged sheet keeps non-duplicate rows even when some fields are empty.
         const visible = source === 'merged'
@@ -862,15 +871,11 @@
             : (showNoVinRows ? list : list.filter(hasVin));
         const rows = visible.filter((order) => !needle || cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle)));
         const head = (label) => {
-            const named = source === 'merged'
-                ? (titles[label] || label)
-                : source === 'reserved'
-                    ? (titles[label] || RESERVED_SHEET_NAMES[label] || label)
-                    : (SHEET_NAMES[label] || titles[label] || label);
+            const named = colName(label);
             if (/^[A-Z]{1,3}$/.test(label) && named && source !== 'merged') {
-                return `<th class="xl-h" title="Source column ${esc(label)}">${esc(named)}<span class="col-letter">${esc(label)}</span></th>`;
+                return `<th class="xl-h" data-label="${esc(label)}" title="Source column ${esc(label)}">${esc(named)}<span class="col-letter">${esc(label)}</span></th>`;
             }
-            return `<th class="xl-h">${esc(named || label)}</th>`;
+            return `<th class="xl-h" data-label="${esc(label)}">${esc(named || label)}</th>`;
         };
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
@@ -942,7 +947,7 @@
         // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
         box.innerHTML = rows.length
             ? `<table class="xl-grid"><thead>
-                <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}">${xlLetter(index)}</th>`).join('')}</tr>
+                <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}" data-label="${esc(label)}" title="Right-click to hide or move this column">${xlLetter(index)}</th>`).join('')}</tr>
                 <tr class="xl-head"><th class="xl-rn">1</th>${cols.map(head).join('')}</tr>
             </thead><tbody>${rows.map((order, rowIndex) => {
                 const classes = [
@@ -956,7 +961,10 @@
         if (grid && xlZoom !== 100) grid.style.zoom = String(xlZoom / 100);
         if (source === sheetSource) {
             const stat = $('xl-stat');
-            if (stat) stat.textContent = rows.length ? `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} columns` : 'No data';
+            if (stat) stat.textContent = (rows.length ? `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} columns` : 'No data')
+                + (hiddenCount > 0 ? ` · ${hiddenCount} hidden` : '');
+            xlRenderColsPop();
+            xlPaintLayoutState();
             const novin = $('xl-novin');
             if (novin) novin.innerHTML = note;
         }
@@ -1016,6 +1024,168 @@
             if (name) name.textContent = 'A1';
             if (formula) formula.textContent = '';
         }
+    }
+    // ---- Sheet layout: hide / reorder columns, then Save layout (kept in this browser) ----
+    const XL_LAYOUT_KEY = 'ro-live-sheet-layout-v1';
+    const xlInfo = {};
+    let xlSaved = {};
+    let xlDraft = {};
+    let xlFlash = '';
+    function xlCopy(value) { return JSON.parse(JSON.stringify(value || {})); }
+    function xlNorm(all) {
+        const out = {};
+        Object.keys(all || {}).sort().forEach((source) => {
+            const layout = all[source] || {};
+            const hidden = (layout.hidden || []).slice().sort();
+            const order = layout.order || [];
+            if (hidden.length || order.length) out[source] = { hidden, order };
+        });
+        return out;
+    }
+    (function xlLoadLayouts() {
+        try { xlSaved = xlNorm(JSON.parse(localStorage.getItem(XL_LAYOUT_KEY) || '{}')); } catch (e) { xlSaved = {}; }
+        xlDraft = xlCopy(xlSaved);
+    })();
+    function xlLayout(source) {
+        if (!xlDraft[source]) xlDraft[source] = { hidden: [], order: [] };
+        return xlDraft[source];
+    }
+    function xlOrdered(source, all) {
+        const known = new Set(all);
+        const saved = (xlLayout(source).order || []).filter((label) => known.has(label));
+        return saved.concat(all.filter((label) => !saved.includes(label)));
+    }
+    function xlVisibleCols(source, all) {
+        const hidden = new Set(xlLayout(source).hidden || []);
+        const shown = xlOrdered(source, all).filter((label) => !hidden.has(label));
+        return shown.length ? shown : all.slice();
+    }
+    function xlDirty() { return JSON.stringify(xlNorm(xlDraft)) !== JSON.stringify(xlNorm(xlSaved)); }
+    function xlPaintLayoutState() {
+        const state = $('xl-layout-state');
+        const save = $('xl-save-layout');
+        const dirty = xlDirty();
+        if (state) {
+            state.textContent = dirty ? 'Unsaved layout changes' : (xlFlash || 'Layout saved');
+            state.classList.toggle('is-dirty', dirty);
+        }
+        if (save) {
+            save.disabled = !dirty;
+            save.classList.toggle('is-dirty', dirty);
+        }
+        const btn = $('xl-cols-btn');
+        if (btn) {
+            const info = xlInfo[sheetSource];
+            const hidden = info ? info.all.length - xlVisibleCols(sheetSource, info.all).length : 0;
+            const label = btn.querySelector('span');
+            if (label) label.textContent = hidden > 0 ? `Columns (${hidden} hidden)` : 'Columns';
+        }
+    }
+    function xlAfterLayoutChange() {
+        xlFlash = '';
+        renderSheet();
+        xlPaintLayoutState();
+    }
+    function xlSetHidden(source, label, hide) {
+        const info = xlInfo[source];
+        if (!info) return;
+        const layout = xlLayout(source);
+        const hidden = new Set(layout.hidden || []);
+        if (hide) {
+            // Always keep at least one column on screen.
+            if (info.all.length - hidden.size <= 1) return;
+            hidden.add(label);
+        } else {
+            hidden.delete(label);
+        }
+        layout.hidden = Array.from(hidden);
+        xlAfterLayoutChange();
+    }
+    function xlMove(source, label, direction) {
+        const info = xlInfo[source];
+        if (!info) return;
+        const layout = xlLayout(source);
+        const hidden = new Set(layout.hidden || []);
+        const ordered = xlOrdered(source, info.all);
+        const from = ordered.indexOf(label);
+        if (from < 0) return;
+        let to = from + direction;
+        // Swap with the next column that is actually on screen so the move is visible.
+        while (to >= 0 && to < ordered.length && !hidden.has(label) && hidden.has(ordered[to])) to += direction;
+        if (to < 0 || to >= ordered.length) return;
+        ordered[from] = ordered[to];
+        ordered[to] = label;
+        layout.order = ordered;
+        xlAfterLayoutChange();
+    }
+    function xlSaveLayout() {
+        xlSaved = xlNorm(xlDraft);
+        xlDraft = xlCopy(xlSaved);
+        try {
+            localStorage.setItem(XL_LAYOUT_KEY, JSON.stringify(xlSaved));
+            xlFlash = 'Layout saved';
+        } catch (e) {
+            xlFlash = 'Could not save in this browser';
+        }
+        xlPaintLayoutState();
+    }
+    function xlResetLayout() {
+        delete xlDraft[sheetSource];
+        xlAfterLayoutChange();
+    }
+    function xlToggleColsPop(force) {
+        const pop = $('xl-cols-pop');
+        const btn = $('xl-cols-btn');
+        if (!pop) return;
+        const open = typeof force === 'boolean' ? force : pop.classList.contains('hidden');
+        pop.classList.toggle('hidden', !open);
+        if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) xlRenderColsPop();
+    }
+    function xlRenderColsPop() {
+        const pop = $('xl-cols-pop');
+        const list = $('xl-cols-list');
+        if (!pop || !list || pop.classList.contains('hidden')) return;
+        const info = xlInfo[sheetSource];
+        if (!info) { list.innerHTML = ''; return; }
+        const title = $('xl-cols-title');
+        if (title) title.textContent = `Columns · ${sheetSource === 'reserved' ? 'Reserved Order File' : sheetSource === 'merged' ? 'Merged sheet' : 'E-Sales'}`;
+        const hidden = new Set(xlLayout(sheetSource).hidden || []);
+        const ordered = xlOrdered(sheetSource, info.all);
+        const shownCount = ordered.filter((label) => !hidden.has(label)).length;
+        const q = (($('xl-cols-q') && $('xl-cols-q').value) || '').trim().toLowerCase();
+        const scroll = list.scrollTop;
+        list.innerHTML = ordered.map((label, index) => {
+            const name = String(info.name(label) || label);
+            if (q && !`${name} ${label}`.toLowerCase().includes(q)) return '';
+            const isHidden = hidden.has(label);
+            const letter = /^[A-Z]{1,3}$/.test(label) && sheetSource !== 'merged' ? `<small>col ${esc(label)}</small>` : '';
+            return `<li class="${isHidden ? 'is-hidden' : ''}" data-label="${esc(label)}">
+                <label><input type="checkbox" data-xl-toggle${isHidden ? '' : ' checked'}${!isHidden && shownCount <= 1 ? ' disabled' : ''}><span>${esc(name)}</span>${letter}</label>
+                <button type="button" data-xl-move="-1" aria-label="Move ${esc(name)} left"${index === 0 ? ' disabled' : ''}>&#8593;</button>
+                <button type="button" data-xl-move="1" aria-label="Move ${esc(name)} right"${index === ordered.length - 1 ? ' disabled' : ''}>&#8595;</button>
+            </li>`;
+        }).join('') || '<li class="xl-cols-none">No column matches.</li>';
+        list.scrollTop = scroll;
+    }
+    function xlCloseCtx() {
+        const ctx = $('xl-ctx');
+        if (ctx) ctx.classList.add('hidden');
+    }
+    function xlOpenCtx(event, source, label) {
+        const ctx = $('xl-ctx');
+        if (!ctx) return;
+        const info = xlInfo[source];
+        const name = info ? String(info.name(label) || label) : label;
+        ctx.dataset.source = source;
+        ctx.dataset.label = label;
+        const title = ctx.querySelector('.xl-ctx-title');
+        if (title) title.textContent = name;
+        ctx.classList.remove('hidden');
+        const width = ctx.offsetWidth || 190;
+        const height = ctx.offsetHeight || 150;
+        ctx.style.left = Math.max(4, Math.min(event.clientX, window.innerWidth - width - 8)) + 'px';
+        ctx.style.top = Math.max(4, Math.min(event.clientY, window.innerHeight - height - 8)) + 'px';
     }
     function renderSheet() {
         const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
@@ -1474,6 +1644,67 @@
         showNoVinRows = !showNoVinRows;
         renderSheet();
     });
+    // Layout controls: Columns popover, Save / Reset, right-click menu on column headers.
+    if ($('xl-cols-btn')) $('xl-cols-btn').addEventListener('click', (event) => { event.stopPropagation(); xlToggleColsPop(); });
+    if ($('xl-cols-close')) $('xl-cols-close').addEventListener('click', () => xlToggleColsPop(false));
+    if ($('xl-cols-q')) $('xl-cols-q').addEventListener('input', xlRenderColsPop);
+    if ($('xl-cols-showall')) $('xl-cols-showall').addEventListener('click', () => {
+        xlLayout(sheetSource).hidden = [];
+        xlAfterLayoutChange();
+    });
+    if ($('xl-save-layout')) $('xl-save-layout').addEventListener('click', xlSaveLayout);
+    if ($('xl-reset-layout')) $('xl-reset-layout').addEventListener('click', xlResetLayout);
+    if ($('xl-cols-list')) {
+        $('xl-cols-list').addEventListener('change', (event) => {
+            const box = event.target.closest('[data-xl-toggle]');
+            const row = event.target.closest('li[data-label]');
+            if (box && row) xlSetHidden(sheetSource, row.dataset.label, !box.checked);
+        });
+        $('xl-cols-list').addEventListener('click', (event) => {
+            const move = event.target.closest('[data-xl-move]');
+            const row = event.target.closest('li[data-label]');
+            if (move && row && !move.disabled) xlMove(sheetSource, row.dataset.label, Number(move.dataset.xlMove));
+        });
+    }
+    if ($('xl-cols-pop')) $('xl-cols-pop').addEventListener('click', (event) => event.stopPropagation());
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('#xl-ctx')) xlCloseCtx();
+        const pop = $('xl-cols-pop');
+        if (pop && !pop.classList.contains('hidden') && !event.target.closest('#xl-cols-pop, #xl-cols-btn')) xlToggleColsPop(false);
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        xlCloseCtx();
+        xlToggleColsPop(false);
+    });
+    window.addEventListener('scroll', xlCloseCtx, true);
+    ['live-sheet-esales', 'live-sheet-reserved', 'live-sheet-merged'].forEach((id) => {
+        const box = $(id);
+        if (!box) return;
+        box.addEventListener('contextmenu', (event) => {
+            const th = event.target.closest('.xl-grid thead th[data-label]');
+            if (!th) return;
+            event.preventDefault();
+            xlOpenCtx(event, box.dataset.source, th.dataset.label);
+        });
+    });
+    if ($('xl-ctx')) $('xl-ctx').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-act]');
+        const ctx = $('xl-ctx');
+        if (!button || !ctx) return;
+        const source = ctx.dataset.source;
+        const label = ctx.dataset.label;
+        xlCloseCtx();
+        if (button.dataset.act === 'hide') xlSetHidden(source, label, true);
+        else if (button.dataset.act === 'left') xlMove(source, label, -1);
+        else if (button.dataset.act === 'right') xlMove(source, label, 1);
+        else if (button.dataset.act === 'showall') { xlLayout(source).hidden = []; xlAfterLayoutChange(); }
+    });
+    window.addEventListener('beforeunload', (event) => {
+        if (!xlDirty()) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
     const xlZoomInput = $('xl-zoom');
     if (xlZoomInput) xlZoomInput.addEventListener('input', () => {
         xlZoom = Number(xlZoomInput.value) || 100;
@@ -1481,6 +1712,142 @@
         if (label) label.textContent = `${xlZoom}%`;
         document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = String(xlZoom / 100); });
     });
+    // ---- Notify employees who have not updated their reserved orders on reserved-orders.html ----
+    const PENDING_LOG_KEY = 'ro-pending-notified-v1';
+    function advisorKey(value) {
+        return String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+    function isPendingUpdate(order) {
+        if (!isRealVin(order)) return false;
+        const status = String(order.status || '').trim();
+        if (status === 'تم الفوترة' || status === 'الغاء') return false;
+        // "Not updated" = nobody has ever changed the status of this order from the employee page or admin.
+        return !String(order.statusChangedAt || '').trim() && !String(order.statusChangedBy || '').trim();
+    }
+    function pendingGroups(expiredOnly) {
+        const people = new Map();
+        staff.filter((person) => person.active !== false && person.name && person.recordId)
+            .forEach((person) => people.set(advisorKey(person.name), person));
+        const groups = new Map();
+        orders.filter(isPendingUpdate).forEach((order) => {
+            const advisor = String(order.salesAdvisor || '').trim();
+            const key = advisorKey(advisor);
+            if (!key || key === 'unassigned') return;
+            const expired = remain(order) === 'EXPIRED';
+            if (expiredOnly && !expired) return;
+            if (!groups.has(key)) {
+                const person = people.get(key) || null;
+                groups.set(key, { key, name: person ? person.name : advisor, recordId: person ? person.recordId : '', orders: [], expired: 0 });
+            }
+            const group = groups.get(key);
+            group.orders.push(order);
+            if (expired) group.expired += 1;
+        });
+        return Array.from(groups.values()).sort((a, b) => (b.recordId ? 1 : 0) - (a.recordId ? 1 : 0) || b.orders.length - a.orders.length || a.name.localeCompare(b.name));
+    }
+    function pendingLog() {
+        try { return JSON.parse(localStorage.getItem(PENDING_LOG_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function ago(ms) {
+        const minutes = Math.round(ms / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return `${minutes} min ago`;
+        const hours = Math.round(minutes / 60);
+        return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
+    }
+    function pendingMessage(group, intro) {
+        const nums = group.orders.map((order) => order.orderNumber && order.orderNumber !== 'NO ORDER' ? order.orderNumber : '').filter(Boolean);
+        const shown = nums.slice(0, 8).join(', ');
+        const more = nums.length > 8 ? ` and ${nums.length - 8} more` : '';
+        const count = group.orders.length;
+        return `${intro.trim()} You have ${count} reserved order${count === 1 ? '' : 's'} with no status update${group.expired ? ` (${group.expired} expired)` : ''}${shown ? `: ${shown}${more}` : ''}.`;
+    }
+    function paintPendingModal() {
+        const list = $('pending-list');
+        if (!list) return;
+        const groups = pendingGroups($('pending-expired-only') && $('pending-expired-only').checked);
+        const log = pendingLog();
+        const reachable = groups.filter((group) => group.recordId);
+        const help = $('pending-help');
+        if (help) {
+            help.textContent = groups.length
+                ? `${groups.reduce((sum, group) => sum + group.orders.length, 0)} order(s) across ${groups.length} advisor(s) have never had a status update. ${reachable.length} can be notified.`
+                : 'Every assigned order already has a status update. Nobody needs a reminder.';
+        }
+        list.innerHTML = groups.map((group) => {
+            const last = group.recordId && log[group.recordId] ? `<small>Last notified ${esc(ago(Date.now() - log[group.recordId]))}</small>` : '';
+            return `<label class="pn-row${group.recordId ? '' : ' is-locked'}" data-record="${esc(group.recordId)}" data-key="${esc(group.key)}">
+                <input type="checkbox" class="pn-check"${group.recordId ? ' checked' : ' disabled'}>
+                <span class="pn-name"><b dir="auto">${esc(group.name)}</b>${group.recordId ? '' : '<small>No login account in Employees, cannot be notified</small>'}${last}</span>
+                <span class="pn-count"><b>${group.orders.length}</b> pending${group.expired ? ` · <em>${group.expired} expired</em>` : ''}</span>
+            </label>`;
+        }).join('');
+        const send = $('pending-send');
+        if (send) send.disabled = !reachable.length;
+        const error = $('pending-error');
+        if (error) error.textContent = '';
+    }
+    function openPendingModal() {
+        const modal = $('pending-modal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        paintPendingModal();
+    }
+    function closePendingModal() {
+        const modal = $('pending-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+    async function sendPendingNotices() {
+        const send = $('pending-send');
+        const error = $('pending-error');
+        const intro = ($('pending-intro') && $('pending-intro').value.trim()) || 'Please update the status of your reserved orders on the Reserved Orders page.';
+        const groups = pendingGroups($('pending-expired-only') && $('pending-expired-only').checked);
+        const chosen = Array.from(document.querySelectorAll('#pending-list .pn-row')).filter((row) => {
+            const box = row.querySelector('.pn-check');
+            return box && box.checked && !box.disabled;
+        }).map((row) => groups.find((group) => group.key === row.dataset.key)).filter(Boolean);
+        if (!chosen.length) { if (error) error.textContent = 'Choose at least one employee.'; return; }
+        if (send) { send.disabled = true; send.textContent = 'Sending…'; }
+        const log = pendingLog();
+        const failed = [];
+        let sent = 0;
+        for (const group of chosen) {
+            try {
+                await api('/api/reserved-orders/notifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Update your reserved orders', message: pendingMessage(group, intro), recordIds: [group.recordId] })
+                });
+                log[group.recordId] = Date.now();
+                sent += 1;
+            } catch (e) {
+                if (e.message === 'unauthorized') return;
+                failed.push(group.name);
+            }
+        }
+        try { localStorage.setItem(PENDING_LOG_KEY, JSON.stringify(log)); } catch (e) { /* ignore */ }
+        if (send) { send.textContent = 'Notify selected'; }
+        paintPendingModal();
+        if (error) {
+            error.classList.toggle('ok', !failed.length);
+            error.textContent = failed.length
+                ? `Sent to ${sent}. Could not notify: ${failed.join(', ')}.`
+                : `Notified ${sent} employee${sent === 1 ? '' : 's'}. They see it on their Reserved Orders page and as a laptop alert if enabled.`;
+        }
+    }
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-notify-pending]')) { openPendingModal(); return; }
+        const modal = $('pending-modal');
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (event.target === modal || event.target.closest('#pending-close')) closePendingModal();
+        else if (event.target.closest('#pending-all')) {
+            document.querySelectorAll('#pending-list .pn-check:not(:disabled)').forEach((box) => { box.checked = true; });
+        } else if (event.target.closest('#pending-none')) {
+            document.querySelectorAll('#pending-list .pn-check').forEach((box) => { box.checked = false; });
+        } else if (event.target.closest('#pending-send')) sendPendingNotices();
+    });
+    if ($('pending-expired-only')) $('pending-expired-only').addEventListener('change', paintPendingModal);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closePendingModal(); });
     async function adminSetStatus(key, status, selectEl) {
         if (!key || !status) return;
         try {
