@@ -40,3 +40,11 @@
 .note-panel textarea:focus { outline: 2px solid #eb0a1e; outline-offset: 1px; }
 .note-panel .err { min-height: 18px; margin-top: 6px; color: #ff8a8a; font-weight: 600; font-size: 13px; }
 .note-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+/* Banner that asks every user to allow computer pop-up alerts */
+#app .alerts-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 12px; padding: 11px 16px; border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.12); color: #fde68a; font-size: 13.5px; line-height: 1.4; }
+#app .alerts-banner[hidden] { display: none !important; }
+#app .alerts-banner b { color: #fff; }
+#app .alerts-banner[data-state="blocked"] { border-color: rgba(251, 113, 133, 0.5); background: rgba(251, 113, 133, 0.12); color: #fecdd3; }
+#app .alerts-banner button { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 560px) { #app .alerts-banner { flex-direction: column; align-items: stretch; } }

@@ -1,6 +1,7 @@
 (function () {
     // Employees choose one of only three statuses, and write a note with it.
     const STATUSES = ['Payment', 'In progress', 'Cancelled'];
+    const NOT_UPDATED = '__none__'; // filter value for orders that have no status yet
     const CARS = [
         ['Camry', 'images/cars/camry.png'], ['Corolla', 'images/cars/corolla.png'], ['Crown', 'images/cars/crown.png'],
         ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux double cab.png'],
@@ -170,6 +171,7 @@
         }
         const next = Array.isArray(data.orders) ? data.orders : [];
         orders = next;
+        try { notifyMyNewOrders(); } catch (e) { console.error('New-order alert failed:', e); }
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
@@ -185,15 +187,15 @@
         const product = $('filter-product');
         const area = $('filter-area');
         const keep = [status.value, advisor.value, queue.value, product.value, area.value];
-        status.innerHTML = '<option value="">All statuses</option>' + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
-        const advisors = Array.from(new Set(orders.map((order) => order.salesAdvisor).filter((name) => name && name !== 'UNASSIGNED'))).sort();
-        const unassigned = orders.some((order) => order.salesAdvisor === 'UNASSIGNED') ? '<option value="UNASSIGNED">UNASSIGNED</option>' : '';
-        advisor.innerHTML = '<option value="">All advisors</option>' + advisors.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + unassigned;
-        const queues = Array.from(new Set(orders.map((order) => order.queueNumber).filter((n) => n != null))).sort((a, b) => a - b);
-        queue.innerHTML = '<option value="">All queues</option>' + queues.map((n) => `<option value="${n}">${queueLabel(n)}</option>`).join('');
-        const products = Array.from(new Set(orders.map((order) => order.vehicle).filter((name) => name && name !== '—'))).sort();
-        product.innerHTML = '<option value="">All cars</option>' + products.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
-        const areas = Array.from(new Set(orders.map((order) => order.searchArea).filter((name) => name && name !== '—'))).sort();
+        status.innerHTML = '<option value="">All statuses</option>' + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + `<option value="${NOT_UPDATED}">Not updated</option>`;
+        // Filters list exactly what the sheet columns show (salesman = column A, product = column E, area = RTL column N).
+        const rows = dataOrders().map((order) => sheetValues(order));
+        const distinct = (key) => Array.from(new Set(rows.map((row) => row[key]).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b)));
+        advisor.innerHTML = '<option value="">All salesmen</option>' + distinct('Salesman name').map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+        const queues = Array.from(new Set(dataOrders().map((order) => order.boQueuePosition).filter((n) => n != null))).sort((a, b) => a - b);
+        queue.innerHTML = '<option value="">All queues</option>' + queues.map((n) => `<option value="${n}">#${n}</option>`).join('');
+        product.innerHTML = '<option value="">All cars</option>' + distinct('Product').map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+        const areas = distinct('Area');
         area.innerHTML = '<option value="">All areas</option>' + areas.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
         restoreSelect(status, keep[0]);
         restoreSelect(advisor, keep[1]);
@@ -204,71 +206,58 @@
     function visibleOrders() {
         const q = $('search').value.trim().toLowerCase();
         const status = chosen('filter-status');
-        const payment = chosen('filter-payment');
         const product = chosen('filter-product');
         const area = chosen('filter-area');
         const advisor = chosen('filter-advisor');
         const queue = chosen('filter-queue');
-        const state = chosen('filter-state');
         const sort = $('sort').value;
         const list = dataOrders().filter((order) => {
-            if (q && ![order.vin, order.orderNumber, order.customerName, order.salesAdvisor].join(' ').toLowerCase().includes(q)) return false;
-            if (status && order.status !== status) return false;
-            if (payment && order.paymentKind !== payment) return false;
-            if (product && order.vehicle !== product) return false;
-            if (area && order.searchArea !== area) return false;
-            if (advisor && order.salesAdvisor !== advisor) return false;
-            if (queue && String(order.queueNumber) !== queue) return false;
-            if (state === 'expired' && !isExpired(order)) return false;
-            if (state === 'active' && !isActive(order)) return false;
-            if (state === 'soon' && !isSoon(order)) return false;
-            if (state === 'nodate' && !hasNoAssign(order)) return false;
+            const row = sheetValues(order);
+            if (q && ![row.VIN, row['Order number'], row['Customer name'], row['Salesman name'], row.Product, order.statusNote].join(' ').toLowerCase().includes(q)) return false;
+            if (status === NOT_UPDATED) { if (statusKey(order.status)) return false; }
+            else if (status && statusKey(order.status) !== status) return false;
+            if (product && row.Product !== product) return false;
+            if (area && row.Area !== area) return false;
+            if (advisor && row['Salesman name'] !== advisor) return false;
+            if (queue && String(order.boQueuePosition) !== queue) return false;
             return true;
         });
+        const pos = (order) => (order.boQueuePosition == null ? 9e9 : Number(order.boQueuePosition));
         list.sort((a, b) => {
-            if (sort === 'queue-desc') return (b.queueNumber || 0) - (a.queueNumber || 0);
-            if (sort === 'assign-asc') return String(a.assignDate).localeCompare(String(b.assignDate));
-            if (sort === 'assign-desc') return String(b.assignDate).localeCompare(String(a.assignDate));
+            if (sort === 'queue-desc') return (b.boQueuePosition == null ? -1 : Number(b.boQueuePosition)) - (a.boQueuePosition == null ? -1 : Number(a.boQueuePosition));
             if (sort === 'remaining') return (remainingMs(a) ?? 9e15) - (remainingMs(b) ?? 9e15);
-            return (a.queueNumber || 0) - (b.queueNumber || 0);
+            return pos(a) - pos(b) || (a.queueNumber || 0) - (b.queueNumber || 0);
         });
         return list;
     }
     function activeKpi() {
-        const extras = $('search').value.trim() || chosen('filter-payment') || chosen('filter-product') || chosen('filter-area') || chosen('filter-advisor') || chosen('filter-queue');
+        const extras = $('search').value.trim() || chosen('filter-product') || chosen('filter-area') || chosen('filter-advisor') || chosen('filter-queue');
         if (extras) return '';
         const status = chosen('filter-status');
-        const state = chosen('filter-state');
-        if (!status && !state) return 'total';
-        if (!status && state === 'active') return 'active';
-        if (!status && state === 'expired') return 'expired';
-        if (!status && state === 'soon') return 'soon';
-        if (status === 'تم الفوترة' && !state) return 'completed';
-        return '';
+        if (!status) return 'total';
+        return status;
     }
     function clearFilters() {
-        ['search', 'filter-status', 'filter-payment', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'filter-state'].forEach((id) => { $(id).value = ''; });
+        ['search', 'filter-status', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue'].forEach((id) => { $(id).value = ''; });
         $('sort').value = 'queue-asc';
     }
     function applyKpi(kind) {
         clearFilters();
-        if (kind === 'active') $('filter-state').value = 'active';
-        if (kind === 'expired') $('filter-state').value = 'expired';
-        if (kind === 'completed') $('filter-status').value = 'تم الفوترة';
-        if (kind === 'soon') $('filter-state').value = 'soon';
+        if (kind === 'total') { render(); return; }
+        $('filter-status').value = kind;
         render();
     }
     function render() {
         const list = visibleOrders();
         const source = dataOrders();
-        const soon = source.filter(isSoon).length;
         const activeKey = activeKpi();
+        const countOf = (key) => source.filter((order) => (key === NOT_UPDATED ? !statusKey(order.status) : statusKey(order.status) === key)).length;
         $('kpis').innerHTML = [
-            ['total', 'Total Reserved', source.length, ''],
-            ['active', 'Active Orders', source.filter(isActive).length, 'ok'],
-            ['expired', 'Expired', source.filter(isExpired).length, 'bad'],
-            ['completed', 'Completed / Invoiced', source.filter(isCompleted).length, 'info'],
-            ['soon', 'Approaching Deadline', soon, 'warn']
+            ['total', 'All reserved', source.length, ''],
+            ['Payment', 'Payment', countOf('Payment'), 'ok'],
+            ['In progress', 'In progress', countOf('In progress'), 'warn'],
+            ['Cancelled', 'Cancelled', countOf('Cancelled'), 'bad'],
+            [NOT_UPDATED, 'Not updated', countOf(NOT_UPDATED), 'info']
         ].map(([key, label, value, cls]) => `<button type="button" class="kpi ${cls}${activeKey === key ? ' on' : ''}" data-kpi="${key}"><em>${label}</em><strong>${value}</strong></button>`).join('');
         paintViewMode();
         if (viewMode() === 'sheet') {
@@ -521,11 +510,27 @@
         const session = readSession();
         if (!session || !order) return false;
         if (isOrder5Editor(session) && orderNumberStartsWith5(order)) return true;
-        // Reserved Order File rows: the salesman is column A of that file.
-        const advisor = personKey(isReservedFileOrder(order) ? order.salesAdvisor : (columnText(order, 'T') || order.salesAdvisor));
+        // The row belongs to the "Salesman name" shown in the sheet (column A of the Reserved Order File).
+        const pools = [order.reservedFields, order.fromReservedFile ? order.fields : null];
+        let columnA = '';
+        pools.forEach((pool) => {
+            if (columnA) return;
+            const hit = (Array.isArray(pool) ? pool : []).find((field) => String(field.col || '').trim().toUpperCase() === 'A');
+            columnA = hit ? realText(hit.value) : '';
+        });
+        const fallback = isReservedFileOrder(order) ? order.salesAdvisor : (columnText(order, 'T') || order.salesAdvisor);
+        const advisor = personKey(columnA && !/^(unassigned|salesman name)$/i.test(columnA) ? columnA : fallback);
         if (!advisor || advisor === 'unassigned') return false;
-        if (personKey(session.name) === advisor) return true;
+        if (samePerson(session.name, advisor)) return true;
         return personKey(session.employeeNumber) === advisor;
+    }
+    // Same name ignoring case, dots, extra spaces and word order (the server uses the same rule).
+    function samePerson(a, b) {
+        const x = personKey(a);
+        const y = personKey(b);
+        if (!x || !y) return false;
+        if (x === y) return true;
+        return x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ');
     }
     // ---- Small order tiles: car + employee. Click opens the full card (same markup, same status select). ----
     let openOrderKey = '';
@@ -560,11 +565,10 @@
         const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
         const img = carImage(info.product, order.vehicle, productName(order));
         const carName = info.product || cleanVehicleName(order.vehicle) || 'Car not named';
-        const status = order.status || 'محجوز';
         const timeText = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
         const tone = ms == null ? '' : timerClass(ms);
         return `<button type="button" class="rc-tile${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}" data-tile-key="${esc(order.key)}" aria-label="Open details for ${esc(carName)}">
-            <span class="rc-top"><span class="rc-q">${queueLabel(order.queueNumber)}</span><span class="badge ${badge(order.status)}" dir="auto">${esc(status)}</span></span>
+            <span class="rc-top"><span class="rc-q" title="Back Order queue position">${order.boQueuePosition == null ? '—' : '#' + esc(String(order.boQueuePosition))}</span>${sheetStatusPill(order)}</span>
             <span class="rc-car">
                 <span class="rc-thumb">${img ? `<img src="${img}" alt="${esc(carName)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rc-fallback" hidden>${CAR_ICON}</span>` : `<span class="rc-fallback">${CAR_ICON}</span>`}</span>
                 <span class="rc-name"><b dir="auto" title="${esc(carName)}">${esc(carName)}</b>${info.sfx ? `<small dir="auto">${esc(info.sfx)}</small>` : ''}</span>
@@ -777,7 +781,7 @@
         const panel = modal.querySelector('.overlay-panel');
         const scroll = panel ? panel.scrollTop : 0;
         const wasExpanded = Boolean(body.querySelector('.excel-row:not(.hidden)'));
-        body.innerHTML = cardHtml(order);
+        body.innerHTML = detailHtml(order);
         if (wasExpanded) {
             const row = body.querySelector('.excel-row');
             const toggle = body.querySelector('.bo-toggle');
@@ -796,6 +800,53 @@
     function closeOrderModal() {
         openOrderKey = '';
         paintOrderModal();
+    }
+    // Order details dialog: the same information as the sheet columns, nothing else.
+    function detailHtml(order) {
+        const values = sheetValues(order);
+        const mine = canUpdateOrder(order);
+        const key = statusKey(order.status);
+        const carName = values.Product || 'Car not named';
+        const img = carImage(values.Product, order.vehicle, productName(order));
+        const pos = order.boQueuePosition;
+        const queue = pos == null ? '—' : '#' + pos + (order.boQueueSize != null ? ' / ' + order.boQueueSize : '');
+        const who = order.statusNoteBy || order.statusChangedBy || '';
+        const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusNoteDisplay || order.statusChangedDisplay || '');
+        const note = String(order.statusNote || '').trim();
+        const item = (label, value) => `<div class="rd-item"><span>${esc(label)}</span><b dir="auto">${isBlankValue(value) ? '—' : esc(value)}</b></div>`;
+        const grid = [
+            item('Queue position', queue),
+            item('Salesman name', values['Salesman name']),
+            item('Customer name', values['Customer name']),
+            item('Order number', values['Order number']),
+            item('Model year', values['Model year']),
+            item('Product', values.Product),
+            item('ALJ suffix', values['ALJ suffix']),
+            item('Exterior color', values['Exterior color']),
+            item('Interior color', values['Interior color']),
+            item('VIN', values.VIN),
+            item('Expiry date', values['Expiry date']),
+            item('RTL status', values['RTL status']),
+            item('Allocation age', values['Allocation age']),
+            item('Area', values.Area),
+            item('Share level', values['Share level'])
+        ].join('');
+        const statusBox = mine
+            ? `<select class="rd-status-select" data-key="${esc(order.key)}" aria-label="Choose the status of your order">${statusOptionsHtml(order.status)}</select>${key ? `<button type="button" class="rd-note-edit" data-key="${esc(order.key)}">Edit note</button>` : ''}`
+            : `${sheetStatusPill(order)}<small class="rd-lock">Only ${esc(values['Salesman name'] || 'the assigned salesman')} can update this order</small>`;
+        return `<article class="rd${isCancelled(order) || key === 'Cancelled' ? ' cancelled' : ''}">
+            <header class="rd-head">
+                <div class="rd-thumb">${img ? `<img src="${img}" alt="${esc(carName)}" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rd-fallback" hidden>${CAR_ICON}</span>` : `<span class="rd-fallback">${CAR_ICON}</span>`}</div>
+                <div class="rd-title"><h3 dir="auto">${esc(carName)}${values['ALJ suffix'] ? ` <small>${esc(values['ALJ suffix'])}</small>` : ''}</h3><span dir="auto">${esc(values['Customer name'] || '')}</span></div>
+            </header>
+            <div class="rd-grid">${grid}</div>
+            <section class="rd-status">
+                <h4>Order status</h4>
+                <div class="rd-status-row">${statusBox}</div>
+                <p class="rd-note" dir="auto">${note ? esc(note) : '<span class="muted">No note yet.</span>'}</p>
+                ${key && (who || when) ? `<small class="rd-updated">Updated by <b>${esc(who || '—')}</b>${when ? ` · ${esc(when)}` : ''}</small>` : ''}
+            </section>
+        </article>`;
     }
     function cardHtml(order) {
         const deadline = columnDeadline(order);
@@ -1450,7 +1501,7 @@
         if (!card) return;
         requestStatus(card.dataset.key, select.value, select);
     });
-    ['search', 'filter-status', 'filter-payment', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'filter-state', 'sort'].forEach((id) => {
+    ['search', 'filter-status', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'sort'].forEach((id) => {
         $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
         $(id).addEventListener('change', render);
     });
@@ -1525,7 +1576,17 @@
     if ($('view-sheet')) $('view-sheet').addEventListener('click', () => setViewMode('sheet'));
     if ($('view-cards')) $('view-cards').addEventListener('click', () => setViewMode('cards'));
     if ($('order-modal')) {
+        $('order-modal').addEventListener('change', (event) => {
+            const select = event.target.closest('.rd-status-select');
+            if (select) requestStatus(select.dataset.key, select.value, select);
+        });
         $('order-modal').addEventListener('click', (event) => {
+            const edit = event.target.closest('.rd-note-edit');
+            if (edit) {
+                const target = orders.find((item) => item.key === edit.dataset.key);
+                if (target && statusKey(target.status)) requestStatus(target.key, target.status, null);
+                return;
+            }
             if (event.target === $('order-modal') || event.target.closest('.rc-close')) { closeOrderModal(); return; }
             toggleBoDetails(event);
         });
@@ -1709,7 +1770,7 @@
     function desktopSupported() { return typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext !== false; }
     // Fallback for everyone else (blocked, not asked yet, old browser, plain-http address): the same alert as a card
     // inside this page, so every user still gets the alert while the page is open.
-    function showPageToast(title, body) {
+    function showPageToast(title, body, view) {
         let box = document.getElementById('ro-toasts');
         if (!box) {
             box = document.createElement('div');
@@ -1728,7 +1789,7 @@
         card.appendChild(strong);
         card.appendChild(text);
         const close = () => { card.remove(); };
-        card.addEventListener('click', () => { try { showView('inbox'); } catch (e) { /* view may not be ready */ } close(); });
+        card.addEventListener('click', () => { try { showView(view || 'inbox'); } catch (e) { /* view may not be ready */ } close(); });
         box.appendChild(card);
         while (box.children.length > 4) box.firstChild.remove();
         setTimeout(close, 12000);
@@ -1741,6 +1802,7 @@
         try { localStorage.setItem(notifiedStoreKey(session), JSON.stringify(list.slice(-NOTIFIED_CAP))); } catch (e) { /* storage full or blocked */ }
     }
     function paintDesktopButton() {
+        paintAlertsBanner();
         const button = $('notif-toggle');
         if (!button) return;
         button.hidden = false; // always shown, so every user can switch alerts on
@@ -1765,16 +1827,17 @@
             button.title = 'Get a pop-up on this laptop when admin sends you a message.';
         }
     }
-    function showDesktopNotification(title, body, tag) {
-        if (!desktopSupported() || Notification.permission !== 'granted') { showPageToast(title, body); return; }
+    function showDesktopNotification(title, body, tag, view) {
+        if (!desktopSupported() || Notification.permission !== 'granted') { showPageToast(title, body, view); return; }
         try {
-            const note = new Notification(title, { body, tag, renotify: false, icon: 'images/logo/toyota.png', dir: 'auto' });
+            // requireInteraction keeps the pop-up on screen until the person clicks or closes it.
+            const note = new Notification(title, { body, tag, renotify: false, requireInteraction: true, icon: 'images/logo/toyota.png', dir: 'auto' });
             note.onclick = () => {
                 window.focus();
-                try { showView('inbox'); } catch (e) { /* view may not be ready */ }
+                try { showView(view || 'inbox'); } catch (e) { /* view may not be ready */ }
                 note.close();
             };
-        } catch (e) { showPageToast(title, body); /* some browsers only allow notifications from a service worker */ }
+        } catch (e) { showPageToast(title, body, view); /* some browsers only allow notifications from a service worker */ }
     }
     // First run for a person only records what already exists (no flood of old items); later runs pop up the new ones.
     function pushDesktopAlerts(session, candidates) {
@@ -1832,18 +1895,81 @@
         showDesktopNotification('Test notification', 'This is how admin messages will appear on this laptop.', 'ro-test');
         paintDesktopButton();
     }
-    // Right after sign-in (a click, so browsers allow it) ask once per person; they can always change it with the button.
+    // Every user is asked to allow computer pop-ups: right after sign-in (a click, so browsers allow it), again on the
+    // first click of every later visit while it is still undecided, and a banner at the top stays until they decide.
+    let askedThisVisit = false;
+    function afterPermissionChoice() {
+        paintDesktopButton();
+        if (desktopSupported() && Notification.permission === 'granted') {
+            showDesktopNotification('Computer pop-ups are on', 'You will get a pop-up here for admin messages and new orders assigned to you.', 'ro-test');
+        }
+    }
     function askDesktopAlertsOnce(session) {
-        if (!desktopSupported() || Notification.permission !== 'default' || !session) return;
-        const key = 'ro-desktop-asked-v1-' + (session.recordId || session.employeeNumber || 'x');
-        try {
-            if (localStorage.getItem(key)) return;
-            localStorage.setItem(key, '1');
-        } catch (e) { /* storage blocked: ask anyway */ }
+        if (!desktopSupported() || Notification.permission !== 'default' || !session || askedThisVisit) return;
+        askedThisVisit = true;
         try {
             const pending = Notification.requestPermission();
-            if (pending && typeof pending.then === 'function') pending.then(paintDesktopButton, paintDesktopButton);
-        } catch (e) { /* ignore */ }
+            if (pending && typeof pending.then === 'function') pending.then(afterPermissionChoice, afterPermissionChoice);
+            else afterPermissionChoice();
+        } catch (e) { askedThisVisit = false; }
+    }
+    document.addEventListener('click', () => {
+        if (readSession() && !$('app').classList.contains('hidden')) askDesktopAlertsOnce(readSession());
+    }, true);
+    function paintAlertsBanner() {
+        const box = $('alerts-banner');
+        if (!box) return;
+        const session = readSession();
+        let state = 'hidden';
+        if (session && desktopSupported()) {
+            if (Notification.permission === 'default') state = 'ask';
+            else if (Notification.permission === 'denied') {
+                let dismissed = false;
+                try { dismissed = sessionStorage.getItem('ro-alerts-blocked-dismissed') === '1'; } catch (e) { /* ignore */ }
+                if (!dismissed) state = 'blocked';
+            }
+        }
+        box.hidden = state === 'hidden';
+        box.dataset.state = state;
+        if (state === 'ask') {
+            box.innerHTML = '<span><b>Turn on computer pop-up alerts.</b> You will get a pop-up on this computer when admin sends you a message or a new order is assigned to you.</span><button type="button" class="solid" data-alerts="enable">Turn on</button>';
+        } else if (state === 'blocked') {
+            box.innerHTML = '<span><b>Computer pop-ups are blocked for this site.</b> Click the lock icon in the address bar, set Notifications to Allow, then reload this page.</span><button type="button" class="ghost" data-alerts="dismiss">Dismiss</button>';
+        } else {
+            box.innerHTML = '';
+        }
+    }
+    if ($('alerts-banner')) $('alerts-banner').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-alerts]');
+        if (!button) return;
+        if (button.dataset.alerts === 'dismiss') {
+            try { sessionStorage.setItem('ro-alerts-blocked-dismissed', '1'); } catch (e) { /* ignore */ }
+            paintAlertsBanner();
+            return;
+        }
+        askedThisVisit = false;
+        askDesktopAlertsOnce(readSession());
+    });
+    // A new order in this person's name (after the first visit) gets its own pop-up.
+    function notifyMyNewOrders() {
+        const session = readSession();
+        const all = dataOrders();
+        if (!session || !all.length) return;
+        const mine = all.filter(canUpdateOrder);
+        const storeKey = 'ro-my-orders-v1-' + (session.recordId || session.employeeNumber || 'x');
+        let known = null;
+        try { known = JSON.parse(localStorage.getItem(storeKey) || 'null'); } catch (e) { known = null; }
+        try { localStorage.setItem(storeKey, JSON.stringify(mine.map((order) => order.key))); } catch (e) { /* storage blocked */ }
+        if (!Array.isArray(known)) return;          // first visit only records what already exists
+        const seen = new Set(known);
+        const fresh = mine.filter((order) => !seen.has(order.key));
+        if (!fresh.length) return;
+        const describe = (order) => {
+            const values = sheetValues(order);
+            return [values.Product, values['Order number'] ? 'order ' + values['Order number'] : '', values.VIN].filter(Boolean).join(' · ');
+        };
+        if (fresh.length > 3) showDesktopNotification(`${fresh.length} new reserved orders for you`, fresh.slice(0, 3).map(describe).join(' | ') + ' …', 'ro-new-batch', 'orders');
+        else fresh.forEach((order) => showDesktopNotification('New reserved order for you', describe(order), 'ro-new:' + order.key, 'orders'));
     }
     async function paintMyAlerts() {
         const session = readSession();
@@ -1909,6 +2035,8 @@
         loadLive();
         loadVehicles();
         paintMyAlerts();
+        paintDesktopButton();
+        askDesktopAlertsOnce(session);
         if (clock) clearInterval(clock);
         clock = setInterval(tickTimers, 1000);
     }
@@ -1935,7 +2063,7 @@
             if (lastMessagesStamp && stamp !== lastMessagesStamp) paintMyAlerts();
             lastMessagesStamp = stamp;
         } catch (e) { /* offline: try again next tick */ }
-    }, 30000);
+    }, 15000);
     if ($('notif-toggle')) $('notif-toggle').addEventListener('click', toggleDesktopAlerts);
     paintDesktopButton();
     loadNames();

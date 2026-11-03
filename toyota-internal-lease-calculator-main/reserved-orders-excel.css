@@ -460,3 +460,8 @@
 #pending-modal .err.ok { color: #6ee7b7; }
 #pending-modal .pn-actions { display: flex; justify-content: flex-end; gap: 8px; }
 #pending-modal .pn-actions .solid:disabled { opacity: 0.5; cursor: default; }
+
+/* Admin Live sheet: Note + Queue position columns (same look as the employee sheet) */
+#admin-app #panel-sheet .excel-live td.col-note { min-width: 240px; max-width: 360px; white-space: normal !important; line-height: 1.3; }
+#admin-app #panel-sheet .excel-live .xl-note-text { display: inline; }
+#admin-app #panel-sheet .excel-live .q-of { color: #6b6b6b; font-weight: 600; }

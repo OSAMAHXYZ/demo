@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,9 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
     <link rel="stylesheet" href="reserved-orders-skin.css?v=20261025audit1">
-    <link rel="stylesheet" href="reserved-orders-cards.css?v=20261103sc1">
+    <link rel="stylesheet" href="reserved-orders-cards.css?v=20261103nt1">
     <link rel="stylesheet" href="reserved-orders-excel.css?v=20261103xl3">
-    <link rel="stylesheet" href="reserved-orders-employee-sheet.css?v=20261103st1">
+    <link rel="stylesheet" href="reserved-orders-employee-sheet.css?v=20261103nt1">
 </head>
 <body>
     <section id="login" class="login-split">
@@ -73,6 +73,7 @@
         </header>
 
         <main class="tower">
+            <div id="alerts-banner" class="alerts-banner" role="status" hidden></div>
             <section class="mc-center" id="mc-center">
                 <header class="mc-head">
                     <p>Toyota · ALJ · Sales CRM</p>
@@ -107,28 +108,12 @@
                 <select id="filter-status" aria-label="Status"><option value="">All statuses</option></select>
                 <select id="filter-product" aria-label="Car"><option value="">All cars</option></select>
                 <select id="filter-area" aria-label="Area"><option value="">All areas</option></select>
-                <select id="filter-advisor" aria-label="Advisor"><option value="">All advisors</option></select>
-                <select id="filter-state" aria-label="Deadline">
-                    <option value="">All deadlines</option>
-                    <option value="active">Active</option>
-                    <option value="expired">Expired</option>
-                    <option value="soon">Approaching deadline</option>
-                    <option value="nodate">No assignment date</option>
-                </select>
-                <select id="filter-payment" aria-label="Payment">
-                    <option value="">All payments</option>
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank</option>
-                    <option value="other">Other</option>
-                    <option value="unknown">Unknown</option>
-                </select>
+                <select id="filter-advisor" aria-label="Salesman"><option value="">All salesmen</option></select>
                 <select id="filter-queue" aria-label="Queue number"><option value="">All queues</option></select>
-                <select id="sort" aria-label="Queue sorting">
+                <select id="sort" aria-label="Sorting">
                     <option value="queue-asc">Queue ascending</option>
                     <option value="queue-desc">Queue descending</option>
-                    <option value="assign-asc">Oldest assignment</option>
-                    <option value="assign-desc">Newest assignment</option>
-                    <option value="remaining">Remaining time</option>
+                    <option value="remaining">Expiry date (soonest)</option>
                 </select>
                 <button class="ghost" id="filter-clear" type="button">Clear</button>
                 <button class="solid" id="filter-refresh" type="button">Refresh</button>
@@ -258,5 +243,5 @@
         </div>
 
     </div>
-    <script src="reserved-orders-page.js?v=20261103st1"></script>
+    <script src="reserved-orders-page.js?v=20261103own1"></script>
 </body></html>

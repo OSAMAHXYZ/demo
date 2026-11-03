@@ -71,7 +71,19 @@
         return 'is-bad';
     }
     function isCancelledStatus(order) {
-        return String(order && order.status || '').trim() === 'الغاء';
+        const value = String(order && order.status || '').trim().toLowerCase();
+        return value === 'الغاء' || value === 'cancelled';
+    }
+    // The three statuses employees choose, plus any status the admin adds in Settings (the old built-in list is not offered).
+    const EMPLOYEE_STATUS_LIST = ['Payment', 'In progress', 'Cancelled'];
+    const OLD_STATUSES = new Set(['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'db', 'ابيان', 'ان اساين']);
+    function offeredStatuses() {
+        const added = STATUSES.filter((item) => !OLD_STATUSES.has(String(item).trim().toLowerCase()) && !EMPLOYEE_STATUS_LIST.some((s) => s.toLowerCase() === String(item).trim().toLowerCase()));
+        return EMPLOYEE_STATUS_LIST.concat(added);
+    }
+    function employeeStatusKey(value) {
+        const text = String(value || '').trim().toLowerCase();
+        return EMPLOYEE_STATUS_LIST.find((item) => item.toLowerCase() === text) || '';
     }
     function formatExpiryDate(order) {
         if (order && order.expiryDisplay && String(order.expiryDisplay).trim()) return String(order.expiryDisplay).trim();
@@ -89,14 +101,17 @@
         });
     }
     function statusSelectHtml(order) {
-        const value = order.status || '';
-        const options = STATUSES.map((item) => {
+        const raw = order.status || '';
+        const value = employeeStatusKey(raw) || raw;
+        const list = offeredStatuses();
+        const options = list.map((item) => {
             const selected = item === value ? ' selected' : '';
             return `<option value="${esc(item)}"${selected}>${esc(item)}</option>`;
         }).join('');
-        const extra = value && !STATUSES.includes(value)
-            ? `<option value="${esc(value)}" selected>${esc(value)}</option>`
-            : '';
+        // Not updated yet (or an older status that is no longer offered): show it as the current choice.
+        const extra = !value
+            ? '<option value="" selected disabled>Not updated</option>'
+            : (!list.includes(value) ? `<option value="${esc(value)}" selected>${esc(value)}</option>` : '');
         return `<select class="admin-status-select" data-key="${esc(order.key)}" data-prev="${esc(value)}" title="Change status" aria-label="Change status">${extra}${options}</select>`;
     }
     function paymentCell(order) {
@@ -143,7 +158,11 @@
         F: 'SFX', G: 'Exterior Color', H: 'Interior Color', I: 'VIN', J: 'Expiry'
     };
     const RESERVED_COL_ORDER = ['B', 'C', 'I', 'E', 'D', 'F', 'G', 'H', 'J'];
-    const MERGED_COL_ORDER = ['Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area', 'Share level', 'RTL stock'];
+    // Live sheet columns. A-J come from the pushed Reserved Order File (A salesman, B customer, C order, D model year,
+    // E product, F suffix, G exterior, H interior, I VIN, J expiry). The four RTL columns come from the pushed
+    // RTL Stock row of the same VIN (M status, K allocation age, N area, H share level). Same columns as the employee page.
+    const MERGED_COL_ORDER = ['Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'RTL status', 'Allocation age', 'Area', 'Share level'];
+    const MERGED_META_COLS = ['Queue position', 'Status', 'Note', 'Updated by'];
     function retailOk(value) {
         const text = String(value || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
         if (!text || text === '—' || text === '-') return false;
@@ -160,7 +179,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN in the Reserved Order File. Every VIN is checked in the RTL Stock: when found, all its car details show in the RTL columns on the right (use Columns to hide any). Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by shows who changed status and when (Saudi time).'
+        merged: 'One row per VIN in the Reserved Order File (columns A to J). RTL status, Allocation age, Area and Share level come from the RTL Stock row of the same VIN. Queue position comes from the Toyota Back Order file. Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -281,71 +300,55 @@
             expiryDate: (reservedSide && reservedSide.expiryDate) || a.expiryDate || b.expiryDate || ''
         });
     }
-    function buildMergedOrder(order) {
-        const inE = orderInSheet(order, 'esales');
-        const inR = orderInSheet(order, 'reserved');
-        const esales = orderSheetFields(order, 'esales');
-        const reserved = orderSheetFields(order, 'reserved');
-        const eProduct = cleanProductText(fieldValueFromList(esales, 'I'));
-        const eSuffixRaw = fieldValueFromList(esales, 'J');
-        const eSuffix = (!looksLikeDateText(eSuffixRaw) && !looksLikeVinText(eSuffixRaw)) ? eSuffixRaw : '';
-        const eVin = fieldValueFromList(esales, 'L');
-        const rVin = fieldValueFromList(reserved, 'I');
-        const rProduct = cleanProductText(fieldValueFromList(reserved, 'E'));
-        const rSuffix = fieldValueFromList(reserved, 'F');
-        const vin = firstReal(
-            looksLikeVinText(order.vin) ? order.vin : '',
-            looksLikeVinText(eVin) ? eVin : '',
-            looksLikeVinText(rVin) ? rVin : ''
-        );
-        // Reserved-only → Reserved columns. E-Sales or Both → Stock E-Sales info only; expiry from Reserved.
-        let values;
-        if (inR && !inE) {
-            values = {
-                Source: 'Reserved',
-                VIN: vin,
-                Order: cleanOrderText(fieldValueFromList(reserved, 'C')) || cleanOrderText(order.orderNumber),
-                Customer: cleanPersonText(fieldValueFromList(reserved, 'B')) || cleanPersonText(order.customerName),
-                Product: firstReal(rProduct, cleanProductText(order.vehicle)),
-                'Model Year': firstReal(fieldValueFromList(reserved, 'D'), order.modelYear),
-                SFX: rSuffix,
-                Exterior: firstReal(fieldValueFromList(reserved, 'G')),
-                Interior: firstReal(fieldValueFromList(reserved, 'H')),
-                // Advisor / payment come from the Back Order file match; area from the RTL Stock row.
-                Advisor: cleanPersonText(order.salesAdvisor),
-                Payment: firstReal((order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''),
-                Area: firstReal(order.searchArea),
-                'Share level': firstReal(order.shareLevel)
-            };
-        } else {
-            values = {
-                Source: inE && inR ? 'Both' : 'E-Sales',
-                VIN: vin,
-                Order: cleanOrderText(order.orderNumber) || cleanOrderText(fieldValueFromList(esales, 'F')),
-                Customer: cleanPersonText(order.customerName) || cleanPersonText(fieldValueFromList(esales, 'S')),
-                Product: eProduct || cleanProductText(order.vehicle),
-                'Model Year': firstReal(order.modelYear, fieldValueFromList(esales, 'K')),
-                SFX: eSuffix,
-                Exterior: firstReal(order.exterior, fieldValueFromList(esales, 'M')),
-                Interior: firstReal(order.interior, fieldValueFromList(esales, 'N')),
-                Advisor: cleanPersonText(order.salesAdvisor) || cleanPersonText(fieldValueFromList(esales, 'T')),
-                Payment: firstReal(
-                    (order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''
-                ),
-                Area: firstReal(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A')),
-                'Share level': firstReal(order.shareLevel, fieldValueFromList(esales, 'C'))
-            };
+    // One value of the pushed Reserved Order File row (columns A to J), same lookup the employee page uses.
+    function reservedPick(order, letter) {
+        const want = String(letter || '').toUpperCase();
+        const pools = [order && order.reservedFields, order && order.fields];
+        for (let p = 0; p < pools.length; p += 1) {
+            const fields = Array.isArray(pools[p]) ? pools[p] : [];
+            const hit = fields.find((field) => String(field.col || '').trim().toUpperCase() === want);
+            if (!hit || isBlankSheetValue(hit.value)) continue;
+            return String(hit.value).replace(/\u00a0/g, ' ').trim();
         }
-        values['RTL stock'] = order.inRtl === true ? 'In RTL stock' : order.inRtl === false ? 'Not in RTL' : '';
-        const expiry = inR ? formatExpiryValue(order, reserved) : '';
+        return '';
+    }
+    function buildMergedOrder(order) {
+        const reserved = orderSheetFields(order, 'reserved');
+        const pick = (letter) => reservedPick(order, letter);
+        const vinPick = pick('I');
+        const eVin = fieldValueFromList(orderSheetFields(order, 'esales'), 'L');
+        const vin = firstReal(
+            looksLikeVinText(vinPick) ? vinPick : '',
+            looksLikeVinText(order.vin) ? order.vin : '',
+            looksLikeVinText(eVin) ? eVin : ''
+        );
+        const suffixRaw = pick('F');
+        const suffix = (!looksLikeDateText(suffixRaw) && !looksLikeVinText(suffixRaw)) ? suffixRaw : '';
+        let product = firstReal(cleanProductText(pick('E')), cleanProductText(order.vehicle));
+        if (product && suffix && product.toLowerCase().endsWith(' ' + suffix.toLowerCase())) product = product.slice(0, product.length - suffix.length).trim();
+        const values = {
+            'Salesman name': firstReal(cleanPersonText(pick('A')), cleanPersonText(order.salesAdvisor)),
+            'Customer name': firstReal(cleanPersonText(pick('B')), cleanPersonText(order.customerName)),
+            'Order number': firstReal(cleanOrderText(pick('C')), cleanOrderText(order.orderNumber)),
+            'Model year': firstReal(pick('D'), order.modelYear),
+            Product: product,
+            'ALJ suffix': suffix,
+            'Exterior color': firstReal(pick('G'), order.exterior),
+            'Interior color': firstReal(pick('H'), order.interior),
+            VIN: vin,
+            'Expiry date': firstReal(formatExpiryValue(order, reserved), pick('J')),
+            'RTL status': rtlValue(order, 'M'),
+            'Allocation age': rtlValue(order, 'K'),
+            Area: firstReal(rtlValue(order, 'N'), order.searchArea),
+            'Share level': firstReal(rtlValue(order, 'H'), order.shareLevel)
+        };
         const mergedFields = MERGED_COL_ORDER.map((label) => ({
             label,
             col: label,
             value: values[label] == null ? '' : values[label]
         }));
         return Object.assign({}, order, {
-            mergeSource: values.Source,
-            mergedExpiry: expiry,
+            mergedExpiry: values['Expiry date'],
             mergedFields,
             vin: vin || order.vin
         });
@@ -363,10 +366,9 @@
         return Array.from(byVin.values())
             .map(buildMergedOrder)
             .sort((a, b) => {
-                const rank = { Both: 0, 'E-Sales': 1, Reserved: 2 };
-                const d = (rank[a.mergeSource] != null ? rank[a.mergeSource] : 9) - (rank[b.mergeSource] != null ? rank[b.mergeSource] : 9);
-                if (d) return d;
-                return (a.queueNumber || 0) - (b.queueNumber || 0);
+                const pa = a.boQueuePosition == null ? 9e9 : Number(a.boQueuePosition);
+                const pb = b.boQueuePosition == null ? 9e9 : Number(b.boQueuePosition);
+                return pa - pb || (a.queueNumber || 0) - (b.queueNumber || 0);
             });
     }
     function salesTypeOf(order) {
@@ -391,17 +393,18 @@
         const ms = remainMs(order);
         return `<td>${esc(expiryText(order))}</td><td class="timer-cell st-timer ${timerTone(ms)}" data-deadline="${esc(deadline || '')}">${esc(remain(order))}</td>`;
     }
+    // ---- Overview: the three statuses employees choose (plus "Not updated"), from the same rows as the Live sheet ----
+    function statusBucket(order) {
+        return employeeStatusKey(order.status) || (String(order.status || '').trim() ? 'other' : 'none');
+    }
     function renderSalesTypes() {
         const cardsBox = $('st-cards');
         if (!cardsBox) return;
-        const cars = carRows();
-        const counts = {};
-        cars.forEach((order) => { const key = salesTypeOf(order) || 'blank'; counts[key] = (counts[key] || 0) + 1; });
-        const extra = Object.keys(counts).filter((key) => !SALES_TYPE_ORDER.includes(key)).sort();
-        const keys = SALES_TYPE_ORDER.concat(extra);
-        const total = cars.length;
-        const expired = cars.filter((order) => EXPIRY_TYPES.has(salesTypeOf(order)) && remain(order) === 'EXPIRED').length;
-        $('st-meta').textContent = `${total} cars with a VIN in the live sheet · column U` + (expired ? ` · ${expired} reservation${expired === 1 ? '' : 's'} expired` : '');
+        const rows = buildMergedList(orders);
+        const counts = { 'Payment': 0, 'In progress': 0, 'Cancelled': 0, none: 0, other: 0 };
+        rows.forEach((order) => { counts[statusBucket(order)] += 1; });
+        const total = rows.length;
+        $('st-meta').textContent = `${total} car${total === 1 ? '' : 's'} in the Live sheet (one per VIN of the Reserved Order File)`;
         const card = (key, label, name, value, tone) => {
             const share = total ? Math.round((value / total) * 100) : 0;
             return `<button type="button" class="st-card ${tone}${salesTypePick === key ? ' is-on' : ''}" data-st="${esc(key)}">
@@ -412,65 +415,64 @@
                 <em>${share}% of cars</em>
             </button>`;
         };
-        const tones = { '01': 't-red', '13': 't-blue', '07': 't-violet', '08': 't-teal' };
-        cardsBox.innerHTML = card('', 'Total', 'All sales types', total, 't-total')
-            + keys.map((key) => card(key, key === 'blank' ? 'Blank' : key, key === 'blank' ? 'No sales type' : (SALES_TYPE_NAMES[key] || 'Sales type ' + key) + (EXPIRY_TYPES.has(key) ? ' · has expiry' : ''), counts[key] || 0, tones[key] || 't-grey')).join('');
+        cardsBox.innerHTML = card('', 'Total', 'All reserved cars', total, 't-total')
+            + card('Payment', 'Payment', 'Chosen by the employee', counts.Payment, 't-teal')
+            + card('In progress', 'In progress', 'Chosen by the employee', counts['In progress'], 't-blue')
+            + card('Cancelled', 'Cancelled', 'Chosen by the employee', counts.Cancelled, 't-red')
+            + card('none', 'Not updated', 'No status yet', counts.none, 't-grey')
+            + (counts.other ? card('other', 'Other', 'Status added by admin', counts.other, 't-violet') : '');
         renderSalesTypeDetail();
     }
     function renderSalesTypeDetail() {
         const box = $('st-detail');
         if (!box) return;
         if (salesTypePick == null) { box.innerHTML = ''; return; }
-        const list = carRows()
-            .filter((order) => !salesTypePick || (salesTypeOf(order) || 'blank') === salesTypePick)
-            .sort((a, b) => (a.queueNumber || 0) - (b.queueNumber || 0));
-        const title = salesTypePick === '' ? 'All cars' : salesTypePick === 'blank' ? 'Cars with no sales type' : `Sales type ${salesTypePick}${SALES_TYPE_NAMES[salesTypePick] ? ' · ' + SALES_TYPE_NAMES[salesTypePick] : ''}`;
+        const list = buildMergedList(orders).filter((order) => !salesTypePick || statusBucket(order) === salesTypePick);
+        const title = salesTypePick === '' ? 'All cars' : salesTypePick === 'none' ? 'Cars with no status yet' : salesTypePick === 'other' ? 'Cars with a status added by admin' : `Status: ${salesTypePick}`;
+        const cell = (order, label) => esc(sheetValue(order, label, 'merged') || '—');
         box.innerHTML = `<div class="st-detail-head"><h3>${esc(title)}</h3><span>${list.length} car${list.length === 1 ? '' : 's'}</span></div>
-            <div class="st-table"><table><thead><tr><th>Queue</th><th>Status</th><th>Type</th><th>Order</th><th>VIN</th><th>Model</th><th>Customer</th><th>Salesman</th><th>Expiry</th><th>Time left</th></tr></thead><tbody>${
+            <div class="st-table"><table><thead><tr><th>Queue position</th><th>Status</th><th>Note</th><th>Salesman name</th><th>Customer name</th><th>Order number</th><th>Product</th><th>VIN</th><th>Expiry date</th></tr></thead><tbody>${
             list.map((order) => `<tr data-open="${esc(order.key)}" class="st-row${isCancelledStatus(order) ? ' row-cancelled' : ''}">
-                <td><span class="q-pill">#${order.queueNumber == null ? '—' : order.queueNumber}</span></td>
+                <td>${order.boQueuePosition == null ? '—' : `<span class="q-pill">#${esc(String(order.boQueuePosition))}</span>`}</td>
                 <td>${statusPill(order.status)}</td>
-                <td><span class="st-type">${esc(salesTypeOf(order) || '—')}</span></td>
-                <td>${esc(order.orderNumber || fieldOf(order, 'F') || '—')}</td>
-                <td class="mono">${esc(order.vin || fieldOf(order, 'L') || '—')}</td>
-                <td>${esc(fieldOf(order, 'I') || order.vehicle || '—')}</td>
-                <td>${esc(fieldOf(order, 'S') || order.customerName || '—')}</td>
-                <td>${esc(fieldOf(order, 'T') || order.salesAdvisor || '—')}</td>
-                ${expiryCells(order)}
-            </tr>`).join('') || '<tr><td colspan="10" class="st-na">No cars</td></tr>'
+                <td dir="auto">${cell(order, 'Note')}</td>
+                <td>${cell(order, 'Salesman name')}</td>
+                <td>${cell(order, 'Customer name')}</td>
+                <td>${cell(order, 'Order number')}</td>
+                <td>${cell(order, 'Product')}</td>
+                <td class="mono">${cell(order, 'VIN')}</td>
+                <td>${cell(order, 'Expiry date')}</td>
+            </tr>`).join('') || '<tr><td colspan="9" class="st-na">No cars</td></tr>'
             }</tbody></table></div>`;
     }
     function statusPill(status) {
-        const value = String(status || '').trim();
-        const tone = value === 'الغاء' ? 'is-bad' : value === 'تم الفوترة' ? 'is-ok' : value === 'محجوز' ? 'is-hold' : value ? 'is-info' : 'is-none';
-        return `<span class="s-pill ${tone}">${esc(value || '—')}</span>`;
+        const value = employeeStatusKey(status) || String(status || '').trim();
+        const tone = value === 'Cancelled' || value === 'الغاء' ? 'is-bad' : value === 'Payment' || value === 'تم الفوترة' ? 'is-ok' : value === 'In progress' || value === 'محجوز' ? 'is-hold' : value ? 'is-info' : 'is-none';
+        return `<span class="s-pill ${tone}">${esc(value || 'Not updated')}</span>`;
     }
 
     function renderOverview() {
+        const rows = buildMergedList(orders);
+        const count = (key) => rows.filter((order) => statusBucket(order) === key).length;
         const activeStaff = staff.filter((person) => person.active).length;
         const today = audit.filter((event) => String(event.at || '').slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
         $('admin-kpis').innerHTML = [
-            ['Current orders', orders.length], ['Archived versions', archive.length], ['Audit events', audit.length],
-            ['Employees', staff.length], ['Active employees', activeStaff], ["Today's changes", today]
+            ['Reserved cars', rows.length], ['Payment', count('Payment')], ['In progress', count('In progress')],
+            ['Cancelled', count('Cancelled')], ['Not updated', count('none')], ['Active employees', activeStaff], ["Today's changes", today]
         ].map(([label, value]) => `<article class="kpi"><em>${label}</em><strong>${value}</strong></article>`).join('');
-        // Mirror Sales type analysis (column U) — Stock E-Sales has no Payment column,
-        // so the old cash/bank report stayed Unknown for every row.
-        const typeCounts = {};
-        carRows().forEach((order) => {
-            const key = salesTypeOf(order) || 'blank';
-            typeCounts[key] = (typeCounts[key] || 0) + 1;
+        // Updates by salesman: how many of each salesman's cars already have a status.
+        const bySales = new Map();
+        rows.forEach((order) => {
+            const name = sheetValue(order, 'Salesman name', 'merged') || 'No salesman';
+            const entry = bySales.get(name) || { total: 0, done: 0 };
+            entry.total += 1;
+            if (statusBucket(order) !== 'none') entry.done += 1;
+            bySales.set(name, entry);
         });
-        const typeKeys = SALES_TYPE_ORDER.concat(
-            Object.keys(typeCounts).filter((key) => !SALES_TYPE_ORDER.includes(key)).sort()
-        ).filter((key) => typeCounts[key]);
-        const typeMax = Math.max(1, ...typeKeys.map((key) => typeCounts[key] || 0));
-        $('pay-bars').innerHTML = typeKeys.map((key) => {
-            const value = typeCounts[key] || 0;
-            const label = key === 'blank'
-                ? 'Blank'
-                : (SALES_TYPE_NAMES[key] ? `${key} · ${SALES_TYPE_NAMES[key]}` : `Type ${key}`);
-            return `<div class="bar"><span>${esc(label)}</span><i style="width:${Math.round(value / typeMax * 100)}%"></i><b>${value}</b></div>`;
-        }).join('') || '<div class="bar"><span>No cars</span><i style="width:0%"></i><b>0</b></div>';
+        const list = Array.from(bySales.entries()).sort((a, b) => b[1].total - a[1].total);
+        $('pay-bars').innerHTML = list.map(([name, entry]) =>
+            `<div class="bar"><span>${esc(name)}</span><i style="width:${entry.total ? Math.round(entry.done / entry.total * 100) : 0}%"></i><b>${entry.done} / ${entry.total}</b></div>`
+        ).join('') || '<div class="bar"><span>No cars</span><i style="width:0%"></i><b>0</b></div>';
         renderSalesTypes();
     }
     function renderOrders() {
@@ -707,42 +709,10 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            const meta = ['Queue', 'Status', 'Employee note', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left'];
-            const titles = {
-                Expiry: 'Expiry date',
-                'Time left': 'Time left',
-                Source: 'Source',
-                'Employee note': 'Employee note',
-                'Leader note': 'Leader note',
-                'Updated by': 'Updated by'
-            };
-            MERGED_COL_ORDER.forEach((label) => { titles[label] = label; });
-            titles['RTL stock'] = 'RTL stock';
-            // All car details from the RTL Stock row of each VIN: one extra column per RTL Stock column (empty ones skipped).
-            const rtlCols = [];
-            const rtlSeen = new Set();
-            const taken = new Set(meta.concat(MERGED_COL_ORDER).map((label) => label.toLowerCase()));
-            (list || []).forEach((order) => (order.rtlFields || []).forEach((field) => {
-                const col = String(field.col || '').trim().toUpperCase();
-                if (!col || rtlSeen.has(col)) return;
-                rtlSeen.add(col);
-                rtlCols.push({ col, label: String(field.label || '').trim() || col });
-            }));
-            rtlCols.sort((a, b) => colIndex(a.col) - colIndex(b.col));
-            const rtlKeys = [];
-            rtlCols.forEach(({ col, label }) => {
-                const key = 'rtl:' + col;
-                const has = (list || []).some((order) => {
-                    const value = rtlValue(order, col);
-                    return value && value !== '—';
-                });
-                if (!has) return;
-                titles[key] = taken.has(label.toLowerCase()) ? 'RTL ' + label : label;
-                taken.add(titles[key].toLowerCase());
-                rtlKeys.push(key);
-            });
-            // Keep every merged column so non-duplicate rows with blanks still appear.
-            return { cols: meta.concat(MERGED_COL_ORDER, rtlKeys), titles };
+            // Only the columns the team asked for, in the same order as the employee page. Leader note is the admin-only extra.
+            const titles = { 'Updated by': 'Updated', 'Leader note': 'Leader note' };
+            MERGED_META_COLS.concat(MERGED_COL_ORDER).forEach((label) => { if (!titles[label]) titles[label] = label; });
+            return { cols: MERGED_META_COLS.concat(MERGED_COL_ORDER, ['Leader note']), titles };
         }
         const meta = source === 'reserved'
             ? ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left']
@@ -803,10 +773,14 @@
         return text === '—' ? '' : text;
     }
     function sheetValue(order, label, source) {
+        if (label === 'Queue position') {
+            if (order.boQueuePosition == null) return '';
+            return String(order.boQueuePosition) + (order.boQueueSize != null ? ' / ' + order.boQueueSize : '');
+        }
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
         if (label === 'Leader note') return order.leaderNote || '';
-        if (label === 'Employee note') return order.statusNote || '';
+        if (label === 'Employee note' || label === 'Note') return order.statusNote || '';
         if (label === 'BO ahead') return aheadText(order);
         if (label === 'Updated by' || label === 'Team notes' || label === 'Updated at') {
             const who = order.statusChangedBy || '';
@@ -950,6 +924,16 @@
                     ${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}
                 </td>`;
             }
+            if (label === 'Queue position') {
+                if (order.boQueuePosition == null) return '<td class="col-queue" title="Not found in the Toyota Back Order file"><span class="ahead-empty">—</span></td>';
+                const size = order.boQueueSize != null ? `<small class="q-of"> / ${esc(String(order.boQueueSize))}</small>` : '';
+                return `<td class="col-queue" title="Back Order queue position"><span class="q-pill">#${esc(String(order.boQueuePosition))}</span>${size}</td>`;
+            }
+            if (label === 'Note') {
+                return `<td class="col-note" title="${esc(value)}">${value ? `<span class="xl-note-text" dir="auto">${esc(value)}</span>` : '<span class="ahead-empty">—</span>'}</td>`;
+            }
+            if (label === 'Salesman name') return `<td class="col-advisor">${value ? `<b>${esc(value)}</b>` : ''}</td>`;
+            if (label === 'RTL status') return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'Expiry') return `<td class="col-expiry">${esc(value || '—')}</td>`;
             if (label === 'Time left') {
@@ -971,7 +955,7 @@
                 return `<td><span class="st-type">${esc(st)}</span></td>`;
             }
             const title = (source === 'merged' ? label : (SHEET_NAMES[label] || titles[label] || label));
-            if (isAreaOrShareLabel(label) || isAreaOrShareLabel(title)) {
+            if (source !== 'merged' && (isAreaOrShareLabel(label) || isAreaOrShareLabel(title))) {
                 if (!value) return `<td class="cell-retail cell-retail-empty"></td>`;
                 const ok = retailOk(value);
                 return `<td class="cell-retail ${ok ? 'cell-retail-ok' : 'cell-retail-bad'}">${esc(value)}</td>`;
@@ -1067,7 +1051,7 @@
         }
     }
     // ---- Sheet layout: hide / reorder columns, then Save layout (kept in this browser) ----
-    const XL_LAYOUT_KEY = 'ro-live-sheet-layout-v1';
+    const XL_LAYOUT_KEY = 'ro-live-sheet-layout-v2'; // v2: the sheet now has the team's own column set
     const xlInfo = {};
     let xlSaved = {};
     let xlDraft = {};

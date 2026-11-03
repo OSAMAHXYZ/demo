@@ -8636,8 +8636,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "stockdashboard" || p.id === "dashboard") return false; // hidden from nav; panel code kept
       if (Auth && !Auth.canViewPanel(p.id, currentUser)) return false;
-      if (p.id === "salesreport") return true;
-      if (p.id === "summary") return true;
+      if (p.id === "salesreport") return hasSalesReportInputs();
+      if (p.id === "summary") return hasSummaryInputs();
       if (p.id === "reservedvehicles") return true;
       if (p.id === "plantracker") return true;
       if (p.id === "gec") return true;
@@ -9283,7 +9283,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (activePanel === "boerrors" && panelId !== "boerrors") {
       const boeWrap = document.getElementById("boe-table-wrap");
       if (boeWrap) boeWrap.textContent = "";
-      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "salesreport", "plantracker", "contact", "evaluation"];
+      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "contact", "evaluation"];
       if (!window._data && typeof hasAnyPushedFiles === "function" && !hasAnyPushedFiles() && !keepsDashboard.includes(panelId)) {
         const dash = $("#dashboard");
         const wait = $("#wait-section");
@@ -9354,16 +9354,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }
     if (panelId === "summary") renderSummaryDashboard();
     if (panelId === "ytdsales") renderYtdSales();
-    if (panelId === "salesreport") {
-      const dash = $("#dashboard");
-      const wait = $("#wait-section");
-      if (dash) {
-        dash.classList.add("show");
-        dash.style.display = "";
-      }
-      if (wait) wait.style.display = "none";
-      if (!hasSalesReportInputs()) clearSalesReportUi();
-    }
     if (panelId === "boerrors") {
       const dash = $("#dashboard");
       const wait = $("#wait-section");
@@ -25482,7 +25472,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
 })();
 
 </script>
-<script src="scroll-transition.js?v=20261103nav1"></script>
-<script src="welcome-screen.js?v=20261103nav1"></script>
+<script src="scroll-transition.js?v=20261103fs1"></script>
+<script src="welcome-screen.js?v=20261103fs1"></script>
 </body>
 </html>

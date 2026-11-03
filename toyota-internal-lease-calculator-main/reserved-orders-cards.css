@@ -139,3 +139,34 @@ body.dash #app.tower-app { height: auto !important; min-height: 100vh; }
 #app .tower { overflow: visible !important; flex: 0 0 auto !important; }
 #app .cards, #app .cards.rc-grid { overflow: visible !important; flex: 0 0 auto !important; }
 #app .marketing-board { overflow: visible !important; flex: 0 0 auto !important; }
+
+/* ---- Order details dialog: only the sheet's information ---- */
+#order-modal .rc-panel { width: min(860px, 100%); }
+#order-modal .rd { color: #e8eef8; }
+#order-modal .rd-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+#order-modal .rd-thumb { flex: 0 0 150px; height: 90px; display: grid; place-items: center; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
+#order-modal .rd-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+#order-modal .rd-fallback { color: #93a0b8; display: grid; place-items: center; }
+#order-modal .rd-fallback[hidden] { display: none; }
+#order-modal .rd-title h3 { margin: 0 0 4px; font-size: 1.35rem; font-weight: 800; color: #fff; }
+#order-modal .rd-title h3 small { margin-inline-start: 8px; font-size: 0.8rem; font-weight: 700; color: #93a0b8; }
+#order-modal .rd-title span { color: #93a0b8; font-weight: 600; }
+#order-modal .rd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+#order-modal .rd-item { display: grid; gap: 2px; padding: 9px 11px; border-radius: 10px; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08); min-width: 0; }
+#order-modal .rd-item span { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #93a0b8; }
+#order-modal .rd-item b { font-size: 14px; font-weight: 700; color: #fff; overflow-wrap: anywhere; }
+#order-modal .rd-status { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.1); }
+#order-modal .rd-status h4 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #93a0b8; }
+#order-modal .rd-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+#order-modal .rd-status-select { min-width: 170px; padding: 7px 10px; border-radius: 8px; border: 1px solid #217346; background: #0e1628; color: #e8eef8; font: 700 13px inherit; cursor: pointer; }
+#order-modal .rd-note-edit { padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.25); background: transparent; color: #e8eef8; cursor: pointer; font-weight: 700; }
+#order-modal .rd-lock { color: #93a0b8; font-weight: 600; }
+#order-modal .rd-note { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,0.25); color: #fff; white-space: pre-wrap; overflow-wrap: anywhere; }
+#order-modal .rd-updated { display: block; margin-top: 8px; color: #93a0b8; font-weight: 600; }
+#order-modal .rd-updated b { color: #fff; }
+#order-modal .rd.cancelled .rd-item,
+#order-modal .rd.cancelled .rd-status { border-color: rgba(251,113,133,0.5); background: rgba(251,113,133,0.1); }
+@media (max-width: 560px) {
+  #order-modal .rd-head { flex-direction: column; align-items: flex-start; }
+  #order-modal .rd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

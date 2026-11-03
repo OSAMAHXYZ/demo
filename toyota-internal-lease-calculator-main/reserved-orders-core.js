@@ -2026,8 +2026,19 @@ function attachReservedOrders(app, options) {
         const key = personKey(user.name);
         return key === 'reda salah' || key === 'mohammed al fadul';
     }
+    function reservedColumnA(order) {
+        const pools = [order && order.reservedFields, order && order.fromReservedFile ? order.fields : null];
+        for (const pool of pools) {
+            const hit = (Array.isArray(pool) ? pool : []).find((field) => String(field && field.col || '').trim().toUpperCase() === 'A');
+            const text = cleanText(hit && hit.value);
+            if (text && text !== '—' && text !== '-' && !/^(unassigned|salesman name)$/i.test(text)) return text;
+        }
+        return '';
+    }
     function responsibleAdvisor(order) {
-        // Reserved Order File rows: the salesman is column A of that file.
+        // The Live sheet's "Salesman name" is column A of the Reserved Order File: that person owns the row.
+        const columnA = reservedColumnA(order);
+        if (columnA) return columnA;
         if (order && (order.fromReservedFile || (order.inReservedFile && order.inEsales === false))) {
             const own = cleanText(order.salesAdvisor);
             if (own && own !== '—' && !/^(unassigned|salesman name)$/i.test(own)) return own;
@@ -2043,8 +2054,16 @@ function attachReservedOrders(app, options) {
         if (isOrder5Editor(user) && orderNumberStartsWith5(order)) return true;
         const advisor = personKey(responsibleAdvisor(order));
         if (!user || !advisor) return false;
-        if (personKey(user.name) === advisor) return true;
+        if (samePerson(user.name, advisor)) return true;
         return personKey(user.employeeNumber) === advisor;
+    }
+    // Same name ignoring case, dots, extra spaces and word order ("Ali Ahmed" = "ahmed  ali").
+    function samePerson(a, b) {
+        const x = personKey(a);
+        const y = personKey(b);
+        if (!x || !y) return false;
+        if (x === y) return true;
+        return x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ');
     }
     function sessionUser(token) {
         const session = sessions.get(String(token || ''));
