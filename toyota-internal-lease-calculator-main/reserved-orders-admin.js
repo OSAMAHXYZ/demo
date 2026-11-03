@@ -143,7 +143,7 @@
         F: 'SFX', G: 'Exterior Color', H: 'Interior Color', I: 'VIN', J: 'Expiry'
     };
     const RESERVED_COL_ORDER = ['B', 'C', 'I', 'E', 'D', 'F', 'G', 'H', 'J'];
-    const MERGED_COL_ORDER = ['Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area', 'Share level'];
+    const MERGED_COL_ORDER = ['Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area', 'Share level', 'RTL stock'];
     function retailOk(value) {
         const text = String(value || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
         if (!text || text === '—' || text === '-') return false;
@@ -160,7 +160,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by shows who changed status and when (Saudi time).'
+        merged: 'One row per VIN in the Reserved Order File. Every VIN is checked in the RTL Stock: when found, all its car details show in the RTL columns on the right (use Columns to hide any). Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by shows who changed status and when (Saudi time).'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -306,15 +306,16 @@
                 VIN: vin,
                 Order: cleanOrderText(fieldValueFromList(reserved, 'C')) || cleanOrderText(order.orderNumber),
                 Customer: cleanPersonText(fieldValueFromList(reserved, 'B')) || cleanPersonText(order.customerName),
-                Product: rProduct,
+                Product: firstReal(rProduct, cleanProductText(order.vehicle)),
                 'Model Year': firstReal(fieldValueFromList(reserved, 'D'), order.modelYear),
                 SFX: rSuffix,
                 Exterior: firstReal(fieldValueFromList(reserved, 'G')),
                 Interior: firstReal(fieldValueFromList(reserved, 'H')),
-                Advisor: '',
-                Payment: '',
-                Area: '',
-                'Share level': ''
+                // Advisor / payment come from the Back Order file match; area from the RTL Stock row.
+                Advisor: cleanPersonText(order.salesAdvisor),
+                Payment: firstReal((order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''),
+                Area: firstReal(order.searchArea),
+                'Share level': firstReal(order.shareLevel)
             };
         } else {
             values = {
@@ -335,6 +336,7 @@
                 'Share level': firstReal(order.shareLevel, fieldValueFromList(esales, 'C'))
             };
         }
+        values['RTL stock'] = order.inRtl === true ? 'In RTL stock' : order.inRtl === false ? 'Not in RTL' : '';
         const expiry = inR ? formatExpiryValue(order, reserved) : '';
         const mergedFields = MERGED_COL_ORDER.map((label) => ({
             label,
@@ -714,8 +716,32 @@
                 'Updated by': 'Updated by'
             };
             MERGED_COL_ORDER.forEach((label) => { titles[label] = label; });
+            titles['RTL stock'] = 'RTL stock';
+            // All car details from the RTL Stock row of each VIN: one extra column per RTL Stock column (empty ones skipped).
+            const rtlCols = [];
+            const rtlSeen = new Set();
+            const taken = new Set(meta.concat(MERGED_COL_ORDER).map((label) => label.toLowerCase()));
+            (list || []).forEach((order) => (order.rtlFields || []).forEach((field) => {
+                const col = String(field.col || '').trim().toUpperCase();
+                if (!col || rtlSeen.has(col)) return;
+                rtlSeen.add(col);
+                rtlCols.push({ col, label: String(field.label || '').trim() || col });
+            }));
+            rtlCols.sort((a, b) => colIndex(a.col) - colIndex(b.col));
+            const rtlKeys = [];
+            rtlCols.forEach(({ col, label }) => {
+                const key = 'rtl:' + col;
+                const has = (list || []).some((order) => {
+                    const value = rtlValue(order, col);
+                    return value && value !== '—';
+                });
+                if (!has) return;
+                titles[key] = taken.has(label.toLowerCase()) ? 'RTL ' + label : label;
+                taken.add(titles[key].toLowerCase());
+                rtlKeys.push(key);
+            });
             // Keep every merged column so non-duplicate rows with blanks still appear.
-            return { cols: meta.concat(MERGED_COL_ORDER), titles };
+            return { cols: meta.concat(MERGED_COL_ORDER, rtlKeys), titles };
         }
         const meta = source === 'reserved'
             ? ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left']
@@ -768,6 +794,13 @@
         }
         return { cols: meta.concat(excel), titles };
     }
+    function rtlValue(order, col) {
+        const want = String(col || '').toUpperCase();
+        const hit = (order && Array.isArray(order.rtlFields) ? order.rtlFields : []).find((field) => String(field.col || '').toUpperCase() === want);
+        if (!hit || hit.value == null) return '';
+        const text = String(hit.value).trim();
+        return text === '—' ? '' : text;
+    }
     function sheetValue(order, label, source) {
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
@@ -798,6 +831,7 @@
         if (label === 'Time left') return remain(order);
         if (source === 'merged') {
             if (label === 'Source') return order.mergeSource || '';
+            if (String(label).startsWith('rtl:')) return rtlValue(order, String(label).slice(4));
             const merged = (order.mergedFields || []).find((item) => item.label === label || item.col === label);
             if (merged) return merged.value == null || merged.value === '—' ? '' : String(merged.value);
             return '';
@@ -925,6 +959,11 @@
                 const tone = value === 'Both' ? 'is-both' : value === 'Reserved' ? 'is-reserved' : 'is-esales';
                 return `<td class="col-source"><span class="source-pill ${tone}">${esc(value || '—')}</span></td>`;
             }
+            if (label === 'RTL stock') {
+                if (!value) return '<td class="col-source"></td>';
+                const tone = value === 'In RTL stock' ? 'is-both' : 'is-reserved';
+                return `<td class="col-source"><span class="source-pill ${tone}">${esc(value)}</span></td>`;
+            }
             if (label === 'U' && value) {
                 const st = /^\d$/.test(value) ? '0' + value : value;
                 return `<td><span class="st-type">${esc(st)}</span></td>`;
@@ -939,7 +978,7 @@
             return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
         };
         const emptyMsg = source === 'merged'
-            ? 'No merged rows yet. Push Stock E-Sales and/or the Reserved Order File.'
+            ? 'No rows yet. Push the Reserved Order File and the RTL Stock on Data push.'
             : source === 'reserved'
                 ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
                 : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
@@ -1305,9 +1344,13 @@
         $('admin-updated').textContent = data.updatedAt ? `Last push ${new Date(data.updatedAt).toLocaleString()}` : 'No live push yet';
         const source = $('push-source');
         if (source) {
-            source.textContent = data.esalesName || data.boName
-                ? `Live files: Stock E-Sales ${data.esalesName || '—'} · Back Order ${data.boName || '—'}`
-                : 'No Stock E-Sales or Back Order pushed yet.';
+            const rep = data.report || {};
+            const rtlCheck = rep.rtlRows != null
+                ? ` · VINs found in RTL Stock ${rep.rtlMatched || 0} of ${(rep.rtlMatched || 0) + (rep.rtlMissing || 0)}`
+                : '';
+            source.textContent = data.rtlName || data.boName
+                ? `Live files: RTL Stock ${data.rtlName || '—'} · Back Order (from Report Sheet admin) ${data.boName || '—'}${rtlCheck}`
+                : 'No RTL Stock or Back Order pushed yet.';
         }
         const status = $('admin-status');
         const current = status.value;
@@ -1519,13 +1562,12 @@
     });
     $('push-live').addEventListener('click', async () => {
         $('push-error').textContent = '';
-        const esales = $('esales-file').files[0];
-        const bo = $('bo-file').files[0];
+        const rtl = $('rtl-file').files[0];
         const reserved = $('reserved-file') ? $('reserved-file').files[0] : null;
-        if (!esales) { $('push-error').textContent = 'Choose the E-Sales Excel first.'; return; }
+        if (!rtl && !reserved) { $('push-error').textContent = 'Choose the RTL Stock and/or the Reserved Order File first.'; return; }
         try {
-            const body = { password: password(), esalesBase64: await fileToBase64(esales), esalesName: esales.name };
-            if (bo) { body.boBase64 = await fileToBase64(bo); body.boName = bo.name; }
+            const body = { password: password() };
+            if (rtl) { body.rtlBase64 = await fileToBase64(rtl); body.rtlName = rtl.name; }
             if (reserved) { body.reservedBase64 = await fileToBase64(reserved); body.reservedName = reserved.name; }
             const pushed = await api('/api/reserved-orders/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if ($('push-report') && pushed.reportSheet) $('push-report').textContent = 'Report Sheet admin now has these files too.';

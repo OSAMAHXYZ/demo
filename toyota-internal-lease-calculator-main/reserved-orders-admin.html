@@ -42,7 +42,7 @@
                 <button class="ghost" type="button" data-panel="sheet">Live sheet</button>
                 <button class="ghost" type="button" data-panel="employees">Employees</button>
                 <button class="ghost" type="button" data-panel="push">Data push</button>
-                <button class="ghost" type="button" data-panel="alerts">BO Message Builder</button>
+                <a class="ghost" href="bo-message-builder.html">BO Message Builder</a>
                 <button class="ghost" type="button" data-panel="archive">Archive</button>
                 <button class="ghost" type="button" data-panel="audit">Audit logs</button>
                 <button class="ghost" type="button" data-panel="reports">Reports</button>
@@ -145,7 +145,7 @@
                     <span class="xl-fxbtns" aria-hidden="true"><i>&#10005;</i><i>&#10003;</i><em>fx</em></span>
                     <div class="xl-formula" id="xl-formula" title="Selected cell value"></div>
                 </div>
-                <p class="sheet-note xl-msgbar" id="sheet-note">One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by shows who changed status and when (Saudi time).</p>
+                <p class="sheet-note xl-msgbar" id="sheet-note">One row per VIN in the Reserved Order File. Every VIN is checked in the RTL Stock: when found, all its car details show in the RTL columns on the right (use Columns to hide any). Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by shows who changed status and when (Saudi time).</p>
                 <!-- E-Sales and Reserved Order File sheets are hidden on purpose: the Live sheet shows only the Merged sheet. -->
                 <div class="excel-live sheet-merged" id="live-sheet-merged" data-source="merged" tabindex="0"></div>
                 <div class="sheet-sources xl-sheettabs" role="tablist" aria-label="Live sheet source">
@@ -180,18 +180,15 @@
             <section id="panel-push" class="hidden">
                 <section class="panel stack">
                     <h2>Push live</h2>
-                    <p>The <b>Reserved Order File</b> can be pushed here any time. This push is the only thing that updates the Live sheet; the Admin Push in Report Sheet admin no longer changes it. Its VINs are merged once: a VIN already in E-Sales keeps one order and takes the Reserved File data (column J, blank fields, expiry date); a new VIN is added with a blank assign date. When no Reserved File is chosen, the last stored one is checked again on this push.</p>
+                    <p>Push the <b>Reserved Order File</b> and the <b>RTL Stock</b> here. This push is the only thing that updates the Live sheet; the Admin Push in Report Sheet admin does not change it. Every VIN in the Reserved Order File becomes one row, and each VIN is checked in the RTL Stock: when it is found, all of its car details (every RTL Stock column) are shown on that row. When a file is not chosen, the last stored one is used again on this push.</p>
                     <p id="push-source"></p>
-                    <label>Stock E-Sales<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
-                    <label>Back Order<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <label>RTL Stock<input id="rtl-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <p class="muted">The Back Order file is not pushed here. It comes only from the Report Sheet admin push, and this push reads the latest one.</p>
                     <label>Reserved Order File<input id="reserved-file" type="file" accept=".xlsx,.xls,.csv"></label>
                     <button class="solid" id="push-live" type="button">PUSH LIVE</button>
                     <div class="err" id="push-error"></div>
                     <div id="push-report"></div>
                 </section>
-            </section>
-            <section id="panel-alerts" class="hidden">
-                <div id="boe-rules-root"></div>
             </section>
             <section id="panel-archive" class="hidden">
                 <div class="panel" style="overflow:auto;"><table><thead><tr><th>Version</th><th>Date</th><th>Uploaded by</th><th>E-Sales</th><th>BO</th><th>Reserved</th><th>Matched</th><th>Unmatched</th><th></th></tr></thead><tbody id="archive-rows"></tbody></table></div>
@@ -245,6 +242,5 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261103xl3"></script>
-    <script src="bo-rules-ui.js?v=20261021np1"></script>
+    <script src="reserved-orders-admin.js?v=20261103bmb1"></script>
 </body></html>

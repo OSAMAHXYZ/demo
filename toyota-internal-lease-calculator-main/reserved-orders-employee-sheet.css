@@ -1,0 +1,24 @@
+/* Employee Reserved Orders page: Excel-style Live sheet (look comes from reserved-orders-excel.css).
+   Everyone sees every row; only your own rows have the status dropdown. */
+#app #admin-app.emp-xl-shell { margin: 10px 0 24px; }
+#app #admin-app.emp-xl-shell.hidden { display: none !important; }
+#app #admin-app #panel-sheet #emp-sheet-shell { display: flex; flex-direction: column; min-height: 0; }
+#app #admin-app #panel-sheet .excel-live { max-height: 72vh !important; min-height: 280px; }
+
+/* your rows: green row number + soft green fill, status dropdown highlighted */
+#app #admin-app #panel-sheet .excel-live tbody tr.is-mine > td { background: #f1f9ee !important; }
+#app #admin-app #panel-sheet .excel-live tbody tr.is-mine > th.xl-rn { background: #c6efce !important; color: #0b5d2a !important; font-weight: 700; }
+#app #admin-app #panel-sheet .excel-live tbody tr.row-cancelled > td { color: #8a8a8a !important; text-decoration: line-through; }
+#app #admin-app #panel-sheet .excel-live tbody tr.row-cancelled .s-pill,
+#app #admin-app #panel-sheet .excel-live tbody tr.row-cancelled .source-pill { text-decoration: none; }
+#app #admin-app #panel-sheet .excel-live tbody td.xl-sel { background: #e8f1fb !important; }
+#app #admin-app #panel-sheet .excel-live .xl-status-select {
+  min-width: 128px; border: 1px solid #217346 !important; background: #fff !important; color: #1f1f1f !important;
+  border-radius: 3px; font: 600 12px Calibri, "Segoe UI", "Tajawal", Arial, sans-serif; padding: 2px 4px; cursor: pointer;
+}
+#app #admin-app #panel-sheet .excel-live tbody tr:not(.is-mine) { cursor: default; }
+
+/* Sheet / Cards switch in the toolbar */
+#app .view-switch { display: inline-flex; margin-inline-start: auto; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.25); }
+#app .view-switch button { border-radius: 0 !important; margin: 0 !important; border: 0 !important; }
+#app .view-switch button.is-on { background: #217346 !important; color: #fff !important; }

@@ -173,7 +173,7 @@
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
-        if (payload === loadLive.last && document.querySelector('#cards .rc-tile')) return tickTimers();
+        if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet .xl-grid')) return tickTimers();
         loadLive.last = payload;
         fillFilters();
         render();
@@ -270,8 +270,14 @@
             ['completed', 'Completed / Invoiced', source.filter(isCompleted).length, 'info'],
             ['soon', 'Approaching Deadline', soon, 'warn']
         ].map(([key, label, value, cls]) => `<button type="button" class="kpi ${cls}${activeKey === key ? ' on' : ''}" data-kpi="${key}"><em>${label}</em><strong>${value}</strong></button>`).join('');
-        $('cards').classList.toggle('rc-grid', list.length > 0);
-        $('cards').innerHTML = list.length ? list.map((order) => tileHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
+        paintViewMode();
+        if (viewMode() === 'sheet') {
+            $('cards').innerHTML = '';
+            paintSheet(list);
+        } else {
+            $('cards').classList.toggle('rc-grid', list.length > 0);
+            $('cards').innerHTML = list.length ? list.map((order) => tileHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
+        }
         paintOrderModal();
     }
     function retailMatch(value) {
@@ -568,6 +574,205 @@
             </span>
         </button>`;
     }
+    // ---- Excel-style sheet: same look and columns as the admin Live sheet. Everyone sees every row; the status
+    // can be changed only on your own orders (the server checks this too). Double-click a row for the full card. ----
+    const SHEET_COLS = ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry date', 'Time left', 'Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area', 'Share level', 'RTL stock'];
+    const sheetSel = { r: 0, c: 0 };
+    function viewMode() {
+        try { return localStorage.getItem('ro-orders-view') === 'cards' ? 'cards' : 'sheet'; } catch (e) { return 'sheet'; }
+    }
+    function setViewMode(mode) {
+        try { localStorage.setItem('ro-orders-view', mode); } catch (e) { /* storage blocked: only this visit */ }
+        render();
+    }
+    function sheetLetter(index) {
+        let n = index + 1;
+        let out = '';
+        while (n > 0) { const rem = (n - 1) % 26; out = String.fromCharCode(65 + rem) + out; n = Math.floor((n - 1) / 26); }
+        return out;
+    }
+    function realText(value) { return isBlankValue(value) ? '' : String(value).replace(/\u00a0/g, ' ').trim(); }
+    function sheetValues(order) {
+        const info = tileInfo(order);
+        const reservedOnly = isReservedFileOrder(order);
+        const ms = remainingMs(Object.assign({}, order, { deadline: columnDeadline(order) }));
+        const customer = realText(order.customerName) || (reservedOnly ? realText(reservedField(order, 'B')) : '');
+        return {
+            Source: reservedOnly ? 'Reserved' : (order.inReservedFile ? 'Both' : 'E-Sales'),
+            VIN: looksLikeVinText(order.vin) ? String(order.vin).trim() : '',
+            Order: order.orderNumber && order.orderNumber !== 'NO ORDER' ? String(order.orderNumber) : '',
+            Customer: looksLikeVinText(customer) || looksLikeDateText(customer) ? '' : customer,
+            Product: info.product || cleanVehicleName(order.vehicle),
+            'Model Year': realText(order.modelYear) || realText(reservedOnly ? reservedField(order, 'D') : columnText(order, 'K')),
+            SFX: info.sfx,
+            Exterior: realText(order.exterior) || realText(reservedOnly ? reservedField(order, 'G') : columnText(order, 'M')),
+            Interior: realText(order.interior) || realText(reservedOnly ? reservedField(order, 'H') : columnText(order, 'N')),
+            Advisor: info.advisor,
+            Payment: order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN' ? order.paymentLabel : '',
+            Area: realText(order.searchArea),
+            'Share level': realText(order.shareLevel),
+            'RTL stock': order.inRtl === true ? 'In RTL stock' : order.inRtl === false ? 'Not in RTL' : '',
+            'Expiry date': expiryText(order) || '',
+            'Time left': ms == null ? '' : formatRemain(ms),
+            _ms: ms
+        };
+    }
+    function sheetRtlCols(list) {
+        const seen = new Set();
+        const cols = [];
+        list.forEach((order) => (order.rtlFields || []).forEach((field) => {
+            const col = String(field.col || '').trim().toUpperCase();
+            if (!col || seen.has(col)) return;
+            seen.add(col);
+            cols.push({ col, label: String(field.label || '').trim() || col });
+        }));
+        const index = (letter) => letter.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+        cols.sort((a, b) => index(a.col) - index(b.col));
+        const taken = new Set(SHEET_COLS.map((label) => label.toLowerCase()));
+        const out = [];
+        cols.forEach(({ col, label }) => {
+            const has = list.some((order) => {
+                const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === col);
+                return hit && !isBlankValue(hit.value);
+            });
+            if (!has) return;
+            const title = taken.has(label.toLowerCase()) ? 'RTL ' + label : label;
+            taken.add(title.toLowerCase());
+            out.push({ key: 'rtl:' + col, title });
+        });
+        return out;
+    }
+    function sheetRtlValue(order, col) {
+        const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === col);
+        return hit && !isBlankValue(hit.value) ? String(hit.value).trim() : '';
+    }
+    function sheetAheadCell(order) {
+        const ahead = Array.isArray(order.ahead) ? order.ahead : [];
+        let meta = '';
+        if (order.boQueuePosition != null) meta = `<span class="ahead-pos">BO #${esc(String(order.boQueuePosition))}${order.boQueueSize != null ? '/' + esc(String(order.boQueueSize)) : ''}</span>`;
+        else if (order.boQueueSize != null) meta = `<span class="ahead-pos">BO queue · ${esc(String(order.boQueueSize))}</span>`;
+        if (!ahead.length && !meta) return '<td class="col-ahead"><span class="ahead-empty">—</span></td>';
+        const chips = ahead.map((item) => {
+            const rank = item.boPosition != null ? item.boPosition : item.queueNumber;
+            const orderNo = item.orderNumber && item.orderNumber !== 'NO ORDER' ? String(item.orderNumber) : '';
+            const who = item.salesAdvisor || '';
+            return `<span class="ahead-chip" title="${esc(['#' + (rank == null ? '' : rank), orderNo, who].filter(Boolean).join(' '))}"><b>#${esc(String(rank == null ? '' : rank))}</b>${orderNo ? `<span>${esc(orderNo)}</span>` : ''}${who ? `<i>${esc(who)}</i>` : ''}</span>`;
+        }).join('');
+        return `<td class="col-ahead"><div class="ahead-stack">${meta}<div class="ahead-chips">${chips}</div></div></td>`;
+    }
+    function sheetStatusPill(status) {
+        const value = String(status || '').trim();
+        const tone = value === 'الغاء' ? 'is-bad' : value === 'تم الفوترة' ? 'is-ok' : value === 'محجوز' ? 'is-hold' : value ? 'is-info' : 'is-none';
+        return `<span class="s-pill ${tone}">${esc(value || '—')}</span>`;
+    }
+    function sheetTimerTone(ms) {
+        const tone = timerClass(ms);
+        return tone === 'ok' ? 'is-ok' : tone === 'soon' ? 'is-warn' : tone === 'expired' ? 'is-bad' : '';
+    }
+    function sheetCell(order, label, values, mine) {
+        if (label === 'Queue') return `<td class="col-queue">${order.queueNumber == null ? '' : `<span class="q-pill">${esc(queueLabel(order.queueNumber))}</span>`}</td>`;
+        if (label === 'Status') {
+            const status = order.status || 'محجوز';
+            if (!mine) return `<td class="col-status">${sheetStatusPill(status)}</td>`;
+            const options = STATUSES.map((item) => `<option value="${esc(item)}"${item === status ? ' selected' : ''}>${esc(item)}</option>`).join('')
+                + (status && !STATUSES.includes(status) ? `<option value="${esc(status)}" selected>${esc(status)}</option>` : '');
+            return `<td class="col-status"><select class="xl-status-select admin-status-select" data-key="${esc(order.key)}" aria-label="Change status of your order">${options}</select></td>`;
+        }
+        if (label === 'Leader note') {
+            const note = String(order.leaderNote || '').trim();
+            return `<td class="col-leader-note">${note ? esc(note) : ''}</td>`;
+        }
+        if (label === 'Updated by') {
+            const who = order.statusChangedBy || '';
+            const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusChangedDisplay || '');
+            if (!who && !when) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
+            return `<td class="col-updated-by">${who ? `<b>${esc(who)}</b>` : ''}${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}</td>`;
+        }
+        if (label === 'BO ahead') return sheetAheadCell(order);
+        if (label === 'Expiry date') return `<td class="col-expiry">${esc(values['Expiry date'] || '—')}</td>`;
+        if (label === 'Time left') {
+            const deadline = columnDeadline(order);
+            return `<td class="timer-cell ${sheetTimerTone(values._ms)}" data-deadline="${esc(deadline || '')}">${esc(values['Time left'] || '—')}</td>`;
+        }
+        if (label === 'Source') {
+            const tone = values.Source === 'Both' ? 'is-both' : values.Source === 'Reserved' ? 'is-reserved' : 'is-esales';
+            return `<td class="col-source"><span class="source-pill ${tone}">${esc(values.Source)}</span></td>`;
+        }
+        if (label === 'RTL stock') {
+            const value = values['RTL stock'];
+            if (!value) return '<td class="col-source"></td>';
+            return `<td class="col-source"><span class="source-pill ${value === 'In RTL stock' ? 'is-both' : 'is-reserved'}">${esc(value)}</span></td>`;
+        }
+        if (label === 'Advisor') return `<td class="col-advisor">${values.Advisor ? (mine ? `<b>${esc(values.Advisor)}</b>` : esc(values.Advisor)) : ''}</td>`;
+        const value = String(label).startsWith('rtl:') ? sheetRtlValue(order, label.slice(4)) : (values[label] == null ? '' : values[label]);
+        const plain = String(value).trim();
+        return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
+    }
+    function paintSheet(list) {
+        const box = $('emp-sheet');
+        if (!box) return;
+        const rtlCols = sheetRtlCols(list);
+        const cols = SHEET_COLS.concat(rtlCols.map((item) => item.key));
+        const titles = {};
+        rtlCols.forEach((item) => { titles[item.key] = item.title; });
+        const keepTop = box.scrollTop;
+        const keepLeft = box.scrollLeft;
+        const mineCount = list.filter(canUpdateOrder).length;
+        if (!list.length) {
+            box.innerHTML = '<p class="empty">No reserved orders match this view.</p>';
+        } else {
+            const rows = list.map((order, rowIndex) => {
+                const mine = canUpdateOrder(order);
+                const values = sheetValues(order);
+                const classes = [mine ? 'is-mine' : '', isCancelled(order) ? 'row-cancelled' : ''].filter(Boolean).join(' ');
+                return `<tr class="${classes}" data-key="${esc(order.key)}"><th class="xl-rn" data-r="${rowIndex}">${rowIndex + 2}</th>${cols.map((label) => sheetCell(order, label, values, mine)).join('')}</tr>`;
+            }).join('');
+            box.innerHTML = `<table class="xl-grid"><thead>
+                <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}">${sheetLetter(index)}</th>`).join('')}</tr>
+                <tr class="xl-head"><th class="xl-rn">1</th>${cols.map((label) => `<th class="xl-h">${esc(titles[label] || label)}</th>`).join('')}</tr>
+            </thead><tbody>${rows}</tbody></table>`;
+        }
+        box.scrollTop = keepTop;
+        box.scrollLeft = keepLeft;
+        const stat = $('emp-xl-stat');
+        if (stat) stat.textContent = `${list.length.toLocaleString('en-GB')} rows × ${cols.length} columns · ${mineCount} yours`;
+        sheetSelect(sheetSel.r, sheetSel.c, false);
+    }
+    function sheetSelect(r, c, scroll) {
+        const box = $('emp-sheet');
+        const body = box && box.querySelector('.xl-grid tbody');
+        if (!body || !body.rows.length) return;
+        r = Math.max(0, Math.min(body.rows.length - 1, r));
+        c = Math.max(0, Math.min(body.rows[0].cells.length - 2, c));
+        sheetSel.r = r;
+        sheetSel.c = c;
+        box.querySelectorAll('.xl-sel, .xl-active').forEach((el) => el.classList.remove('xl-sel', 'xl-active'));
+        const tr = body.rows[r];
+        const td = tr && tr.cells[c + 1];
+        if (!td) return;
+        td.classList.add('xl-sel');
+        if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
+        const letters = box.querySelector('.xl-letters');
+        if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
+        const name = $('emp-xl-name');
+        if (name) name.textContent = sheetLetter(c) + (r + 2);
+        const formula = $('emp-xl-formula');
+        if (formula) {
+            const select = td.querySelector('select');
+            formula.textContent = select ? select.value : String(td.textContent || '').replace(/\s+/g, ' ').trim();
+        }
+        if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    function paintViewMode() {
+        const sheet = viewMode() === 'sheet';
+        const shell = $('admin-app');
+        if (shell) shell.classList.toggle('hidden', !sheet);
+        $('cards').classList.toggle('hidden', sheet);
+        const a = $('view-sheet');
+        const b = $('view-cards');
+        if (a) { a.classList.toggle('is-on', sheet); a.setAttribute('aria-pressed', sheet ? 'true' : 'false'); }
+        if (b) { b.classList.toggle('is-on', !sheet); b.setAttribute('aria-pressed', sheet ? 'false' : 'true'); }
+    }
     function paintOrderModal() {
         const modal = $('order-modal');
         const body = $('order-modal-body');
@@ -705,6 +910,14 @@
     }
     function tickTimers() {
         paintSession();
+        document.querySelectorAll('#emp-sheet .timer-cell').forEach((cell) => {
+            const end = parseLocal(cell.dataset.deadline);
+            const ms = end ? end.getTime() - Date.now() : null;
+            cell.textContent = ms == null ? '—' : formatRemain(ms);
+            cell.classList.remove('is-ok', 'is-warn', 'is-bad');
+            const tone = ms == null ? '' : sheetTimerTone(ms);
+            if (tone) cell.classList.add(tone);
+        });
         document.querySelectorAll('.rc-tile .rc-time').forEach((el) => {
             const end = parseLocal(el.dataset.deadline);
             const ms = end ? end.getTime() - Date.now() : null;
@@ -743,6 +956,8 @@
             const data = await res.json().catch(() => ({}));
             const note = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
             if (note) note.textContent = data.error || 'Only the assigned advisor can update this order.';
+            const bar = $('emp-sheet-msg');
+            if (bar) bar.textContent = data.error || 'Only the assigned advisor can update this order.';
         }
     }
 
@@ -1237,6 +1452,7 @@
         });
         $('employee-id').value = '';
         openApp();
+        askDesktopAlertsOnce(readSession());
     });
     $('logout').addEventListener('click', () => endSession('logout'));
     ['click', 'keydown', 'input', 'change', 'scroll'].forEach((type) => window.addEventListener(type, touch, { passive: true }));
@@ -1277,6 +1493,33 @@
         const tile = event.target.closest('.rc-tile');
         if (tile) openOrderModal(tile.dataset.tileKey);
     });
+    // Sheet: click selects a cell, double-click opens the full card, the status select (own orders only) saves.
+    if ($('emp-sheet')) {
+        $('emp-sheet').addEventListener('click', (event) => {
+            const td = event.target.closest('tbody td');
+            if (!td) return;
+            const tr = td.parentElement;
+            sheetSelect(tr.sectionRowIndex, td.cellIndex - 1, false);
+        });
+        $('emp-sheet').addEventListener('dblclick', (event) => {
+            if (event.target.closest('select')) return;
+            const tr = event.target.closest('tbody tr');
+            if (tr && tr.dataset.key) openOrderModal(tr.dataset.key);
+        });
+        $('emp-sheet').addEventListener('change', (event) => {
+            const select = event.target.closest('.xl-status-select');
+            if (select) changeStatus(select.dataset.key, select.value);
+        });
+        $('emp-sheet').addEventListener('keydown', (event) => {
+            if (event.target.closest('select')) return;
+            const moves = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, 1], ArrowLeft: [0, -1] };
+            if (!moves[event.key]) return;
+            event.preventDefault();
+            sheetSelect(sheetSel.r + moves[event.key][0], sheetSel.c + moves[event.key][1], true);
+        });
+    }
+    if ($('view-sheet')) $('view-sheet').addEventListener('click', () => setViewMode('sheet'));
+    if ($('view-cards')) $('view-cards').addEventListener('click', () => setViewMode('cards'));
     if ($('order-modal')) {
         $('order-modal').addEventListener('click', (event) => {
             if (event.target === $('order-modal') || event.target.closest('.rc-close')) { closeOrderModal(); return; }
@@ -1458,7 +1701,34 @@
     // Uses only the browser's own Notification API: nothing is sent to email, chat apps or any outside service.
     // Fires for messages admin sends to this employee (Notifications + BO / order-error messages).
     const NOTIFIED_CAP = 300;
-    function desktopSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+    // Pop-ups outside the browser need a browser that supports them and an https (or localhost) page.
+    function desktopSupported() { return typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext !== false; }
+    // Fallback for everyone else (blocked, not asked yet, old browser, plain-http address): the same alert as a card
+    // inside this page, so every user still gets the alert while the page is open.
+    function showPageToast(title, body) {
+        let box = document.getElementById('ro-toasts');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'ro-toasts';
+            box.setAttribute('role', 'status');
+            box.setAttribute('aria-live', 'polite');
+            document.body.appendChild(box);
+        }
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'ro-toast';
+        const strong = document.createElement('b');
+        strong.textContent = title;
+        const text = document.createElement('span');
+        text.textContent = body || '';
+        card.appendChild(strong);
+        card.appendChild(text);
+        const close = () => { card.remove(); };
+        card.addEventListener('click', () => { try { showView('inbox'); } catch (e) { /* view may not be ready */ } close(); });
+        box.appendChild(card);
+        while (box.children.length > 4) box.firstChild.remove();
+        setTimeout(close, 12000);
+    }
     function notifiedStoreKey(session) { return 'ro-desktop-notified-v1-' + (session && (session.recordId || session.employeeNumber) || 'x'); }
     function readNotified(session) {
         try { return JSON.parse(localStorage.getItem(notifiedStoreKey(session)) || 'null'); } catch (e) { return null; }
@@ -1469,8 +1739,14 @@
     function paintDesktopButton() {
         const button = $('notif-toggle');
         if (!button) return;
-        if (!desktopSupported()) { button.hidden = true; return; }
-        button.hidden = false;
+        button.hidden = false; // always shown, so every user can switch alerts on
+        if (!desktopSupported()) {
+            button.classList.remove('is-blocked');
+            button.classList.add('is-on');
+            button.textContent = 'Page alerts on';
+            button.title = 'This browser or address cannot show pop-ups outside the page. Alerts appear inside this page while it is open. Click to see a test.';
+            return;
+        }
         const permission = Notification.permission;
         button.classList.toggle('is-on', permission === 'granted');
         button.classList.toggle('is-blocked', permission === 'denied');
@@ -1486,7 +1762,7 @@
         }
     }
     function showDesktopNotification(title, body, tag) {
-        if (!desktopSupported() || Notification.permission !== 'granted') return;
+        if (!desktopSupported() || Notification.permission !== 'granted') { showPageToast(title, body); return; }
         try {
             const note = new Notification(title, { body, tag, renotify: false, icon: 'images/logo/toyota.png', dir: 'auto' });
             note.onclick = () => {
@@ -1494,7 +1770,7 @@
                 try { showView('inbox'); } catch (e) { /* view may not be ready */ }
                 note.close();
             };
-        } catch (e) { /* some browsers only allow notifications from a service worker */ }
+        } catch (e) { showPageToast(title, body); /* some browsers only allow notifications from a service worker */ }
     }
     // First run for a person only records what already exists (no flood of old items); later runs pop up the new ones.
     function pushDesktopAlerts(session, candidates) {
@@ -1534,15 +1810,36 @@
         document.title = count > 0 ? `(${count}) ${base}` : base;
     }
     async function toggleDesktopAlerts() {
-        if (!desktopSupported()) return;
+        if (!desktopSupported()) {
+            showPageToast('Page alerts are on', 'Pop-ups outside the browser are not available here, so admin messages will appear inside this page while it is open.');
+            return;
+        }
         if (Notification.permission === 'default') {
             try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
             paintDesktopButton();
             if (Notification.permission === 'granted') showDesktopNotification('Laptop alerts are on', 'You will get a pop-up here when admin sends you a message.', 'ro-test');
+            else showPageToast('Laptop pop-ups are off', 'Admin messages will still appear inside this page. To get laptop pop-ups, allow notifications for this site in the browser address bar.');
             return;
         }
-        if (Notification.permission === 'granted') showDesktopNotification('Test notification', 'This is how admin messages will appear on this laptop.', 'ro-test');
+        if (Notification.permission === 'denied') {
+            showPageToast('Laptop alerts are blocked', 'Click the lock icon in the address bar, set Notifications to Allow, then reload this page. Until then messages appear inside this page.');
+            return;
+        }
+        showDesktopNotification('Test notification', 'This is how admin messages will appear on this laptop.', 'ro-test');
         paintDesktopButton();
+    }
+    // Right after sign-in (a click, so browsers allow it) ask once per person; they can always change it with the button.
+    function askDesktopAlertsOnce(session) {
+        if (!desktopSupported() || Notification.permission !== 'default' || !session) return;
+        const key = 'ro-desktop-asked-v1-' + (session.recordId || session.employeeNumber || 'x');
+        try {
+            if (localStorage.getItem(key)) return;
+            localStorage.setItem(key, '1');
+        } catch (e) { /* storage blocked: ask anyway */ }
+        try {
+            const pending = Notification.requestPermission();
+            if (pending && typeof pending.then === 'function') pending.then(paintDesktopButton, paintDesktopButton);
+        } catch (e) { /* ignore */ }
     }
     async function paintMyAlerts() {
         const session = readSession();

@@ -879,16 +879,20 @@ function reservedExpiryFields(row) {
     return text ? { expiryDate: '', expiryDisplay: text } : null;
 }
 
-function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, reservedSheets }) {
-    const sheet = pickReservedSheet(sheets);
+function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, reservedSheets, rtlRows }) {
+    // The Live sheet is now built from the Reserved Order File (every VIN in it) and each VIN is looked up in the
+    // RTL Stock file. A Stock E-Sales workbook is optional and only used when one is still supplied.
+    const hasReservedFile = (reservedSheets || []).some((item) => item && Array.isArray(item.grid) && item.grid.length);
+    const sheet = pickReservedSheet(sheets) || (hasReservedFile ? { name: '', grid: [] } : null);
     if (!sheet) {
         return {
             ok: false,
-            error: 'Reserved sheet not found. Expected a sheet named المحجوز E-Sales.',
+            error: 'Reserved Order File not found. Push the Reserved Order File (and the RTL Stock file) first.',
             orders: [],
             report: emptyReport()
         };
     }
+    const rtlStockRows = rtlRows instanceof Map ? rtlRows : new Map();
     const extracted = extractReservedRows(sheet.grid || []);
     const readableRows = (sheet.grid || []).filter((line) => (line || []).some((value) => cleanText(value))).length;
     if (!extracted.rows.length && readableRows > 1 && (previous || []).length) {
@@ -1097,7 +1101,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 key: `vin:${vin}`,
                 vin,
                 orderNumber: prefer(row.orderNumber, bo && bo.orderNumber) || 'NO ORDER',
-                salesAdvisor: cleanText(row.salesAdvisor) || 'UNASSIGNED',
+                // No Stock E-Sales row any more: the advisor comes from the Back Order file when the VIN/order is there.
+                salesAdvisor: cleanText(row.salesAdvisor) || cleanText(bo && bo.salesAdvisor) || 'UNASSIGNED',
                 customerName: prefer(row.customerName, bo && bo.customerName),
                 vehicle: cleanText(row.vehicle),
                 modelYear: cleanText(row.modelYear),
@@ -1135,6 +1140,22 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         });
     }
 
+    // RTL Stock check: every VIN of the live orders is looked up in the RTL Stock file and the whole stock row
+    // (all car details) is attached to the order.
+    let rtlMatched = 0;
+    byVin.forEach((order) => {
+        const vin = normalizeVin(order && order.vin);
+        const rtl = vin && rtlStockRows.size ? rtlStockRows.get(vin) : null;
+        order.inRtl = Boolean(rtl);
+        order.rtlFields = rtl ? rtl.fields : [];
+        order.rtlSheetName = rtl ? rtl.sheetName : '';
+        order.rtlRowIndex = rtl ? rtl.rowIndex : null;
+        if (!rtl) return;
+        rtlMatched += 1;
+        if (!cleanText(order.vehicle) && rtl.product) order.vehicle = rtl.product;
+        if (!cleanText(order.searchArea) || order.searchArea === '—') order.searchArea = rtl.searchArea || order.searchArea || '';
+    });
+
     const orders = applyQueue(Array.from(byVin.values()));
     const advisors = new Set(orders.map((o) => o.salesAdvisor).filter((n) => n && n !== 'UNASSIGNED'));
     const paymentBreakdown = { cash: 0, bank: 0, other: 0, unknown: 0 };
@@ -1153,6 +1174,9 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         reservedFileNewVins,
         reservedFileUpdatedVins,
         reservedFileExpiryVins,
+        rtlRows: rtlStockRows.size,
+        rtlMatched,
+        rtlMissing: orders.filter((o) => o.vin && o.vin !== 'VIN NOT FOUND').length - rtlMatched,
         salesAdvisorCount: advisors.size,
         paymentBreakdown,
         earliestAssignDate: assignDates.length ? displayStamp(assignDates[0]) : '',
@@ -1626,6 +1650,28 @@ function attachReservedOrders(app, options) {
     const statusesFile = path.join(options.storeDir, 'reserved-orders-statuses.json');
     const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
     const archiveDir = path.join(options.storeDir, 'reserved-orders-archive');
+    // RTL Stock pushed from the Reserved Orders admin. Kept here (not in the Report Sheet slots) so this push
+    // never changes the Report Sheet dashboards.
+    const rtlStockFile = path.join(options.storeDir, 'reserved-orders-rtl-stock.xlsx');
+    const rtlStockMetaFile = path.join(options.storeDir, 'reserved-orders-rtl-stock.json');
+    function readOwnRtlStock() {
+        try { return fs.existsSync(rtlStockFile) ? fs.readFileSync(rtlStockFile) : null; } catch (e) { return null; }
+    }
+    function saveOwnRtlStock(buffer, name) {
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(rtlStockFile, buffer);
+        fs.writeFileSync(rtlStockMetaFile, JSON.stringify({ name: String(name || 'RTL Stock'), savedAt: new Date().toISOString() }, null, 2), 'utf8');
+    }
+    function ownRtlStockName() {
+        const meta = readJson(rtlStockMetaFile, null);
+        return meta && meta.name ? String(meta.name) : '';
+    }
+    /** RTL Stock used for the VIN check: the one pushed here, else the Report Sheet RTL file. */
+    function readRtlStockForReserved() {
+        const own = readOwnRtlStock();
+        if (own && own.length) return own;
+        return typeof options.readStoredRtl === 'function' ? options.readStoredRtl() : null;
+    }
     const sessions = new Map();
 
     function loadStatuses() {
@@ -2073,17 +2119,19 @@ function attachReservedOrders(app, options) {
     function publish(sheets, bo, names, previous) {
         const rtlSheets = names.rtlSheets && names.rtlSheets.length
             ? names.rtlSheets
-            : sheetsFromStored(options.readStoredRtl);
+            : sheetsFromStored(readRtlStockForReserved);
         const salesSheets = names.salesSheets && names.salesSheets.length
             ? names.salesSheets
             : sheetsFromStored(options.readStoredSales);
         const previousOrders = previous || loadLive().orders || [];
+        const rtlMap = indexRtlStockRows(rtlSheets);
         const built = buildReservedDataset({
             sheets,
             boRows: bo.rows,
             boHeaders: bo.headers,
             previous: previousOrders,
             rtlByVin: indexRtlAging(rtlSheets),
+            rtlRows: rtlMap,
             reservedSheets: names.reservedSheets || []
         });
         if (!built.ok) return built;
@@ -2092,7 +2140,6 @@ function attachReservedOrders(app, options) {
         const orders = applyQueue(reconciled.orders);
         // Existing VIN status is carried forward in buildReservedDataset; only new VINs start fresh.
         // Removed VINs → Sold: Col V invoice = Delivered; found without invoice = Proforma.
-        const rtlMap = indexRtlStockRows(rtlSheets);
         const salesMap = indexSalesRawByVin(salesSheets);
         const soldIncoming = removed.map((order) => classifyRemovedOrder(order, rtlMap, salesMap));
         const soldKept = dropSoldVins(loadSold(), orders.map((order) => order.vin));
@@ -2103,6 +2150,7 @@ function attachReservedOrders(app, options) {
         const live = {
             updatedAt: new Date().toISOString(),
             esalesName: names.esalesName || '',
+            rtlName: names.rtlName || ownRtlStockName(),
             boName: names.boName || '',
             report: Object.assign({}, built.report, {
                 removedOrders: removed.length,
@@ -2416,10 +2464,19 @@ function attachReservedOrders(app, options) {
     app.post('/api/reserved-orders/push', (req, res) => {
         try {
             if (!requireAdmin(req, res)) return;
-            if (!req.body?.esalesBase64) return res.status(400).json({ error: 'Upload the E-Sales file first.' });
-            const esalesBuffer = Buffer.from(String(req.body.esalesBase64), 'base64');
-            const boBuffer = req.body.boBase64 ? Buffer.from(String(req.body.boBase64), 'base64') : null;
-            const sheets = sheetGridsFromBuffer(esalesBuffer);
+            // RTL Stock replaces Stock E-Sales as the file pushed here. The VINs come from the Reserved Order File and
+            // each one is checked in the RTL Stock. (A Stock E-Sales file is still accepted but no longer needed.)
+            const rtlPushed = req.body?.rtlBase64 ? Buffer.from(String(req.body.rtlBase64), 'base64') : null;
+            const esalesBuffer = req.body?.esalesBase64 ? Buffer.from(String(req.body.esalesBase64), 'base64') : null;
+            // The Back Order file comes only from the Report Sheet admin push; a BO file sent here is ignored.
+            const boBuffer = null;
+            if (!rtlPushed && !esalesBuffer && !readRtlStockForReserved()) {
+                return res.status(400).json({ error: 'Upload the RTL Stock file first.' });
+            }
+            if (!req.body?.reservedBase64 && !(typeof options.readStoredReserved === 'function' && options.readStoredReserved())) {
+                return res.status(400).json({ error: 'Upload the Reserved Order File first.' });
+            }
+            const sheets = esalesBuffer && esalesBuffer.length ? sheetGridsFromBuffer(esalesBuffer) : [];
             const bo = boBuffer
                 ? backOrderFromBuffer(boBuffer)
                 : (typeof options.readStoredBackOrder === 'function' ? options.readStoredBackOrder() : { headers: [], rows: [] });
@@ -2430,11 +2487,12 @@ function attachReservedOrders(app, options) {
                 try { reservedBuffer = options.readStoredReserved() || null; } catch (e) { reservedBuffer = null; }
             }
             const reservedSheets = reservedBuffer && reservedBuffer.length ? sheetGridsFromBuffer(reservedBuffer) : [];
-            const rtlSheets = sheetsFromStored(options.readStoredRtl);
+            const rtlSheets = rtlPushed && rtlPushed.length ? sheetGridsFromBuffer(rtlPushed) : sheetsFromStored(readRtlStockForReserved);
             const salesSheets = sheetsFromStored(options.readStoredSales);
             const built = publish(sheets, bo, {
                 esalesName: req.body.esalesName,
-                boName: req.body.boName || (req.body.boBase64 ? '' : 'admin-back-order'),
+                rtlName: (rtlPushed && rtlPushed.length ? req.body.rtlName : '') || ownRtlStockName(),
+                boName: 'Report Sheet admin',
                 reservedSheets,
                 rtlSheets,
                 salesSheets,
@@ -2443,13 +2501,15 @@ function attachReservedOrders(app, options) {
                 actor: { name: 'Admin · Reserved Orders' }
             });
             if (!built.ok) return res.status(400).json({ error: built.error, report: built.report });
+            if (rtlPushed && rtlPushed.length) saveOwnRtlStock(rtlPushed, req.body.rtlName);
             let reportSheet = null;
             if (typeof options.onSourceFiles === 'function') {
+                // RTL Stock is deliberately not passed here: it stays inside Reserved Orders.
                 reportSheet = options.onSourceFiles({
                     esalesBuffer,
                     esalesName: req.body.esalesName,
                     boBuffer,
-                    boName: req.body.boName || '',
+                    boName: '',
                     reservedBuffer: req.body.reservedBase64 ? reservedBuffer : null,
                     reservedName: req.body.reservedName || ''
                 });
@@ -2467,6 +2527,7 @@ function attachReservedOrders(app, options) {
         res.json({
             updatedAt: live.updatedAt || '',
             esalesName: live.esalesName || '',
+            rtlName: live.rtlName || ownRtlStockName(),
             boName: live.boName || '',
             report: live.report || {},
             statuses: loadStatuses(),

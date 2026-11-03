@@ -122,3 +122,20 @@
 #app .rc-fallback, #app .thumb-fallback { display: grid; place-items: center; color: #6b7c97; }
 #app .rc-fallback[hidden], #app .thumb-fallback[hidden] { display: none !important; }
 #app .rc-fallback .car-icon, #app .thumb-fallback .car-icon { opacity: 0.85; }
+
+/* ---- In-page alert cards (used when a laptop pop-up is not available) ---- */
+#ro-toasts { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000; display: grid; gap: 8px; width: min(360px, calc(100vw - 32px)); }
+.ro-toast { display: grid; gap: 4px; text-align: start; cursor: pointer; padding: 12px 14px; border-radius: 12px; color: #e8eefc; background: #121a2e; border: 1px solid rgba(110, 231, 183, 0.5); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); font: inherit; }
+.ro-toast b { font-size: 14px; color: #6ee7b7; }
+.ro-toast span { font-size: 13px; line-height: 1.35; color: #c4d0ea; }
+#app .top-links { flex-wrap: wrap; }
+
+/* Top bar may grow to a second line when the buttons do not fit (was clipped at the top before). */
+#app .topbar { height: auto !important; min-height: 50px; flex: 0 0 auto !important; flex-wrap: wrap; row-gap: 4px; padding-top: 6px; padding-bottom: 6px; }
+
+/* ---- Let the whole page scroll (it used to be locked to the window height, so lower parts could not be reached) ---- */
+body.dash { height: auto !important; min-height: 100vh; overflow-x: hidden !important; overflow-y: auto !important; }
+body.dash #app.tower-app { height: auto !important; min-height: 100vh; }
+#app .tower { overflow: visible !important; flex: 0 0 auto !important; }
+#app .cards, #app .cards.rc-grid { overflow: visible !important; flex: 0 0 auto !important; }
+#app .marketing-board { overflow: visible !important; flex: 0 0 auto !important; }

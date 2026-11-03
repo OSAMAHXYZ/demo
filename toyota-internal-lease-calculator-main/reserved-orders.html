@@ -8,7 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
     <link rel="stylesheet" href="reserved-orders-skin.css?v=20261025audit1">
-    <link rel="stylesheet" href="reserved-orders-cards.css?v=20261103img1">
+    <link rel="stylesheet" href="reserved-orders-cards.css?v=20261103sc1">
+    <link rel="stylesheet" href="reserved-orders-excel.css?v=20261103xl3">
+    <link rel="stylesheet" href="reserved-orders-employee-sheet.css?v=20261103es1">
 </head>
 <body>
     <section id="login" class="login-split">
@@ -130,6 +132,36 @@
                 </select>
                 <button class="ghost" id="filter-clear" type="button">Clear</button>
                 <button class="solid" id="filter-refresh" type="button">Refresh</button>
+                <span class="view-switch" role="group" aria-label="View">
+                    <button class="ghost is-on" id="view-sheet" type="button" aria-pressed="true">Sheet</button>
+                    <button class="ghost" id="view-cards" type="button" aria-pressed="false">Cards</button>
+                </span>
+            </div>
+            <!-- Same Excel look as the admin Live sheet (id "admin-app" only reuses that stylesheet's scope) -->
+            <div id="admin-app" class="emp-xl-shell">
+                <section id="panel-sheet" class="xlw">
+                    <div id="emp-sheet-shell">
+                        <div class="xl-titlebar">
+                            <span class="xl-appicon" aria-hidden="true">X</span>
+                            <span class="xl-autosave" aria-hidden="true">AutoSave <i class="xl-toggle"></i></span>
+                            <span class="xl-filename"><b>Live sheet.xlsx</b> <small>· Everyone sees every order · you edit only your own</small></span>
+                        </div>
+                        <div class="xl-menutabs" aria-hidden="true">
+                            <span>File</span><span class="on">Home</span><span>Insert</span><span>Page Layout</span><span>Formulas</span><span>Data</span><span>Review</span><span>View</span>
+                        </div>
+                        <div class="xl-formulabar">
+                            <div class="xl-namebox" id="emp-xl-name" title="Name Box">A2</div>
+                            <span class="xl-fxbtns" aria-hidden="true"><i>&#10005;</i><i>&#10003;</i><em>fx</em></span>
+                            <div class="xl-formula" id="emp-xl-formula" title="Selected cell value"></div>
+                        </div>
+                        <p class="sheet-note xl-msgbar" id="emp-sheet-msg">Green rows are yours: change the Status dropdown there. Other rows are view-only. Double-click a row for the full card.</p>
+                        <div class="excel-live sheet-merged" id="emp-sheet" data-source="merged" tabindex="0"></div>
+                        <div class="sheet-sources xl-sheettabs" role="tablist" aria-label="Live sheet source">
+                            <button class="sheet-source active" type="button" role="tab" aria-selected="true"><strong>Live sheet</strong></button>
+                        </div>
+                        <div class="xl-statusbar"><span class="xl-ready">Ready</span><span class="xl-stat" id="emp-xl-stat"></span></div>
+                    </div>
+                </section>
             </div>
             <section class="cards" id="cards"></section>
             </div>
@@ -212,5 +244,5 @@
         </div>
 
     </div>
-    <script src="reserved-orders-page.js?v=20261103img1"></script>
+    <script src="reserved-orders-page.js?v=20261103es1"></script>
 </body></html>
