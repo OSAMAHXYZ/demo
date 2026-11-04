@@ -186,7 +186,7 @@
     // E product, F suffix, G exterior, H interior, I VIN, J expiry). The four RTL columns come from the pushed
     // RTL Stock row of the same VIN (M status, K allocation age, N area, H share level). Same columns as the employee page.
     const MERGED_COL_ORDER = ['Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
-    const MERGED_META_COLS = ['Queue position', 'Status', 'Note', 'Updated by'];
+    const MERGED_META_COLS = ['Queue 1', 'Queue 2', 'Queue 3', 'Status', 'Note', 'Updated by'];
     function retailOk(value) {
         const text = String(value || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
         if (!text || text === '—' || text === '-') return false;
@@ -203,7 +203,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN in the Reserved Order File (columns A to J). Expiry date counts down to column J of the Reserved Order File. Usage (L), Allocation age (K), Area (X) and Share level (the Sharing level column) come from the RTL Stock row of the same VIN. Queue position comes from the Toyota Back Order file. Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
+        merged: 'One row per VIN in the Reserved Order File (columns A to J). Expiry date counts down to column J of the Reserved Order File. Usage (L), Allocation age (K), Area (X) and Share level (the Sharing level column) come from the RTL Stock row of the same VIN. Queue 1, 2 and 3 are the positions for colour choices 1, 2 and 3 in the Toyota Back Order file (same as BO Order Lookup). Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -309,7 +309,8 @@
                     || esalesSide.ahead || [],
                 boQueuePosition: esalesSide.boQueuePosition != null ? esalesSide.boQueuePosition : reservedSide.boQueuePosition,
                 boQueueSize: esalesSide.boQueueSize != null ? esalesSide.boQueueSize : reservedSide.boQueueSize,
-                boOrdersAhead: esalesSide.boOrdersAhead != null ? esalesSide.boOrdersAhead : reservedSide.boOrdersAhead
+                boOrdersAhead: esalesSide.boOrdersAhead != null ? esalesSide.boOrdersAhead : reservedSide.boOrdersAhead,
+                boTierQueues: (esalesSide.boTierQueues || []).some(Boolean) ? esalesSide.boTierQueues : reservedSide.boTierQueues
             });
         }
         const base = esalesSide || reservedSide || a;
@@ -636,7 +637,7 @@
         </tr>`).join('');
     }
     function renderReport() {
-        $('report-body').innerHTML = `<h2>Latest push</h2><p>Reserved VINs ${report.reservedVinCount || 0}<br>Matched ${report.matchedOrders || 0}<br>Unmatched ${report.unmatchedVins || 0}<br>Advisors ${report.salesAdvisorCount || 0}<br>Earliest ${esc(report.earliestAssignDate || '—')}<br>Latest ${esc(report.latestAssignDate || '—')}</p>`;
+        $('report-body').innerHTML = `<h2>Latest push</h2><p>Reserved VINs ${report.reservedVinCount || 0}<br>New VINs ${report.reservedFileAddedVins || 0}<br>Changed, status cleared ${report.reservedFileChangedVins || 0}<br>Unchanged, status kept ${report.reservedFileKeptVins || 0}<br>Matched ${report.matchedOrders || 0}<br>Unmatched ${report.unmatchedVins || 0}<br>Advisors ${report.salesAdvisorCount || 0}<br>Earliest ${esc(report.earliestAssignDate || '—')}<br>Latest ${esc(report.latestAssignDate || '—')}</p>`;
     }
     function fillAlertFields() {
         const select = $('alert-field');
@@ -803,6 +804,11 @@
         return text === '—' ? '' : text;
     }
     function sheetValue(order, label, source) {
+        const tierMatch = /^Queue ([123])$/.exec(label);
+        if (tierMatch) {
+            const q = (order.boTierQueues || [])[Number(tierMatch[1]) - 1];
+            return q ? `${q.position} / ${q.size}` : '';
+        }
         if (label === 'Queue position') {
             if (order.boQueuePosition == null) return '';
             return String(order.boQueuePosition) + (order.boQueueSize != null ? ' / ' + order.boQueueSize : '');
@@ -953,6 +959,14 @@
                     ${who ? `<b>${esc(who)}</b>${id ? `<small>${esc(id)}</small>` : ''}` : ''}
                     ${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}
                 </td>`;
+            }
+            const tierMatch = /^Queue ([123])$/.exec(label);
+            if (tierMatch) {
+                const tier = Number(tierMatch[1]);
+                const q = (order.boTierQueues || [])[tier - 1];
+                if (!q) return `<td class="col-queue col-tier" title="No colour choice ${tier} for this order in the Toyota Back Order file"><span class="ahead-empty">—</span></td>`;
+                const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
+                return `<td class="col-queue col-tier" title="Colour choice ${tier}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><span class="q-pill">#${esc(String(q.position))}</span><small class="q-of"> / ${esc(String(q.size))}</small>${pair ? `<small class="q-pair">${esc(pair)}</small>` : ''}</td>`;
             }
             if (label === 'Queue position') {
                 if (order.boQueuePosition == null) return '<td class="col-queue" title="Not found in the Toyota Back Order file"><span class="ahead-empty">—</span></td>';
@@ -1112,14 +1126,18 @@
         if (!xlDraft[source]) xlDraft[source] = { hidden: [], order: [] };
         return xlDraft[source];
     }
-    const renamedCol = (label) => (label === 'RTL status' ? 'Usage' : label);
+    const renamedCol = (label) => {
+        if (label === 'RTL status') return ['Usage'];
+        if (label === 'Queue position') return ['Queue 1', 'Queue 2', 'Queue 3'];
+        return [label];
+    };
     function xlOrdered(source, all) {
         const known = new Set(all);
-        const saved = (xlLayout(source).order || []).map(renamedCol).filter((label) => known.has(label));
+        const saved = (xlLayout(source).order || []).flatMap(renamedCol).filter((label) => known.has(label));
         return saved.concat(all.filter((label) => !saved.includes(label)));
     }
     function xlVisibleCols(source, all) {
-        const hidden = new Set((xlLayout(source).hidden || []).map(renamedCol));
+        const hidden = new Set((xlLayout(source).hidden || []).flatMap(renamedCol));
         const shown = xlOrdered(source, all).filter((label) => !hidden.has(label));
         return shown.length ? shown : all.slice();
     }

@@ -609,7 +609,7 @@
     // ---- Excel-style sheet: same look as the admin Live sheet. Everyone sees every row; only the advisor of an
     // order can set its status (Payment / In progress / Cancelled) and must write a note with it. Double-click a row
     // for the full card. ----
-    const SHEET_COLS = ['Queue position', 'Order status', 'Note', 'Updated', 'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
+    const SHEET_COLS = ['Queue 1', 'Queue 2', 'Queue 3', 'Order status', 'Note', 'Updated', 'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
     const sheetSel = { r: 0, c: 0 };
     function viewMode() {
         try { return localStorage.getItem('ro-orders-view') === 'cards' ? 'cards' : 'sheet'; } catch (e) { return 'sheet'; }
@@ -670,13 +670,15 @@
         const tone = key === 'Cancelled' ? 'is-bad' : key === 'Payment' ? 'is-ok' : key === 'In progress' ? 'is-hold' : 'is-none';
         return `<span class="s-pill ${tone}">${esc(key || 'Not updated')}</span>`;
     }
+    function tierQueueCell(order, tier) {
+        const q = (order.boTierQueues || [])[tier - 1];
+        if (!q) return `<td class="col-queue col-tier" title="No colour choice ${tier} for this order in the Toyota Back Order file"><span class="ahead-empty">—</span></td>`;
+        const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
+        return `<td class="col-queue col-tier" title="Colour choice ${tier}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><span class="q-pill">#${esc(String(q.position))}</span><small class="q-of"> / ${esc(String(q.size))}</small>${pair ? `<small class="q-pair">${esc(pair)}</small>` : ''}</td>`;
+    }
     function sheetCell(order, label, values, mine) {
-        if (label === 'Queue position') {
-            const pos = order.boQueuePosition;
-            if (pos == null) return '<td class="col-queue" title="Not found in the Toyota Back Order file"><span class="ahead-empty">—</span></td>';
-            const size = order.boQueueSize != null ? `<small class="q-of"> / ${esc(String(order.boQueueSize))}</small>` : '';
-            return `<td class="col-queue" title="Back Order queue position"><span class="q-pill">#${esc(String(pos))}</span>${size}</td>`;
-        }
+        const tierMatch = /^Queue ([123])$/.exec(label);
+        if (tierMatch) return tierQueueCell(order, Number(tierMatch[1]));
         if (label === 'Order status') {
             if (!mine) return `<td class="col-status">${sheetStatusPill(order)}</td>`;
             return `<td class="col-status"><select class="xl-status-select admin-status-select" data-key="${esc(order.key)}" aria-label="Choose the status of your order">${statusOptionsHtml(order.status)}</select></td>`;
@@ -847,14 +849,20 @@
         const key = statusKey(order.status);
         const carName = values.Product || 'Car not named';
         const img = carImage(values.Product, order.vehicle, productName(order));
-        const pos = order.boQueuePosition;
-        const queue = pos == null ? '—' : '#' + pos + (order.boQueueSize != null ? ' / ' + order.boQueueSize : '');
+        const tierText = (tier) => {
+            const q = (order.boTierQueues || [])[tier - 1];
+            if (!q) return '—';
+            const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
+            return `#${q.position} / ${q.size}${pair ? ` (${pair})` : ''}`;
+        };
         const who = order.statusNoteBy || order.statusChangedBy || '';
         const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusNoteDisplay || order.statusChangedDisplay || '');
         const note = String(order.statusNote || '').trim();
         const item = (label, value) => `<div class="rd-item"><span>${esc(label)}</span><b dir="auto">${isBlankValue(value) ? '—' : esc(value)}</b></div>`;
         const grid = [
-            item('Queue position', queue),
+            item('Queue 1', tierText(1)),
+            item('Queue 2', tierText(2)),
+            item('Queue 3', tierText(3)),
             item('Salesman name', values['Salesman name']),
             item('Customer name', values['Customer name']),
             item('Order number', values['Order number']),

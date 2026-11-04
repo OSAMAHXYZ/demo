@@ -939,11 +939,28 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         const norm = (value) => cleanText(value).toLowerCase().replace(/\s+/g, ' ');
         return norm(a) === norm(b);
     }
-    function carryForward(prev, record) {
+    // True when the Reserved Order File row of a VIN (columns A to J) differs from the one of the last push.
+    function reservedInfoChanged(prev, fields) {
+        const before = prev && Array.isArray(prev.reservedFields) ? prev.reservedFields : [];
+        if (!before.length) return false;
+        const norm = (value) => {
+            const text = cleanText(value).replace(/\s+/g, ' ').toLowerCase();
+            return text === '—' ? '' : text;
+        };
+        const byCol = (list) => {
+            const map = new Map();
+            (list || []).forEach((field) => { if (field && field.col) map.set(String(field.col).toUpperCase(), norm(field.value)); });
+            return map;
+        };
+        const a = byCol(before);
+        const b = byCol(fields);
+        return 'ABCDEFGHIJ'.split('').some((col) => (a.get(col) || '') !== (b.get(col) || ''));
+    }
+    function carryForward(prev, record, infoChanged) {
         if (!prev) return record;
-        // Same VIN pushed again for ANOTHER salesman: take the new name and info and start over with a blank
-        // status (no old status, note, history or clock). A VIN still with the same salesman keeps everything.
-        if (!sameSalesman(prev.salesAdvisor, record.salesAdvisor)) {
+        // Same VIN pushed again for ANOTHER salesman, or with changed Reserved Order File info: take the new info and
+        // start over with a blank status (no old status, note, history or clock). An unchanged VIN keeps everything.
+        if (infoChanged || !sameSalesman(prev.salesAdvisor, record.salesAdvisor)) {
             const assignmentHistory = Array.isArray(prev.assignmentHistory) ? prev.assignmentHistory.slice() : [];
             assignmentHistory.push({
                 salesAdvisor: record.salesAdvisor,
@@ -1119,6 +1136,9 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
     let reservedFileRows = 0;
     let reservedFileNewVins = 0;
     let reservedFileUpdatedVins = 0;
+    let reservedFileAddedVins = 0;
+    let reservedFileChangedVins = 0;
+    let reservedFileKeptVins = 0;
     let reservedFileExpiryVins = 0;
     const countedUpdated = new Set();
     const countedExpiry = new Set();
@@ -1152,6 +1172,10 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             const prev = earlierOrder(row, vin);
             const expiry = reservedExpiryFields(row);
             if (expiry && !countedExpiry.has(vin)) { countedExpiry.add(vin); reservedFileExpiryVins += 1; }
+            const infoChanged = reservedInfoChanged(prev, row.fields);
+            if (!prev) reservedFileAddedVins += 1;
+            else if (infoChanged) reservedFileChangedVins += 1;
+            else reservedFileKeptVins += 1;
             byVin.set(vin, carryForward(prev, {
                 key: `vin:${vin}`,
                 vin,
@@ -1190,7 +1214,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 matchedBackOrder: Boolean(bo),
                 sourceRow: row.rowIndex,
                 fromReservedFile: true
-            }));
+            }, infoChanged));
             reservedFileNewVins += 1;
         });
     }
@@ -1243,6 +1267,9 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         reservedFileRows,
         reservedFileNewVins,
         reservedFileUpdatedVins,
+        reservedFileAddedVins,
+        reservedFileChangedVins,
+        reservedFileKeptVins,
         reservedFileExpiryVins,
         rtlRows: rtlStockRows.size,
         rtlMatched,
@@ -1452,7 +1479,7 @@ function withColorQueue(orders, table) {
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
     const headers = table && Array.isArray(table.headers) ? table.headers : [];
     const list = Array.isArray(orders) ? orders : [];
-    if (!rows.length || !headers.length) return list.map((order) => ({ ...order, ahead: [] }));
+    if (!rows.length || !headers.length) return list.map((order) => ({ ...order, ahead: [], boTierQueues: [null, null, null] }));
     const lookup = BoOrderLookup.fromBoData({ rows, headers });
     const productColumn = lookup.resolveColumn(headers, [/^product$/i, /product/i, /model/i]);
     const suffixColumn = lookup.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
@@ -1541,6 +1568,26 @@ function withColorQueue(orders, table) {
         return cache.get(key) || [];
     };
 
+    // Same as the Tier 1 / 2 / 3 cards of BO Order Lookup: the order's position in the queue of each of its
+    // colour choices (Ext/Int Color 1, 2 and 3). A "*" colour is expanded and the best position is kept.
+    const tierQueues = (entry) => {
+        const productNorm = lookup.normalizeText(entry.product);
+        const suffixNorm = lookup.normalizeText(entry.suffix);
+        const best = new Map();
+        (entry.pairs || []).forEach((pair) => {
+            lookup.buildPairQueuesForRefPair(allEntries, pair, productNorm, suffixNorm, productColumn, suffixColumn, entry.orderNorm)
+                .forEach((pq) => {
+                    if (pq.position == null) return;
+                    const prev = best.get(pq.tier);
+                    if (!prev || pq.position < prev.position) best.set(pq.tier, pq);
+                });
+        });
+        return [1, 2, 3].map((tier) => {
+            const pq = best.get(tier);
+            return pq ? { tier, exterior: String(pq.exterior || ''), interior: String(pq.interior || ''), position: pq.position, size: pq.totalQueueSize } : null;
+        });
+    };
+
     const toAhead = (queue) => queue.slice(0, 3).map((entry, index) => ({
         queueNumber: index + 1,
         boPosition: index + 1,
@@ -1550,7 +1597,7 @@ function withColorQueue(orders, table) {
     }));
 
     return list.map((order) => {
-        if (!rows.length) return { ...order, ahead: [] };
+        if (!rows.length) return { ...order, ahead: [], boTierQueues: [null, null, null] };
         const needle = lookup.normalizeText(order.orderNumber);
         let refEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
         const spec = orderQueueSpec(order);
@@ -1594,8 +1641,10 @@ function withColorQueue(orders, table) {
         }
 
         const posIdx = needle ? queue.findIndex((entry) => entry.orderNorm === needle) : -1;
+        const fileEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
         return {
             ...order,
+            boTierQueues: fileEntry ? tierQueues(fileEntry) : [null, null, null],
             ahead: toAhead(queue),
             boQueuePosition: posIdx >= 0 ? posIdx + 1 : null,
             boOrdersAhead: posIdx >= 0 ? posIdx : null,
@@ -2291,7 +2340,7 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: pushSource,
             newValue: version,
-            details: `Pushed from ${pushOrigin}. Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length} (delivered ${deliveredCount}, proforma ${proformaCount}), reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, updated ${built.report.reservedFileUpdatedVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
+            details: `Pushed from ${pushOrigin}. Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length} (delivered ${deliveredCount}, proforma ${proformaCount}), reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileAddedVins || 0}, changed so status cleared ${built.report.reservedFileChangedVins || 0}, unchanged so status kept ${built.report.reservedFileKeptVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
         });
         if (created) {
             audit(names.req, {

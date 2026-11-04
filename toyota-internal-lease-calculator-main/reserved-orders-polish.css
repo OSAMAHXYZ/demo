@@ -188,6 +188,8 @@ body > #admin-app .topbar .top-links { justify-self: end; }
 .login-screen .login-card .field { text-align: left; }
 
 /* ---------- Live sheet: expiry countdown (Reserved Order File column J) ---------- */
+td.col-tier { white-space: nowrap; line-height: 1.25; }
+td.col-tier .q-pair { display: block; margin-top: 2px; color: #6b6b6b !important; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
 #admin-app #panel-sheet td.xl-expiry { white-space: nowrap; line-height: 1.25; }
 #admin-app #panel-sheet td.xl-expiry b {
   display: block;
