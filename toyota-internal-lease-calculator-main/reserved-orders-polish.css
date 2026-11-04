@@ -187,6 +187,19 @@ body > #admin-app .topbar .top-links { justify-self: end; }
 .login-screen .login-card { text-align: center; }
 .login-screen .login-card .field { text-align: left; }
 
+/* ---------- Live sheet: expiry countdown (Reserved Order File column J) ---------- */
+#admin-app #panel-sheet td.xl-expiry { white-space: nowrap; line-height: 1.25; }
+#admin-app #panel-sheet td.xl-expiry b {
+  display: block;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+#admin-app #panel-sheet td.xl-expiry small { display: block; margin-top: 1px; color: #6b6b6b !important; font-size: 11px; }
+#admin-app #panel-sheet td.xl-expiry.is-ok b { color: #0b7a3a !important; }
+#admin-app #panel-sheet td.xl-expiry.is-warn b { color: #b45309 !important; }
+#admin-app #panel-sheet td.xl-expiry.is-bad b { color: #c0392b !important; }
+
 @media (max-width: 760px) {
   :root { --ro-gutter: 14px; }
   .mc-head h1 { font-size: 1.45rem; }

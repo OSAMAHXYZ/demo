@@ -1205,15 +1205,16 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         order.rtlFields = rtl ? rtl.fields : [];
         order.rtlSheetName = rtl ? rtl.sheetName : '';
         order.rtlRowIndex = rtl ? rtl.rowIndex : null;
-        // Car details from the RTL row: M status, K allocation age, N area, H share level.
+        // Car details from the RTL row: L usage, K allocation age, X area, H share level.
         const rtlCol = (letter) => {
             const hit = rtl && (rtl.fields || []).find((field) => String(field.col || '').toUpperCase() === letter);
             const text = hit ? cleanText(hit.value) : '';
             return text === '—' ? '' : text;
         };
         order.rtlStatus = rtlCol('M');
+        order.rtlUsage = rtlCol('L');
         order.rtlAllocationAge = rtlCol('K');
-        order.rtlArea = rtlCol('N');
+        order.rtlArea = rtlCol('X');
         order.rtlShareLevel = rtlCol('H');
         if (!rtl) return;
         rtlMatched += 1;

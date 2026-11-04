@@ -52,6 +52,30 @@
         }
         return order && order.deadline || '';
     }
+    // Deadline for the Live sheet "Expiry date" timer: only the Reserved Order File expiry (column J).
+    function expiryDeadlineOf(order) {
+        if (order && order.expiryDate && parseLocal(order.expiryDate)) return order.expiryDate;
+        const iso = String(order && order.expiryDate || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}T23:59:59`;
+        const display = String(order && order.expiryDisplay || '').trim();
+        const dmy = display.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+        if (!dmy) return '';
+        const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+        return `${year}-${pad(dmy[2])}-${pad(dmy[1])}T23:59:59`;
+    }
+    function expiryCountdown(ms) {
+        if (ms == null) return '';
+        if (ms <= 0) return 'Expired';
+        const total = Math.floor(ms / 1000);
+        const days = Math.floor(total / 86400);
+        const rest = total % 86400;
+        return `${days ? days + 'd ' : ''}${pad(Math.floor(rest / 3600))}:${pad(Math.floor((rest % 3600) / 60))}:${pad(rest % 60)}`;
+    }
+    function expiryTone(ms) {
+        if (ms == null) return '';
+        if (ms <= 0) return 'is-bad';
+        return ms < 86400000 ? 'is-warn' : 'is-ok';
+    }
     function remainMs(order) {
         const end = parseLocal(orderDeadline(order));
         return end ? end.getTime() - Date.now() : null;
@@ -161,7 +185,7 @@
     // Live sheet columns. A-J come from the pushed Reserved Order File (A salesman, B customer, C order, D model year,
     // E product, F suffix, G exterior, H interior, I VIN, J expiry). The four RTL columns come from the pushed
     // RTL Stock row of the same VIN (M status, K allocation age, N area, H share level). Same columns as the employee page.
-    const MERGED_COL_ORDER = ['Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'RTL status', 'Allocation age', 'Area', 'Share level'];
+    const MERGED_COL_ORDER = ['Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
     const MERGED_META_COLS = ['Queue position', 'Status', 'Note', 'Updated by'];
     function retailOk(value) {
         const text = String(value || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
@@ -179,7 +203,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN in the Reserved Order File (columns A to J). RTL status, Allocation age, Area and Share level come from the RTL Stock row of the same VIN. Queue position comes from the Toyota Back Order file. Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
+        merged: 'One row per VIN in the Reserved Order File (columns A to J). Expiry date counts down to column J of the Reserved Order File. Usage (L), Allocation age (K), Area (X) and Share level (H) come from the RTL Stock row of the same VIN. Queue position comes from the Toyota Back Order file. Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -337,9 +361,9 @@
             'Interior color': firstReal(pick('H'), order.interior),
             VIN: vin,
             'Expiry date': firstReal(formatExpiryValue(order, reserved), pick('J')),
-            'RTL status': rtlValue(order, 'M'),
+            Usage: rtlValue(order, 'L'),
             'Allocation age': rtlValue(order, 'K'),
-            Area: firstReal(rtlValue(order, 'N'), order.searchArea),
+            Area: firstReal(rtlValue(order, 'X'), order.searchArea),
             'Share level': firstReal(rtlValue(order, 'H'), order.shareLevel)
         };
         const mergedFields = MERGED_COL_ORDER.map((label) => ({
@@ -933,7 +957,14 @@
                 return `<td class="col-note" title="${esc(value)}">${value ? `<span class="xl-note-text" dir="auto">${esc(value)}</span>` : '<span class="ahead-empty">—</span>'}</td>`;
             }
             if (label === 'Salesman name') return `<td class="col-advisor">${value ? `<b>${esc(value)}</b>` : ''}</td>`;
-            if (label === 'RTL status') return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
+            if (label === 'Usage') return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
+            if (label === 'Expiry date') {
+                const deadline = value ? expiryDeadlineOf(order) : '';
+                const end = parseLocal(deadline);
+                if (!end) return `<td class="col-expiry">${esc(value)}</td>`;
+                const ms = end.getTime() - Date.now();
+                return `<td class="col-expiry xl-expiry ${expiryTone(ms)}" data-expiry="${esc(deadline)}" title="Expires ${esc(value)}"><b class="xl-expiry-left">${esc(expiryCountdown(ms))}</b><small>${esc(value)}</small></td>`;
+            }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'Expiry') return `<td class="col-expiry">${esc(value || '—')}</td>`;
             if (label === 'Time left') {
@@ -1075,13 +1106,14 @@
         if (!xlDraft[source]) xlDraft[source] = { hidden: [], order: [] };
         return xlDraft[source];
     }
+    const renamedCol = (label) => (label === 'RTL status' ? 'Usage' : label);
     function xlOrdered(source, all) {
         const known = new Set(all);
-        const saved = (xlLayout(source).order || []).filter((label) => known.has(label));
+        const saved = (xlLayout(source).order || []).map(renamedCol).filter((label) => known.has(label));
         return saved.concat(all.filter((label) => !saved.includes(label)));
     }
     function xlVisibleCols(source, all) {
-        const hidden = new Set(xlLayout(source).hidden || []);
+        const hidden = new Set((xlLayout(source).hidden || []).map(renamedCol));
         const shown = xlOrdered(source, all).filter((label) => !hidden.has(label));
         return shown.length ? shown : all.slice();
     }
@@ -1562,6 +1594,16 @@
         } catch (e) { if (e.message !== 'unauthorized') $('push-error').textContent = e.message; }
     });
     setInterval(() => {
+        document.querySelectorAll('.xl-expiry').forEach((cell) => {
+            const end = parseLocal(cell.dataset.expiry);
+            if (!end) return;
+            const ms = end.getTime() - Date.now();
+            const left = cell.querySelector('.xl-expiry-left');
+            if (left) left.textContent = expiryCountdown(ms);
+            cell.classList.remove('is-ok', 'is-warn', 'is-bad');
+            const tone = expiryTone(ms);
+            if (tone) cell.classList.add(tone);
+        });
         document.querySelectorAll('.timer-cell').forEach((cell) => {
             const end = parseLocal(cell.dataset.deadline);
             if (!end) {

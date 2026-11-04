@@ -62,6 +62,20 @@
         const remain = formatRemain(ms);
         return remain ? `${dateText} ( ${remain} )` : dateText;
     }
+    // Live countdown to the Reserved Order File expiry (column J): "3d 04:12:09", then "Expired".
+    function expiryCountdown(ms) {
+        if (ms == null) return '';
+        if (ms <= 0) return 'Expired';
+        const total = Math.floor(ms / 1000);
+        const days = Math.floor(total / 86400);
+        const rest = total % 86400;
+        return `${days ? days + 'd ' : ''}${pad(Math.floor(rest / 3600))}:${pad(Math.floor((rest % 3600) / 60))}:${pad(rest % 60)}`;
+    }
+    function expiryTone(ms) {
+        if (ms == null) return '';
+        if (ms <= 0) return 'is-bad';
+        return ms < 86400000 ? 'is-warn' : 'is-ok';
+    }
     // Green until 4h past expiry; yellow from 4–8h overdue; red after 8h overdue.
     function timerClass(ms) {
         if (ms == null) return '';
@@ -595,7 +609,7 @@
     // ---- Excel-style sheet: same look as the admin Live sheet. Everyone sees every row; only the advisor of an
     // order can set its status (Payment / In progress / Cancelled) and must write a note with it. Double-click a row
     // for the full card. ----
-    const SHEET_COLS = ['Queue position', 'Order status', 'Note', 'Updated', 'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'RTL status', 'Allocation age', 'Area', 'Share level'];
+    const SHEET_COLS = ['Queue position', 'Order status', 'Note', 'Updated', 'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
     const sheetSel = { r: 0, c: 0 };
     function viewMode() {
         try { return localStorage.getItem('ro-orders-view') === 'cards' ? 'cards' : 'sheet'; } catch (e) { return 'sheet'; }
@@ -611,7 +625,7 @@
         return out;
     }
     function realText(value) { return isBlankValue(value) ? '' : String(value).replace(/\u00a0/g, ' ').trim(); }
-    // value of an RTL Stock column of the order's VIN (M status, K allocation age, N area, H share level)
+    // value of an RTL Stock column of the order's VIN (L usage, K allocation age, X area, H share level)
     function rtlCol(order, letter) {
         const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === letter);
         return hit ? realText(hit.value) : '';
@@ -641,9 +655,9 @@
             'Interior color': pick('H') || realText(order.interior),
             VIN: looksLikeVinText(vinText) ? vinText : (looksLikeVinText(order.vin) ? String(order.vin).trim() : ''),
             'Expiry date': expiryText(order) || pick('J'),
-            'RTL status': rtlCol(order, 'M'),
+            Usage: rtlCol(order, 'L'),
             'Allocation age': rtlCol(order, 'K'),
-            Area: rtlCol(order, 'N') || realText(order.searchArea),
+            Area: rtlCol(order, 'X') || realText(order.searchArea),
             'Share level': rtlCol(order, 'H') || realText(order.shareLevel)
         };
     }
@@ -676,9 +690,17 @@
             if (!statusKey(order.status) || (!who && !when)) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
             return `<td class="col-updated-by">${who ? `<b>${esc(who)}</b>` : ''}${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}</td>`;
         }
-        if (label === 'RTL status') {
-            const value = values['RTL status'];
+        if (label === 'Usage') {
+            const value = values.Usage;
             return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
+        }
+        if (label === 'Expiry date') {
+            const date = values['Expiry date'];
+            const deadline = date ? expiryDeadline(order) : '';
+            const end = parseLocal(deadline);
+            if (!end) return `<td class="col-expiry">${esc(date)}</td>`;
+            const ms = end.getTime() - Date.now();
+            return `<td class="col-expiry xl-expiry ${expiryTone(ms)}" data-expiry="${esc(deadline)}" title="Expires ${esc(date)}"><b class="xl-expiry-left">${esc(expiryCountdown(ms))}</b><small>${esc(date)}</small></td>`;
         }
         if (label === 'Salesman name') return `<td class="col-advisor">${values[label] ? (mine ? `<b>${esc(values[label])}</b>` : esc(values[label])) : ''}</td>`;
         const value = values[label] == null ? '' : values[label];
@@ -839,7 +861,7 @@
             item('Interior color', values['Interior color']),
             item('VIN', values.VIN),
             item('Expiry date', values['Expiry date']),
-            item('RTL status', values['RTL status']),
+            item('Usage', values.Usage),
             item('Allocation age', values['Allocation age']),
             item('Area', values.Area),
             item('Share level', values['Share level'])
@@ -964,6 +986,16 @@
     }
     function tickTimers() {
         paintSession();
+        document.querySelectorAll('.xl-expiry').forEach((cell) => {
+            const end = parseLocal(cell.dataset.expiry);
+            if (!end) return;
+            const ms = end.getTime() - Date.now();
+            const left = cell.querySelector('.xl-expiry-left');
+            if (left) left.textContent = expiryCountdown(ms);
+            cell.classList.remove('is-ok', 'is-warn', 'is-bad');
+            const tone = expiryTone(ms);
+            if (tone) cell.classList.add(tone);
+        });
         document.querySelectorAll('.rc-tile .rc-time').forEach((el) => {
             const end = parseLocal(el.dataset.deadline);
             const ms = end ? end.getTime() - Date.now() : null;
