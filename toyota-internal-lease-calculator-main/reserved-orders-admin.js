@@ -1902,7 +1902,7 @@
             }
         }
         try { localStorage.setItem(PENDING_LOG_KEY, JSON.stringify(log)); } catch (e) { /* ignore */ }
-        if (send) { send.textContent = 'Notify selected'; }
+        if (send) { send.textContent = 'Send again to selected'; }
         paintPendingModal();
         if (error) {
             error.classList.toggle('ok', !failed.length);
@@ -1912,7 +1912,11 @@
         }
     }
     document.addEventListener('click', (event) => {
-        if (event.target.closest('[data-notify-pending]')) { openPendingModal(); return; }
+        if (event.target.closest('[data-notify-pending]')) {
+            openPendingModal();
+            if (document.querySelector('#pending-list .pn-check:checked')) sendPendingNotices();
+            return;
+        }
         const modal = $('pending-modal');
         if (!modal || modal.classList.contains('hidden')) return;
         if (event.target === modal || event.target.closest('#pending-close')) closePendingModal();

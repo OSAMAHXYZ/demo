@@ -73,7 +73,7 @@
                     <select id="admin-status"></select>
                     <select id="admin-payment"><option value="">Payment</option><option value="cash">Cash</option><option value="bank">Bank</option><option value="other">Other</option><option value="unknown">Blank / unknown</option></select>
                     <select id="admin-expired"><option value="">All timers</option><option value="expired">Expired only</option></select>
-                    <button class="solid" type="button" data-notify-pending title="Remind employees whose reserved orders have no status update">Notify employees who haven't updated</button>
+                    <button class="solid" type="button" data-notify-pending title="Send a reminder right away to every employee whose reserved orders have no status update">Notify all who haven't updated</button>
                 </div>
                 <div class="panel" style="overflow:auto;"><table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Expiry date</th><th>Time left</th><th></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
             </section>
@@ -121,7 +121,7 @@
                     </div>
                     <div class="xl-rgroup">
                         <div class="xl-rbtns">
-                            <button type="button" class="xl-rbtn" data-notify-pending title="Remind employees whose reserved orders have no status update"><i aria-hidden="true">&#9993;</i><span>Notify not updated</span></button>
+                            <button type="button" class="xl-rbtn" data-notify-pending title="Send a reminder right away to every employee whose reserved orders have no status update"><i aria-hidden="true">&#9993;</i><span>Notify all not updated</span></button>
                         </div>
                         <em>Employees</em>
                     </div>
@@ -237,10 +237,10 @@
                 <div class="pn-actions">
                     <button class="ghost" id="pending-all" type="button">Select all</button>
                     <button class="ghost" id="pending-none" type="button">Clear</button>
-                    <button class="solid" id="pending-send" type="button">Notify selected</button>
+                    <button class="solid" id="pending-send" type="button">Send again to selected</button>
                 </div>
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261104sl1"></script>
+    <script src="reserved-orders-admin.js?v=20261104nt1"></script>
 </body></html>
