@@ -203,7 +203,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN in the Reserved Order File (columns A to J). Expiry date counts down to column J of the Reserved Order File. Usage (L), Allocation age (K), Area (X) and Share level (H) come from the RTL Stock row of the same VIN. Queue position comes from the Toyota Back Order file. Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
+        merged: 'One row per VIN in the Reserved Order File (columns A to J). Expiry date counts down to column J of the Reserved Order File. Usage (L), Allocation age (K), Area (X) and Share level (the Sharing level column) come from the RTL Stock row of the same VIN. Queue position comes from the Toyota Back Order file. Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -364,7 +364,7 @@
             Usage: rtlValue(order, 'L'),
             'Allocation age': rtlValue(order, 'K'),
             Area: firstReal(rtlValue(order, 'X'), order.searchArea),
-            'Share level': firstReal(rtlValue(order, 'H'), order.shareLevel)
+            'Share level': firstReal(rtlByLabel(order, 'sharing level'), rtlValue(order, 'H'), order.shareLevel)
         };
         const mergedFields = MERGED_COL_ORDER.map((label) => ({
             label,
@@ -792,6 +792,12 @@
     function rtlValue(order, col) {
         const want = String(col || '').toUpperCase();
         const hit = (order && Array.isArray(order.rtlFields) ? order.rtlFields : []).find((field) => String(field.col || '').toUpperCase() === want);
+        if (!hit || hit.value == null) return '';
+        const text = String(hit.value).trim();
+        return text === '—' ? '' : text;
+    }
+    function rtlByLabel(order, label) {
+        const hit = (order && Array.isArray(order.rtlFields) ? order.rtlFields : []).find((field) => String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase() === label);
         if (!hit || hit.value == null) return '';
         const text = String(hit.value).trim();
         return text === '—' ? '' : text;

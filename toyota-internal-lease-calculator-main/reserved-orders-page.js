@@ -625,9 +625,13 @@
         return out;
     }
     function realText(value) { return isBlankValue(value) ? '' : String(value).replace(/\u00a0/g, ' ').trim(); }
-    // value of an RTL Stock column of the order's VIN (L usage, K allocation age, X area, H share level)
+    // value of an RTL Stock column of the order's VIN (L usage, K allocation age, X area)
     function rtlCol(order, letter) {
         const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === letter);
+        return hit ? realText(hit.value) : '';
+    }
+    function rtlByLabel(order, label) {
+        const hit = (order.rtlFields || []).find((field) => String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase() === label);
         return hit ? realText(hit.value) : '';
     }
     function statusKey(value) {
@@ -658,7 +662,7 @@
             Usage: rtlCol(order, 'L'),
             'Allocation age': rtlCol(order, 'K'),
             Area: rtlCol(order, 'X') || realText(order.searchArea),
-            'Share level': rtlCol(order, 'H') || realText(order.shareLevel)
+            'Share level': rtlByLabel(order, 'sharing level') || rtlCol(order, 'H') || realText(order.shareLevel)
         };
     }
     function sheetStatusPill(order) {

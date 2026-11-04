@@ -1205,17 +1205,18 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         order.rtlFields = rtl ? rtl.fields : [];
         order.rtlSheetName = rtl ? rtl.sheetName : '';
         order.rtlRowIndex = rtl ? rtl.rowIndex : null;
-        // Car details from the RTL row: L usage, K allocation age, X area, H share level.
-        const rtlCol = (letter) => {
-            const hit = rtl && (rtl.fields || []).find((field) => String(field.col || '').toUpperCase() === letter);
+        // Car details from the RTL row: L usage, K allocation age, X area, "Sharing level" column for share level.
+        const rtlText = (hit) => {
             const text = hit ? cleanText(hit.value) : '';
             return text === '—' ? '' : text;
         };
+        const rtlCol = (letter) => rtlText(rtl && (rtl.fields || []).find((field) => String(field.col || '').toUpperCase() === letter));
+        const rtlByLabel = (label) => rtlText(rtl && (rtl.fields || []).find((field) => String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase() === label));
         order.rtlStatus = rtlCol('M');
         order.rtlUsage = rtlCol('L');
         order.rtlAllocationAge = rtlCol('K');
         order.rtlArea = rtlCol('X');
-        order.rtlShareLevel = rtlCol('H');
+        order.rtlShareLevel = rtlByLabel('sharing level') || rtlCol('H');
         if (!rtl) return;
         rtlMatched += 1;
         if (!cleanText(order.vehicle) && rtl.product) order.vehicle = rtl.product;
