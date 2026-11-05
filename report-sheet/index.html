@@ -16,7 +16,7 @@
     if (window.Chart && Chart.defaults) { Chart.defaults.color = "#8d9bb0"; Chart.defaults.borderColor = "rgba(148,163,184,.10)"; }
   </script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="auth.js?v=20261031auth4"></script>
+  <script src="auth.js?v=20261105zt1"></script>
   <script src="data-store.js?v=20261018ytd1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
@@ -26,6 +26,7 @@
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261019swap5"></script>
+  <script src="zone-tracker.js?v=20261105zt2"></script>
   <script src="contact-performance.js?v=20261031cp3"></script>
   <script src="evaluation-data.js?v=20261031ev2"></script>
   <script src="evaluation.js?v=20261031ev2"></script>
@@ -42,7 +43,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261023op1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261019ds2" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261105ytd1" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261019alloc7" />
   <link rel="stylesheet" href="contact-performance.css?v=20261031cp3" />
   <link rel="stylesheet" href="evaluation.css?v=20261031ev2" />
@@ -1625,6 +1626,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
   <link rel="stylesheet" href="unified-layout.css?v=20261031u2" />
   <link rel="stylesheet" href="unified-design.css?v=20261103ud2" />
   <link rel="stylesheet" href="bo-dashboard-fit.css?v=20261103bf1" />
+  <link rel="stylesheet" href="matched-vehicles.css?v=20261105mv1" />
+  <link rel="stylesheet" href="zone-tracker.css?v=20261105zt2" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -2172,7 +2175,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
           <div>
             <p class="ytd-kicker">Toyota · ALJ · Digital Retail</p>
             <h2 class="ytd-title">YTD Sales</h2>
-            <p class="ytd-sub">Past months are pushed month by month from the Admin page. This month stays live. Target comes from the pushed month. Actual is the Sales Raw column V count for each employee.</p>
+            <p class="ytd-sub">Actual is the Sales Raw column V count for each advisor in each month. Monthly targets are pushed from Admin → YTD sales. Ach% = Actual ÷ Target. Open a month to see every advisor.</p>
           </div>
           <label class="ytd-year">
             <span>Year</span>
@@ -2913,6 +2916,133 @@ body.live-app #panel-salesreport .sr-emp-sum {
             </div>
             <div id="pt-drawer-body"></div>
           </aside>
+        </div>
+      </div>
+
+      <!-- PANEL: Zone Tracker · Plan Tracker counting per Search Area zone -->
+      <div class="panel-section" id="panel-zonetracker" style="display:none">
+        <div class="bo-empty card" id="zt-empty">
+          <h2>Zone Tracker</h2>
+          <p style="color:var(--muted);margin:0 0 12px">
+            Cars per zone (Search Area Desc) with the same rules as Plan Tracker.
+            Reads <b>daily RTL snapshots</b> from <a href="data-uploader.html">Data Uploader</a>
+            (same archive as Admin Push · <code>rtl-daily</code>).
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Open <a href="data-uploader.html">Data Uploader</a></li>
+            <li>Upload one RTL Excel per day (first worksheet · VIN · Search Area · Allocation Date · Age)</li>
+            <li>Return here · open <b>Zone Tracker</b> · click <b>Refresh</b></li>
+          </ol>
+          <p class="foot" id="zt-empty-month"></p>
+          <div class="zt-empty-actions">
+            <button type="button" class="btn" id="zt-empty-prev">Previous month</button>
+            <button type="button" class="btn" id="zt-empty-now">This Month</button>
+            <button type="button" class="btn-primary" id="zt-empty-refresh">Refresh</button>
+          </div>
+          <p class="foot" id="zt-loading" hidden>Loading day RTL snapshots…</p>
+        </div>
+
+        <div id="zt-dash" class="zt-dash" hidden>
+          <header class="pt-top zt-top">
+            <div class="pt-top-copy">
+              <div class="pt-brand" aria-hidden="true">
+                <img class="pt-brand-logo" src="../images/logo/toyota.png" alt="" width="28" height="28" decoding="async" onerror="this.style.display='none'" />
+              </div>
+              <div class="pt-brand-copy">
+                <p class="pt-eye">ALJ DIGITAL RETAIL</p>
+                <h2>Zone Tracker</h2>
+                <p class="pt-sub" id="zt-live-hint">—</p>
+              </div>
+            </div>
+            <div class="pt-actions zt-actions">
+              <span class="pt-month-chip">
+                <span class="pt-month-k">Month</span>
+                <strong class="pt-month-label zt-month-label">Month</strong>
+              </span>
+              <button type="button" class="btn" id="zt-month-prev">Previous</button>
+              <button type="button" class="btn" id="zt-month-next">Next</button>
+              <button type="button" class="btn" id="zt-month-now">This Month</button>
+              <div class="pt-mode zt-mode" role="group" aria-label="Period">
+                <button type="button" data-zt-mode="daily">Daily</button>
+                <button type="button" data-zt-mode="cumulative">Cumulative</button>
+              </div>
+              <select id="zt-day" aria-label="Day file" title="Day shown in Daily mode"></select>
+              <button type="button" class="btn-primary" id="zt-refresh">Refresh</button>
+              <button type="button" class="btn" id="zt-export">Excel</button>
+              <span class="pt-updated-wrap">
+                <span class="pt-updated-k">Last Updated</span>
+                <strong class="pt-updated" id="zt-updated">—</strong>
+              </span>
+            </div>
+          </header>
+
+          <div class="pt-filters zt-filters">
+            <select id="zt-f-zone" aria-label="Zone"><option value="">All zones</option></select>
+            <select id="zt-f-sharing" aria-label="Sharing level"><option value="">All sharing levels</option></select>
+            <select id="zt-f-product" aria-label="Product"><option value="">All products</option></select>
+            <select id="zt-f-sfx" aria-label="SFX"><option value="">All SFX</option></select>
+            <select id="zt-f-usage" aria-label="Usage"><option value="">All usage</option></select>
+            <select id="zt-f-status" aria-label="Status"><option value="">All statuses</option></select>
+            <input type="search" id="zt-q" placeholder="Search VIN or product" autocomplete="off" />
+            <button type="button" class="btn" id="zt-clear">Clear</button>
+          </div>
+
+          <div class="pt-kpis zt-kpis" id="zt-kpis"></div>
+
+          <div class="zt-grid">
+            <article class="pt-card zt-card">
+              <div class="pt-card-h"><h3>Cars received per zone</h3><span class="zt-note" id="zt-zone-chart-note"></span></div>
+              <div class="pt-chart zt-chart"><canvas id="zt-chart-zones"></canvas><p class="zt-empty-note" id="zt-zone-chart-empty" hidden>No cars received for these filters.</p></div>
+            </article>
+            <article class="pt-card zt-card">
+              <div class="pt-card-h"><h3 id="zt-daily-title">Daily received</h3><span class="zt-note" id="zt-daily-note"></span></div>
+              <div class="pt-chart zt-chart"><canvas id="zt-chart-daily"></canvas></div>
+            </article>
+            <article class="pt-card zt-card zt-span-2">
+              <div class="pt-card-h"><h3>Zone × model</h3><span class="zt-note">Cars in today's file · click a zone row to select it</span></div>
+              <div class="zt-scroll" id="zt-matrix"></div>
+            </article>
+            <article class="pt-card zt-card zt-span-2">
+              <div class="pt-card-h"><h3 id="zt-plan-title">Selected zone by model &amp; SFX</h3><span class="zt-note">Allocation from Admin plan · Remaining = Allocation − Received MTD</span></div>
+              <div class="zt-scroll" id="zt-plan"></div>
+            </article>
+            <article class="pt-card zt-card zt-span-2">
+              <div class="pt-card-h"><h3>Movements</h3><span class="zt-note" id="zt-moves-count"></span></div>
+              <div class="pt-tabs zt-kinds" id="zt-move-kinds"></div>
+              <div class="zt-scroll zt-scroll-tall" id="zt-moves"></div>
+            </article>
+            <article class="pt-card zt-card zt-span-2">
+              <div class="pt-card-h"><h3>Cars with no plan line</h3><span class="zt-note" id="zt-unmatched-count"></span></div>
+              <div class="zt-scroll" id="zt-unmatched"></div>
+            </article>
+          </div>
+
+          <div class="pt-modal zt-modal" id="zt-modal" hidden>
+            <div class="pt-modal-card pt-modal-wide">
+              <div class="pt-modal-h">
+                <div>
+                  <p class="pt-eye">VIN RESULTS</p>
+                  <h3 id="zt-modal-title">VINs</h3>
+                  <p class="pt-sub" id="zt-modal-sub"></p>
+                </div>
+                <button type="button" class="btn" data-zt-close="1">Close</button>
+              </div>
+              <div class="pt-vin-tools">
+                <input type="search" id="zt-modal-q" placeholder="Search VIN, product, zone" autocomplete="off" />
+              </div>
+              <div class="zt-scroll zt-modal-scroll">
+                <table class="pt-table zt-table">
+                  <thead>
+                    <tr>
+                      <th>VIN</th><th>Product</th><th>SFX</th><th>Zone</th><th>Sharing level</th><th>Usage</th>
+                      <th class="num">Age</th><th>AG date</th><th class="num">Day</th><th>Status</th><th>Badge</th>
+                    </tr>
+                  </thead>
+                  <tbody id="zt-modal-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -8581,6 +8711,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "gec", label: "GEC Dashboard" },
     { id: "plantracker", label: "Plan Tracker" },
+    { id: "zonetracker", label: "Zone Tracker" },
     { id: "ytdsales", label: "YTD Sales" },
     { id: "contact", label: "Contact Performance" },
     { id: "evaluation", label: "Evaluation Criteria" },
@@ -8640,6 +8771,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (p.id === "salesreport" || p.id === "summary") return true;
       if (p.id === "reservedvehicles") return true;
       if (p.id === "plantracker") return true;
+      if (p.id === "zonetracker") return true;
       if (p.id === "gec") return true;
       if (p.id === "delivery") return true;
       if (p.id === "boerrors") return true;
@@ -9240,6 +9372,52 @@ body.live-app #panel-salesreport .sr-emp-sum {
     });
   }
 
+  /** Bridge helpers for Zone Tracker module (same rtl-daily snapshots and RES rules as Plan Tracker). */
+  function renderZoneTrackerPanel(force) {
+    Object.assign(window, {
+      ensureRtlActiveMonth,
+      getCachedRtlActiveMonth,
+      basMonthContext,
+      mapRtlDailyVehicle,
+      dayVehicleSearchArea,
+      dayVehicleAgDate,
+      dayVehicleField,
+      extractVinValue,
+      upperTrim,
+      normHeader,
+      parseDate,
+      escapeHtml,
+      formatNumber,
+      setStatus,
+      matchRtlToAllocLeaf,
+      ALLOCATION_ROWS,
+      allocationValues,
+      basAgSameAsFileDay,
+      basScheduleDayFromAg,
+      inferCollectionDateFromAge,
+      basDaySalesBucket,
+      buildSalesVinLookup,
+      buildBasMonthlyData,
+      appendObjectSheet,
+      downloadWorkbook,
+      excelFileStamp,
+    });
+    if (!window.ZoneTracker || typeof window.ZoneTracker.render !== "function") {
+      const empty = $("#zt-empty");
+      if (empty) {
+        empty.hidden = false;
+        empty.innerHTML = `<h2>Zone Tracker</h2><p class="foot">zone-tracker.js failed to load.</p>`;
+      }
+      const dash = $("#zt-dash");
+      if (dash) dash.hidden = true;
+      return;
+    }
+    window.ZoneTracker.render({ force: !!force }).catch((err) => {
+      console.warn("Zone Tracker render failed", err);
+      if (typeof setStatus === "function") setStatus(err.message || "Zone Tracker failed", "err");
+    });
+  }
+
   function renderGecPanel() {
     const host = $("#gec-host");
     if (!host || !window.GecDashboard) return;
@@ -9283,7 +9461,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (activePanel === "boerrors" && panelId !== "boerrors") {
       const boeWrap = document.getElementById("boe-table-wrap");
       if (boeWrap) boeWrap.textContent = "";
-      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "contact", "evaluation"];
+      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "zonetracker", "contact", "evaluation"];
       if (!window._data && typeof hasAnyPushedFiles === "function" && !hasAnyPushedFiles() && !keepsDashboard.includes(panelId)) {
         const dash = $("#dashboard");
         const wait = $("#wait-section");
@@ -9302,6 +9480,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     document.body.classList.toggle("sr-mode", panelId === "salesreport");
     document.body.classList.toggle("ytd-mode", panelId === "ytdsales");
     document.body.classList.toggle("pt-wide-mode", panelId === "plantracker");
+    document.body.classList.toggle("zt-mode", panelId === "zonetracker");
     document.body.classList.toggle("boe-mode", panelId === "boerrors");
     document.body.classList.toggle("alloc-mode", panelId === "boallocstock");
     document.body.classList.toggle("bo-dash-mode", panelId === "bodashboard");
@@ -9329,6 +9508,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       boerrors: "⚠",
       boallocstock: "▦",
       plantracker: "▣",
+      zonetracker: "⌖",
       stockdashboard: "◈",
       reservedvehicles: "◎",
       dashboard: "◉",
@@ -9428,6 +9608,13 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
     if (panelId === "plantracker") renderPlanTrackerPanel();
+    if (panelId === "zonetracker") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) { dash.classList.add("show"); dash.style.display = ""; }
+      if (wait) wait.style.display = "none";
+      renderZoneTrackerPanel();
+    }
     if (panelId === "boerrors" && window._data) renderBoErrorsDashboard(window._data);
     if (panelId === "boallocstock" && window._data) {
       renderBoAllocStockDashboard(window._data);
@@ -10947,81 +11134,79 @@ body.live-app #panel-salesreport .sr-emp-sum {
         bucket.records.push({ name, date, vin: row.vin || "" });
       }
     });
-    const current = Object.values(months).find((bucket) => bucket.phase === "current");
-    if (current) {
-      const roster = ((window._data && window._data.salesReport && window._data.salesReport.rows) || []);
-      const saved = (ytdTargets.months && ytdTargets.months[current.key]) || {};
-      Object.keys(saved).forEach((key) => {
-        if (current.employees.has(key)) return;
-        const row = saved[key] || {};
-        current.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0, aside: false });
-      });
-      roster.forEach((person) => {
-        const name = person["Sales Employee"] || person.salesman || "";
-        const key = person._key || nameKey(name);
-        if (!key || current.employees.has(key)) return;
-        current.employees.set(key, { key, name, id: person.salesmanCode || "", actual: 0, aside: ytdIsUnassigned(name) });
-      });
-      (employeeTargets || []).forEach((person) => {
-        const name = person && person.name;
-        const key = nameKey(name);
-        if (!key || isPlaceholderName(name) || current.employees.has(key)) return;
-        current.employees.set(key, { key, name, id: "", actual: 0, aside: false });
-      });
-    }
     Object.values(months).forEach((bucket) => {
-      if (bucket.phase !== "closed") return;
-      Object.entries(ytdFilePeople(bucket.key)).forEach(([key, row]) => {
-        if (bucket.employees.has(key)) {
-          if (row.name) bucket.employees.get(key).name = row.name;
-          return;
-        }
-        bucket.employees.set(key, { key, name: row.name || key, id: "", actual: 0, aside: ytdIsUnassigned(row.name) });
+      ytdSavedTargets(bucket.key).forEach((row, key) => {
+        if (bucket.employees.has(key)) return;
+        bucket.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0, aside: false });
       });
+      if (bucket.phase === "closed") {
+        Object.entries(ytdFilePeople(bucket.key)).forEach(([key, row]) => {
+          if (row.target == null || bucket.employees.has(key)) return;
+          bucket.employees.set(key, { key, name: row.name || key, id: "", actual: 0, aside: ytdIsUnassigned(row.name) });
+        });
+      }
+      if (bucket.phase === "current" && !ytdSavedTargets(bucket.key).size) {
+        (employeeTargets || []).forEach((person) => {
+          const name = person && person.name;
+          const key = nameKey(name);
+          if (!key || isPlaceholderName(name) || bucket.employees.has(key)) return;
+          bucket.employees.set(key, { key, name, id: "", actual: 0, aside: false });
+        });
+      }
     });
     return months;
   }
 
+  /** Monthly targets pushed from Admin → YTD sales, keyed the same way as the column V counts. */
+  function ytdSavedTargets(monthKey) {
+    const out = new Map();
+    const saved = (ytdTargets.months && ytdTargets.months[monthKey]) || {};
+    Object.entries(saved).forEach(([savedKey, row]) => {
+      const target = Number(row && row.target);
+      if (!row || !Number.isFinite(target)) return;
+      const name = resolveSalesmanName(row.name || "") || row.name || savedKey;
+      const key = nameKey(name) || savedKey;
+      out.set(key, { name, id: row.id || "", target });
+    });
+    return out;
+  }
+
   function ytdEmployeeRows(bucket) {
-    const closed = bucket.phase === "closed";
-    const filePeople = closed ? ytdFilePeople(bucket.key) : {};
-    const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
+    const saved = ytdSavedTargets(bucket.key);
+    const filePeople = bucket.phase === "closed" ? ytdFilePeople(bucket.key) : {};
+    const useLiveTargets = bucket.phase === "current" && !saved.size;
     return [...bucket.employees.values()].map((emp) => {
-      const file = filePeople[emp.key] || null;
       let target = null;
-      let fileTotal = null;
-      if (closed) {
-        target = file && file.target != null ? Number(file.target) : null;
-        fileTotal = file && file.total != null ? Number(file.total) : null;
-      } else if (bucket.phase === "current") {
-        const stored = saved[emp.key];
-        if (stored && Number.isFinite(Number(stored.target))) target = Number(stored.target);
-        else {
-          const admin = (employeeTargets || []).find((person) => nameKey(person && person.name) === emp.key);
-          if (admin) target = effectiveEmployeeTarget(admin);
-        }
+      const stored = saved.get(emp.key);
+      const file = filePeople[emp.key];
+      if (stored) target = stored.target;
+      else if (file && file.target != null) target = Number(file.target);
+      else if (useLiveTargets) {
+        const admin = (employeeTargets || []).find((person) => nameKey(person && person.name) === emp.key);
+        if (admin) target = effectiveEmployeeTarget(admin) || null;
       }
-      const hasFile = fileTotal != null;
-      const matched = closed && hasFile && fileTotal === emp.actual;
-      return { ...emp, target, fileTotal, hasFile, matched, ach: ytdAch(emp.actual, target) };
-    }).filter((emp) => closed ? (emp.hasFile || emp.actual > 0 || (emp.target != null && emp.target > 0)) : true)
-      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      return { ...emp, target, ach: ytdAch(emp.actual, target) };
+    }).filter((emp) => emp.actual > 0 || (emp.target != null && emp.target > 0))
+      .sort((a, b) => (a.aside - b.aside) || (b.actual - a.actual) || String(a.name).localeCompare(String(b.name)));
   }
 
   function ytdMonthTotals(bucket) {
     const people = ytdEmployeeRows(bucket);
-    const target = people.reduce((sum, emp) => sum + (emp.target == null ? 0 : emp.target), 0);
-    const hasTarget = people.some((emp) => emp.target != null && emp.target > 0);
-    const actual = people.reduce((sum, emp) => sum + (emp.aside ? 0 : emp.actual), 0);
+    const counted = people.filter((emp) => !emp.aside);
+    const target = counted.reduce((sum, emp) => sum + (emp.target == null ? 0 : emp.target), 0);
+    const hasTarget = target > 0;
+    const actual = counted.reduce((sum, emp) => sum + emp.actual, 0);
     const unassigned = people.reduce((sum, emp) => sum + (emp.aside ? emp.actual : 0), 0);
-    const compared = people.filter((emp) => !emp.aside);
-    const fileKnown = bucket.phase === "closed" && compared.some((emp) => emp.hasFile);
-    const fileTotal = fileKnown ? compared.reduce((sum, emp) => sum + (emp.fileTotal == null ? 0 : emp.fileTotal), 0) : null;
-    const matched = fileKnown && compared.length > 0 && compared.every((emp) => emp.hasFile && emp.fileTotal === emp.actual);
-    return {
-      people, target, actual, unassigned, fileTotal, fileKnown, matched,
-      ach: ytdAch(actual, hasTarget ? target : 0), hasTarget,
-    };
+    const advisors = counted.filter((emp) => emp.actual > 0).length;
+    return { people, target, actual, unassigned, advisors, hasTarget, ach: ytdAch(actual, hasTarget ? target : 0) };
+  }
+
+  function ytdMonthBadge(bucket, totals) {
+    if (bucket.phase === "future" && !totals.actual && !totals.hasTarget) return { text: "Later", cls: "is-live" };
+    if (!totals.hasTarget) return { text: "No target", cls: "is-miss" };
+    if (totals.ach >= 100) return { text: "Target hit", cls: "is-match" };
+    if (totals.ach >= 80) return { text: "On track", cls: "is-live" };
+    return { text: "Below target", cls: "is-miss" };
   }
 
   function paintYtd() {
@@ -11051,30 +11236,29 @@ body.live-app #panel-salesreport .sr-emp-sum {
     let yearActual = 0;
     let yearUnassigned = 0;
     let yearTarget = 0;
-    let yearFile = 0;
-    let closedMonths = 0;
-    let okMonths = 0;
+    let targetMonths = 0;
+    let hitMonths = 0;
+    const yearAdvisors = new Set();
     monthsEl.innerHTML = Object.values(months).map((bucket) => {
       const totals = ytdMonthTotals(bucket);
       yearActual += totals.actual;
       yearUnassigned += totals.unassigned;
-      if (totals.fileKnown) yearFile += totals.fileTotal;
-      if (bucket.phase === "closed") {
-        closedMonths += 1;
-        if (totals.matched) okMonths += 1;
+      totals.people.forEach((emp) => { if (!emp.aside && emp.actual > 0) yearAdvisors.add(emp.key); });
+      if (totals.hasTarget) {
+        yearTarget += totals.target;
+        targetMonths += 1;
+        if (totals.ach >= 100) hitMonths += 1;
       }
-      if (totals.hasTarget) yearTarget += totals.target;
       const status = ytdStatus(totals.ach, totals.hasTarget);
       const gap = totals.hasTarget ? totals.target - totals.actual : null;
-      const gapText = gap == null ? (bucket.phase === "closed" ? "Target comes from the pushed month" : "This month stays live") : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
+      const gapText = gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
       const width = totals.ach == null ? 0 : Math.max(0, Math.min(100, totals.ach));
       const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
       const shortLabel = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" });
-      const reconCls = bucket.phase !== "closed" ? "is-live" : !totals.fileKnown ? "is-miss" : totals.matched ? "is-match" : "is-miss";
-      const reconText = bucket.phase === "current" ? "This month" : bucket.phase === "future" ? "Later" : !totals.fileKnown ? "Not pushed" : totals.matched ? "OK" : "Mismatch";
-      const barCls = bucket.phase === "closed"
-        ? (totals.matched ? "is-hit" : "is-miss")
-        : (totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss");
+      const badge = ytdMonthBadge(bucket, totals);
+      const reconCls = badge.cls;
+      const reconText = badge.text;
+      const barCls = totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss";
       const progress = totals.hasTarget
         ? `<div class="ytd-progress"><div class="ytd-bar ${barCls}" role="img" aria-label="Achievement ${ytdPctText(totals.ach)}"><i style="width:${width.toFixed(1)}%"></i></div><p class="ytd-gap">${gapText}</p></div>`
         : "";
@@ -11088,7 +11272,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         </div>
         <div class="ytd-card-metrics">
           <span class="is-target"><em>Target</em><b class="${totals.hasTarget ? "" : "is-empty"}">${totals.hasTarget ? formatNumber(totals.target) : "No Target"}</b></span>
-          <span class="is-report"><em>File</em><b class="${totals.fileKnown ? "" : "is-empty"}">${totals.fileKnown ? formatNumber(totals.fileTotal) : "—"}</b></span>
+          <span class="is-report"><em>Advisors</em><b class="${totals.advisors ? "" : "is-empty"}">${totals.advisors ? formatNumber(totals.advisors) : "—"}</b></span>
           <span class="is-actual"><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
           <span class="is-ach"><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
         </div>
@@ -11098,12 +11282,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }).join("");
     const yearAch = ytdAch(yearActual, yearTarget);
     const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
-    const fileName = (window._ytdFile && window._ytdFile.filename) || "";
-    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Targets pushed from Admin for past months" : "Push each past month from Admin"}</em></article>
-      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>File Total</span><strong>${yearFile > 0 || fileName ? formatNumber(yearFile) : "—"}</strong><em>${fileName ? escapeHtml(fileName) : "Past months only"}</em></article>
+    const allHit = targetMonths > 0 && hitMonths === targetMonths;
+    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? `${formatNumber(targetMonths)} month${targetMonths === 1 ? "" : "s"} pushed from Admin` : "Push monthly targets from Admin"}</em></article>
+      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Advisors</span><strong>${yearAdvisors.size ? formatNumber(yearAdvisors.size) : "—"}</strong><em>With at least one column V sale this year</em></article>
       <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Actual · Column V</span><strong>${formatNumber(yearActual)}</strong><em>Sales Raw rows with a date in column V${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
       <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
-      <article class="ytd-kpi ${okMonths === closedMonths && closedMonths ? "is-actual" : "is-excluded"}"><span class="ytd-kpi-ico" aria-hidden="true">${okMonths === closedMonths && closedMonths ? "✓" : "!"}</span><span>Past Months OK</span><strong>${closedMonths ? `${formatNumber(okMonths)} / ${formatNumber(closedMonths)}` : "—"}</strong><em>Green when each employee matches</em></article>`;
+      <article class="ytd-kpi ${allHit ? "is-actual" : "is-excluded"}"><span class="ytd-kpi-ico" aria-hidden="true">${allHit ? "✓" : "!"}</span><span>Months on Target</span><strong>${targetMonths ? `${formatNumber(hitMonths)} / ${formatNumber(targetMonths)}` : "—"}</strong><em>Months with a target that reached 100%</em></article>`;
     paintYtdChart(Object.values(months));
     paintYtdDetail();
   }
@@ -11119,7 +11303,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const totals = buckets.map((bucket) => ytdMonthTotals(bucket));
     const datasets = [
       { label: "Actual", data: totals.map((row) => row.actual), backgroundColor: "rgba(52, 211, 153, 0.88)", borderRadius: 4, maxBarThickness: 16 },
-      { label: "File", data: totals.map((row) => (row.fileKnown ? row.fileTotal : null)), backgroundColor: "rgba(139, 92, 246, 0.82)", borderRadius: 4, maxBarThickness: 16 },
     ];
     if (totals.some((row) => row.unassigned > 0)) {
       datasets.push({ label: "Not assigned", data: totals.map((row) => row.unassigned || 0), backgroundColor: "rgba(245, 158, 11, 0.88)", borderRadius: 4, maxBarThickness: 16 });
@@ -11176,23 +11359,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
     });
   }
 
-  function ytdRowState(emp, phase) {
-    if (phase === "closed") {
-      if (!emp.hasFile) return { status: { label: "Not pushed", cls: "is-bad" }, cls: "is-bad" };
-      if (emp.matched) return { status: { label: "OK", cls: "is-ok" }, cls: "is-ok" };
-      return { status: { label: "Mismatch", cls: "is-bad" }, cls: "is-bad" };
-    }
+  function ytdRowState(emp) {
     const hasTarget = emp.target != null && emp.target > 0;
     const status = ytdStatus(emp.ach, hasTarget);
     const cls = emp.aside ? "is-aside" : status.cls === "is-below" ? "is-below" : "";
     return { status, cls };
-  }
-
-  function ytdCheckLabel(bucket, totals) {
-    if (bucket.phase === "current") return { text: "This month", cls: "is-live" };
-    if (bucket.phase === "future") return { text: "Later", cls: "is-live" };
-    if (!totals.fileKnown) return { text: "Not pushed", cls: "is-miss" };
-    return totals.matched ? { text: "OK", cls: "is-match" } : { text: "Mismatch", cls: "is-miss" };
   }
 
   function paintYtdDetail() {
@@ -11203,60 +11374,57 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (panel) panel.classList.toggle("is-detail-open", !!bucket);
     if (!bucket) { el.hidden = true; el.innerHTML = ""; return; }
     const totals = ytdMonthTotals(bucket);
-    const closed = bucket.phase === "closed";
-    const diff = totals.fileKnown ? totals.actual - totals.fileTotal : null;
-    const check = ytdCheckLabel(bucket, totals);
+    const badge = ytdMonthBadge(bucket, totals);
     const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
-    const monthStatus = ytdStatus(totals.ach, totals.hasTarget);
-    const rows = totals.people.map((emp) => {
-      const state = ytdRowState(emp, bucket.phase);
-      const targetCell = closed
-        ? (emp.target == null ? "—" : formatNumber(emp.target))
-        : `<input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" />`;
-      const fileCell = closed ? (emp.hasFile ? formatNumber(emp.fileTotal) : "—") : "—";
+    const gap = totals.hasTarget ? totals.target - totals.actual : null;
+    const gapLabel = gap == null ? "Remaining" : gap < 0 ? "Above by" : "Remaining";
+    const gapText = gap == null ? "—" : formatNumber(Math.abs(gap));
+    const rows = totals.people.map((emp, index) => {
+      const state = ytdRowState(emp);
+      const empGap = emp.target != null && emp.target > 0 ? emp.target - emp.actual : null;
       return `<tr class="${state.cls}" data-ytd-row="${escapeHtml(emp.key)}">
+      <td class="ytd-rank">${emp.aside ? "" : index + 1}</td>
       <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
-      <td>${targetCell}</td>
-      <td data-ytd-file="${escapeHtml(emp.key)}">${fileCell}</td>
-      <td data-ytd-actual="${escapeHtml(emp.key)}">${formatNumber(emp.actual)}</td>
-      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span></td>
+      <td>${emp.target != null && emp.target > 0 ? formatNumber(emp.target) : "—"}</td>
+      <td><b>${formatNumber(emp.actual)}</b></td>
+      <td>${empGap == null ? "—" : empGap > 0 ? formatNumber(empGap) : empGap < 0 ? `+${formatNumber(Math.abs(empGap))}` : "0"}</td>
+      <td>${ytdAchMarkup(emp)}</td>
+      <td><span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span></td>
     </tr>`;
     }).join("");
     const inspectRows = ytdInspect ? `
       <div class="ytd-inspect">
         <h4>Sales Raw · column V · ${formatNumber(bucket.records.length)} row${bucket.records.length === 1 ? "" : "s"}</h4>
-        <table><thead><tr><th>Employee</th><th>Column V</th><th>VIN</th></tr></thead><tbody>
+        <table><thead><tr><th>Advisor</th><th>Column V</th><th>VIN</th></tr></thead><tbody>
           ${bucket.records.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.date instanceof Date ? row.date.toLocaleDateString("en-GB") : "—")}</td><td>${escapeHtml(row.vin || "—")}</td></tr>`).join("") || `<tr><td colspan="3">No column V dates in this month.</td></tr>`}
         </tbody></table>
       </div>` : "";
-    const note = closed
-      ? "Target and file total come from the month pushed from Admin. Actual is the Sales Raw column V count. Green means they are the same."
-      : "This month is not taken from the YTD file. Actual is the live Sales Raw column V count.";
+    const note = totals.hasTarget
+      ? "Target is pushed from Admin → YTD sales. Actual counts the Sales Raw rows whose column V date falls in this month. Ach% = Actual ÷ Target."
+      : "No target pushed for this month yet. Push it from Admin → YTD sales. Actual counts the Sales Raw rows whose column V date falls in this month.";
     el.hidden = false;
     el.innerHTML = `<div class="ytd-detail-head">
         <div class="ytd-detail-title">
           <h3>${label}</h3>
-          <span class="ytd-recon ${check.cls}" data-ytd-sum="match">${check.text}</span>
-          <span class="ytd-status ${monthStatus.cls}" data-ytd-sum="pace" hidden>${monthStatus.label}</span>
+          <span class="ytd-recon ${badge.cls}">${badge.text}</span>
         </div>
         <div class="ytd-detail-actions">
           <button type="button" class="ytd-text-btn${ytdInspect ? " is-on" : ""}" data-ytd-inspect>${ytdInspect ? "Hide records" : "Sales Raw rows"}</button>
-          ${closed ? "" : `<button type="button" class="ytd-save-btn" id="ytd-save-btn">Save targets</button>`}
           <button type="button" class="ytd-text-btn" data-ytd-close>Close</button>
         </div>
       </div>
       <div class="ytd-month-kpis">
-        <article class="is-target"><span>Target</span><strong data-ytd-sum="target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
-        <article class="is-report"><span>File has</span><strong data-ytd-sum="report">${totals.fileKnown ? formatNumber(totals.fileTotal) : "—"}</strong></article>
-        <article class="is-actual"><span>Actual has</span><strong data-ytd-sum="actual">${formatNumber(totals.actual)}</strong></article>
-        <article class="is-diff ${check.cls === "is-match" ? "is-match" : check.cls === "is-miss" ? "is-miss" : ""}"><span>Difference</span><strong data-ytd-sum="diff">${diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`}</strong></article>
-        <article class="is-status ${check.cls === "is-match" ? "is-match" : check.cls === "is-miss" ? "is-miss" : ""}"><span>Check</span><strong data-ytd-sum="status">${check.text}</strong></article>
+        <article class="is-target"><span>Target</span><strong>${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
+        <article class="is-actual"><span>Actual</span><strong>${formatNumber(totals.actual)}</strong></article>
+        <article class="is-report"><span>Ach%</span><strong>${ytdPctText(totals.ach)}</strong></article>
+        <article class="is-diff ${gap != null && gap <= 0 ? "is-match" : gap != null ? "is-miss" : ""}"><span>${gapLabel}</span><strong>${gapText}</strong></article>
+        <article class="is-status"><span>Advisors</span><strong>${formatNumber(totals.advisors)}</strong></article>
       </div>
-      <p class="ytd-save${ytdSaveMessage.cls && !closed ? " " + ytdSaveMessage.cls : ""}" id="ytd-save-note">${escapeHtml(closed ? note : ytdSaveMessage.text || note)}</p>
+      <p class="ytd-save" id="ytd-save-note">${escapeHtml(note)}</p>
       <div class="ytd-table-wrap"><table class="ytd-table">
-        <thead><tr><th>Employee</th><th>Target</th><th>File</th><th>Actual</th><th>Status</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="5">No employees for this month.</td></tr>`}</tbody>
-        <tfoot><tr><td>Month total</td><td data-ytd-sum="foot-target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td data-ytd-sum="foot-file">${totals.fileKnown ? formatNumber(totals.fileTotal) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td data-ytd-sum="foot-ach">${check.text}</td></tr></tfoot>
+        <thead><tr><th>#</th><th>Advisor</th><th>Target</th><th>Actual</th><th>Remaining</th><th>Ach%</th><th>Status</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="7">No sales or targets for this month.</td></tr>`}</tbody>
+        <tfoot><tr><td></td><td>Month total</td><td>${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td>${gap == null ? "—" : gap > 0 ? formatNumber(gap) : gap < 0 ? `+${formatNumber(Math.abs(gap))}` : "0"}</td><td>${ytdPctText(totals.ach)}</td><td>${badge.text}</td></tr></tfoot>
       </table></div>
       ${inspectRows}`;
   }
@@ -11276,74 +11444,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return `<div class="ytd-ach"><span class="ytd-ach-num">${text}</span><span class="ytd-ach-track ${cls}" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></span></div>`;
   }
 
-  function ytdSyncOpenNumbers() {
-    const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
-    if (!bucket) return;
-    const totals = ytdMonthTotals(bucket);
-    const diff = totals.fileKnown ? totals.actual - totals.fileTotal : null;
-    const check = ytdCheckLabel(bucket, totals);
-    const monthStatus = ytdStatus(totals.ach, totals.hasTarget);
-    const set = (name, text) => {
-      const node = document.querySelector(`#ytd-detail [data-ytd-sum="${name}"]`);
-      if (node) node.textContent = text;
-    };
-    set("target", totals.hasTarget ? formatNumber(totals.target) : "—");
-    set("actual", formatNumber(totals.actual));
-    set("report", totals.fileKnown ? formatNumber(totals.fileTotal) : "—");
-    set("diff", diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`);
-    set("status", check.text);
-    set("match", check.text);
-    set("pace", monthStatus.label);
-    set("foot-target", totals.hasTarget ? formatNumber(totals.target) : "—");
-    set("foot-file", totals.fileKnown ? formatNumber(totals.fileTotal) : "—");
-    set("foot-ach", check.text);
-    const match = document.querySelector('#ytd-detail [data-ytd-sum="match"]');
-    if (match) match.className = `ytd-recon ${check.cls}`;
-    const pace = document.querySelector('#ytd-detail [data-ytd-sum="pace"]');
-    if (pace) pace.className = `ytd-status ${monthStatus.cls}`;
-    ["diff", "status"].forEach((name) => {
-      const card = document.querySelector(`#ytd-detail [data-ytd-sum="${name}"]`);
-      const article = card && card.closest("article");
-      if (!article) return;
-      article.classList.toggle("is-match", check.cls === "is-match");
-      article.classList.toggle("is-miss", check.cls === "is-miss");
-    });
-    totals.people.forEach((emp) => {
-      const state = ytdRowState(emp, bucket.phase);
-      const flag = document.querySelector(`#ytd-detail [data-ytd-flag="${CSS.escape(emp.key)}"]`);
-      const row = document.querySelector(`#ytd-detail [data-ytd-row="${CSS.escape(emp.key)}"]`);
-      if (flag) flag.innerHTML = `<span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span>`;
-      if (row) row.className = state.cls;
-    });
-  }
-
   async function renderYtdSales() {
-    await Promise.all([ytdEnsureTargets(), ytdLoadMonths()]);
+    await Promise.all([ytdEnsureTargets(true), ytdLoadMonths(true)]);
     paintYtd();
-  }
-
-  function ytdRememberTarget(input) {
-    if (!ytdOpenMonth || !input) return false;
-    if (ytdMonthPhase(ytdOpenMonth) !== "current") return false;
-    if (!ytdTargets.months) ytdTargets.months = {};
-    const saved = { ...(ytdTargets.months[ytdOpenMonth] || {}) };
-    const key = input.dataset.ytdTarget;
-    const raw = String(input.value || "").trim();
-    if (raw === "") delete saved[key];
-    else {
-      const target = Number(raw);
-      if (!Number.isFinite(target) || target < 0) {
-        const previous = (ytdTargets.months[ytdOpenMonth] || {})[key];
-        input.value = previous && previous.target != null ? previous.target : "";
-        return false;
-      }
-      saved[key] = { name: input.dataset.ytdName || "", id: input.dataset.ytdId || "", target };
-    }
-    ytdTargets.months[ytdOpenMonth] = saved;
-    ytdDirtyMonths.add(ytdOpenMonth);
-    ytdSetSaveNote("Not saved yet.", "is-wait");
-    ytdSyncOpenNumbers();
-    return true;
   }
 
   async function ytdCommitNow(month) {
@@ -11379,10 +11482,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const job = prev.catch(() => {}).then(() => ytdCommitNow(month));
     ytdSaveChain.set(month, job);
     return job;
-  }
-
-  function ytdOnTargetInput(input) {
-    ytdRememberTarget(input);
   }
 
   function renderSrLastUpdated() {
@@ -23629,6 +23728,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (activePanel === "gec" || onlyGec) activePanel = "gec";
     else if (activePanel === "delivery") activePanel = "delivery";
     else if (activePanel === "plantracker") activePanel = "plantracker";
+    else if (activePanel === "zonetracker") activePanel = "zonetracker";
     else if (activePanel === "summary" && hasSummaryInputs()) activePanel = "summary";
     else if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
@@ -24446,10 +24546,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
           }
           return;
         }
-        if (e.target.closest("#ytd-save-btn")) {
-          if (ytdOpenMonth) ytdCommit(ytdOpenMonth);
-          return;
-        }
         if (e.target.closest("[data-ytd-close]")) {
           const prev = ytdOpenMonth;
           Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
@@ -24487,9 +24583,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
           });
         });
       }
-      ytdPanel.addEventListener("input", (e) => {
-        if (e.target.matches("[data-ytd-target]")) ytdOnTargetInput(e.target);
-      });
       ytdPanel.addEventListener("change", (e) => {
         if (e.target.id === "ytd-year") {
           const nextYear = Number(e.target.value) || new Date().getFullYear();
@@ -25472,7 +25565,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
 })();
 
 </script>
-<script src="scroll-transition.js?v=20261103fs1"></script>
+<script src="scroll-transition.js?v=20261105mv1"></script>
 <script src="welcome-screen.js?v=20261103fs1"></script>
 </body>
 </html>

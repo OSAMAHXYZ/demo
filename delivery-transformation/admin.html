@@ -5,13 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Delivery Transformation — Data collector</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20261105lay3" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="admin.css?v=20261010d" />
+  <link rel="stylesheet" href="admin-layout.css?v=20261105lay3" />
+  <link rel="stylesheet" href="live-excel.css?v=20261105xl2" />
 </head>
 <body>
-  <div class="collector-gate" id="collector-gate">
-    <div class="login-card">
+  <div class="collector-gate auth" id="collector-gate">
+    <section class="auth-brand">
       <div class="brand">
         <div class="brand-mark">T</div>
         <div>
@@ -19,48 +21,71 @@
           <span>Delivery Transformation</span>
         </div>
       </div>
-      <h1>Data collector</h1>
-      <p>Password only · no user login · live attendance and delivery-note totals</p>
-      <div class="field">
-        <label for="collector-pass">Password</label>
-        <input id="collector-pass" type="password" value="1234" autocomplete="current-password" />
+      <div class="auth-copy">
+        <h1>Data collector</h1>
+        <p>The VSND dashboard, SLA control, assignments and every Excel export for the delivery team, in one place.</p>
+        <ul class="auth-points">
+          <li><i aria-hidden="true">&#9636;</i>Live VSND schedule and alerts</li>
+          <li><i aria-hidden="true">&#9881;</i>SLA, KPI weights and auto assign</li>
+          <li><i aria-hidden="true">&#8681;</i>Excel exports and backups</li>
+        </ul>
       </div>
-      <button type="button" class="btn-primary" id="collector-btn" style="width:100%">Open collector</button>
-      <div class="login-error" id="collector-error"></div>
-    </div>
+      <p class="auth-foot">Toyota · Delivery Transformation</p>
+    </section>
+    <section class="auth-panel">
+      <div class="login-card">
+        <h1>Open collector</h1>
+        <p>Password only · no user login</p>
+        <div class="field">
+          <label for="collector-pass">Password</label>
+          <input id="collector-pass" type="password" value="1234" autocomplete="current-password" />
+        </div>
+        <button type="button" class="btn-primary" id="collector-btn" style="width:100%">Open collector</button>
+        <div class="login-error" id="collector-error"></div>
+      </div>
+    </section>
   </div>
 
   <div class="collector-app hidden" id="collector-app">
-  <header class="topnav">
+  <aside class="dt-side">
     <div class="brand">
       <div class="brand-mark">T</div>
-      <div><strong>TOYOTA</strong><span>Delivery Transformation · Data collector</span></div>
+      <div><strong>TOYOTA</strong><span>Data collector</span></div>
     </div>
-    <nav class="nav-links">
-      <button type="button" class="tab-btn active" data-tab="dash">VSND</button>
-      <button type="button" class="tab-btn" data-tab="ops">Ops</button>
-      <button type="button" class="tab-btn" data-tab="weights">KPI weights</button>
-      <button type="button" class="tab-btn" data-tab="schedule">SLA</button>
-      <button type="button" class="tab-btn" data-tab="assign">Auto assign</button>
-      <button type="button" class="tab-btn" data-tab="give">Assignment</button>
-      <button type="button" class="tab-btn" data-tab="vins">VIN tools</button>
-      <button type="button" class="tab-btn" data-tab="org">Cities &amp; Companies</button>
-      <a href="coordinator.html">Coordinator</a>
-      <a href="employee.html">Employee</a>
-      <a href="inventory-managment.html">Inventory</a>
-      <button type="button" class="tab-btn" data-tab="org">Cities &amp; Companies</button>
-      <a href="attendance.html" target="_blank" rel="noopener">Attendance</a>
+    <nav class="dt-nav" aria-label="Collector sections">
+      <p class="dt-nav-label">Dashboard</p>
+      <button type="button" class="tab-btn active" data-tab="dash"><i aria-hidden="true">&#9636;</i><span>VSND</span></button>
+      <button type="button" class="tab-btn" data-tab="ops"><i aria-hidden="true">&#9673;</i><span>Operations</span></button>
+      <p class="dt-nav-label">Setup</p>
+      <button type="button" class="tab-btn" data-tab="schedule"><i aria-hidden="true">&#9201;</i><span>SLA</span></button>
+      <button type="button" class="tab-btn" data-tab="weights"><i aria-hidden="true">&#9878;</i><span>KPI weights</span></button>
+      <button type="button" class="tab-btn" data-tab="assign"><i aria-hidden="true">&#8644;</i><span>Auto assign</span></button>
+      <button type="button" class="tab-btn" data-tab="give"><i aria-hidden="true">&#10010;</i><span>Assignment</span></button>
+      <button type="button" class="tab-btn" data-tab="vins"><i aria-hidden="true">&#9638;</i><span>VIN tools</span></button>
+      <button type="button" class="tab-btn" data-tab="org"><i aria-hidden="true">&#8962;</i><span>Cities &amp; Companies</span></button>
+      <p class="dt-nav-label">Pages</p>
+      <a href="coordinator.html"><i aria-hidden="true">&#8599;</i><span>Coordinator</span></a>
+      <a href="employee.html"><i aria-hidden="true">&#8599;</i><span>Employee</span></a>
+      <a href="inventory-managment.html"><i aria-hidden="true">&#8599;</i><span>Inventory</span></a>
+      <a href="attendance.html" target="_blank" rel="noopener"><i aria-hidden="true">&#8599;</i><span>Attendance</span></a>
     </nav>
-    <div class="top-right">
-      <button type="button" class="btn" id="xls-live">Extract printed + sheet + assignments</button>
-      <button type="button" class="btn" id="xls-admin">Extract admin Excel</button>
-      <button type="button" class="btn" id="xls-all">Extract all data</button>
-      <button type="button" class="btn" id="xls-all-upload">Upload all data</button>
+    <details class="dt-tools">
+      <summary><i aria-hidden="true">&#8681;</i><span>Excel tools</span></summary>
+      <div class="dt-tools-list">
+        <button type="button" class="btn" id="xls-live">Extract printed + sheet + assignments</button>
+        <button type="button" class="btn" id="xls-admin">Extract admin Excel</button>
+        <button type="button" class="btn" id="xls-all">Extract all data</button>
+        <button type="button" class="btn" id="xls-all-upload">Upload all data</button>
+      </div>
+    </details>
+    <div class="dt-side-foot">
       <span class="live-clock" id="live-clock">—</span>
-      <span id="who" class="badge">—</span>
-      <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
+      <div class="dt-user">
+        <span id="who" class="badge">—</span>
+        <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
+      </div>
     </div>
-  </header>
+  </aside>
 
   <main class="wrap admin-wrap">
     <section class="panel-tab active vsnd-board" id="tab-dash">
@@ -552,7 +577,7 @@
     </section>
   </main>
 
-  <aside class="pdf-win" id="pdf-win">
+  <aside class="pdf-win is-min" id="pdf-win">
     <header class="pdf-win-bar">
       <strong>Cars PDF copy</strong>
       <div>
@@ -589,6 +614,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20261003scope2"></script>
   <script src="live.js?v=20261010a"></script>
-  <script src="admin.js?v=20261010f"></script>
+  <script src="live-excel.js?v=20261105xl2"></script>
 </body>
 </html>

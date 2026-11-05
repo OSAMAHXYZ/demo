@@ -12,8 +12,8 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
-  <link rel="stylesheet" href="bo-notifications.css?v=20261103gm1" />
-  <script src="auth.js?v=20261031auth4"></script>
+  <link rel="stylesheet" href="bo-notifications.css?v=20261105ytd1" />
+  <script src="auth.js?v=20261105zt1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
@@ -295,7 +295,21 @@
           <h2>YTD sales</h2>
           <span class="admin-section-tag">YTD Sales dashboard</span>
         </div>
-        <p class="admin-lead">Push YTD data <b>one month at a time</b>: choose the month, drop that month's YTD sales file (Salesman Performance), then click <b>Push to live</b>. Only the chosen month is replaced — other months stay as they are. The YTD Sales dashboard reads these pushed months; there is no upload on the dashboard.</p>
+        <p class="admin-lead">Enter each advisor's <b>target for a month</b>, then click <b>Push targets</b>. On the YTD Sales dashboard, Actual is the Sales Raw column V count for that month and Ach% = Actual ÷ Target. Only the chosen month is replaced.</p>
+        <div class="ytd-tg-bar">
+          <label>Month <input type="month" id="ytd-tg-month" aria-label="Target month" /></label>
+          <input type="number" id="ytd-tg-bulk" min="0" step="1" placeholder="Same target for all" aria-label="Same target for all advisors" />
+          <button type="button" class="btn" id="ytd-tg-bulk-btn">Apply to all</button>
+          <button type="button" class="btn" id="ytd-tg-copy">Copy previous month</button>
+          <button type="button" class="btn" id="ytd-tg-clear">Clear month</button>
+          <button type="button" class="btn-primary" id="ytd-tg-push">Push targets</button>
+          <span class="ytd-tg-total" id="ytd-tg-total">Total 0</span>
+        </div>
+        <p class="hint" id="ytd-tg-note"></p>
+        <div class="ytd-tg-grid" id="ytd-tg-grid"></div>
+        <details class="ytd-tg-file">
+          <summary>Optional · read targets from a YTD file (Salesman Performance)</summary>
+        <p class="admin-lead">Used only for advisors that have no target entered above for that month. Choose the month, drop the file, then click <b>Push to live</b>.</p>
         <div class="bo-notif-unlock">
           <label>Month
             <input type="month" id="ytd-month" aria-label="YTD month" />
@@ -312,6 +326,7 @@
         </section>
         <p class="hint" id="ytd-sales-result"></p>
         <div id="ytd-months-list"><p class="foot" style="margin:0">Loading pushed months…</p></div>
+        </details>
       </div>
     </section>
 
@@ -2387,6 +2402,129 @@
     ytdMonthInput.addEventListener("change", paintYtdSales);
   }
   loadYtdMonthsList();
+
+  /* YTD monthly targets: one target per advisor per month, read by the YTD Sales dashboard. */
+  let ytdTargetStore = { months: {} };
+  const ytdTgKey = (name) => String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const ytdTgMonth = () => (document.getElementById("ytd-tg-month") || {}).value || "";
+  function ytdTgPeople(month) {
+    const saved = (ytdTargetStore.months && ytdTargetStore.months[month]) || {};
+    const people = new Map();
+    EMPLOYEE_ROSTER.forEach((e) => {
+      if (!isPlaceholderName(e.name) && !/^(not assigned|unassigned)$/i.test(String(e.name).trim())) people.set(ytdTgKey(e.name), { name: e.name, id: e.code || "", target: null });
+    });
+    Object.values(saved).forEach((row) => {
+      if (!row || !row.name) return;
+      const key = ytdTgKey(row.name);
+      const prev = people.get(key) || { name: row.name, id: row.id || "", target: null };
+      people.set(key, { ...prev, target: Number.isFinite(Number(row.target)) ? Number(row.target) : null });
+    });
+    return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  function ytdTgTotal() {
+    let total = 0;
+    document.querySelectorAll("#ytd-tg-grid [data-tg-name]").forEach((input) => { total += Math.max(0, Number(input.value) || 0); });
+    const el = document.getElementById("ytd-tg-total");
+    if (el) el.textContent = `Total ${formatNumber(total)}`;
+  }
+  function ytdTgNote(text, cls) {
+    const el = document.getElementById("ytd-tg-note");
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = "hint" + (cls ? " " + cls : "");
+  }
+  function paintYtdTargets() {
+    const grid = document.getElementById("ytd-tg-grid");
+    const month = ytdTgMonth();
+    if (!grid) return;
+    if (!month) { grid.innerHTML = '<p class="foot" style="margin:0">Choose a month.</p>'; return; }
+    const pushed = ytdTargetStore.months && ytdTargetStore.months[month] && Object.keys(ytdTargetStore.months[month]).length;
+    grid.innerHTML = ytdTgPeople(month).map((p) => `<label class="ytd-tg-row">
+        <span>${escapeHtml(p.name)}${p.id ? `<small>${escapeHtml(p.id)}</small>` : ""}</span>
+        <input type="number" min="0" step="1" inputmode="numeric" data-tg-name="${escapeHtml(p.name)}" data-tg-id="${escapeHtml(p.id || "")}" value="${p.target == null ? "" : p.target}" aria-label="Target for ${escapeHtml(p.name)}" />
+      </label>`).join("");
+    ytdTgTotal();
+    ytdTgNote(pushed ? `${month} targets are live. Change them and click Push targets to replace.` : `No targets pushed for ${month} yet.`, pushed ? "ok" : "");
+  }
+  async function loadYtdTargets() {
+    try {
+      const res = await fetch("/api/report-sheet/ytd-targets", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      ytdTargetStore = data && data.months ? { months: data.months } : { months: {} };
+    } catch (err) {
+      ytdTgNote("Could not load the saved targets.", "err");
+    }
+    paintYtdTargets();
+  }
+  async function pushYtdTargets() {
+    const month = ytdTgMonth();
+    if (!month) { ytdTgNote("Choose the month first.", "err"); return; }
+    const employees = {};
+    document.querySelectorAll("#ytd-tg-grid [data-tg-name]").forEach((input) => {
+      const raw = String(input.value || "").trim();
+      if (raw === "") return;
+      const target = Number(raw);
+      if (!Number.isFinite(target) || target < 0) return;
+      const name = input.dataset.tgName;
+      employees[ytdTgKey(name)] = { name, id: input.dataset.tgId || "", target };
+    });
+    const btn = document.getElementById("ytd-tg-push");
+    if (btn) btn.disabled = true;
+    ytdTgNote(`Pushing ${month} targets…`);
+    try {
+      const res = await fetch("/api/report-sheet/ytd-targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, employees }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Targets were not pushed.");
+      ytdTargetStore.months[month] = data.employees || employees;
+      paintYtdTargets();
+      const count = Object.keys(employees).length;
+      ytdTgNote(count ? `${month} targets are live · ${count} advisor${count === 1 ? "" : "s"}.` : `${month} targets cleared.`, "ok");
+    } catch (err) {
+      ytdTgNote(err.message || "Targets were not pushed.", "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+  const ytdTgMonthInput = document.getElementById("ytd-tg-month");
+  if (ytdTgMonthInput) {
+    const now = new Date();
+    ytdTgMonthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    ytdTgMonthInput.addEventListener("change", paintYtdTargets);
+    document.getElementById("ytd-tg-grid").addEventListener("input", ytdTgTotal);
+    document.getElementById("ytd-tg-push").addEventListener("click", pushYtdTargets);
+    document.getElementById("ytd-tg-bulk-btn").addEventListener("click", () => {
+      const raw = String(document.getElementById("ytd-tg-bulk").value || "").trim();
+      if (raw === "" || !(Number(raw) >= 0)) { ytdTgNote("Type a target first.", "err"); return; }
+      document.querySelectorAll("#ytd-tg-grid [data-tg-name]").forEach((input) => { input.value = raw; });
+      ytdTgTotal();
+      ytdTgNote("Applied to all advisors · not live until you click Push targets.");
+    });
+    document.getElementById("ytd-tg-clear").addEventListener("click", () => {
+      document.querySelectorAll("#ytd-tg-grid [data-tg-name]").forEach((input) => { input.value = ""; });
+      ytdTgTotal();
+      ytdTgNote("Cleared · click Push targets to remove this month's targets.");
+    });
+    document.getElementById("ytd-tg-copy").addEventListener("click", () => {
+      const [y, m] = ytdTgMonth().split("-").map(Number);
+      if (!y) return;
+      const prev = new Date(y, m - 2, 1);
+      const prevKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+      const saved = (ytdTargetStore.months && ytdTargetStore.months[prevKey]) || {};
+      const byName = new Map(Object.values(saved).map((row) => [ytdTgKey(row && row.name), row]));
+      if (!byName.size) { ytdTgNote(`No targets pushed for ${prevKey}.`, "err"); return; }
+      document.querySelectorAll("#ytd-tg-grid [data-tg-name]").forEach((input) => {
+        const row = byName.get(ytdTgKey(input.dataset.tgName));
+        input.value = row && row.target != null ? row.target : "";
+      });
+      ytdTgTotal();
+      ytdTgNote(`Copied from ${prevKey} · not live until you click Push targets.`);
+    });
+    loadYtdTargets();
+  }
 
   const accessHost = $("#viewer-access-host");
   if (accessHost) {

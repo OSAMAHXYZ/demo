@@ -24,6 +24,22 @@
 #panel-notifications .notif-bo select { border: 1px solid #e6e8ee; border-radius: 8px; padding: 9px 10px; background: #fff; color: #172033; font: inherit; width: 100%; }
 #panel-notifications #notif-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #panel-notifications #notif-list th, #panel-notifications #notif-list td { border-bottom: 1px solid #e6e8ee; text-align: left; padding: 7px 6px; vertical-align: top; }
+.ytd-tg-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 12px 0 6px; }
+.ytd-tg-bar label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.ytd-tg-bar input { height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: #fff; color: var(--ink); font: inherit; }
+.ytd-tg-bar #ytd-tg-bulk { width: 170px; }
+.ytd-tg-total { margin-left: auto; align-self: center; font-weight: 800; font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+#ytd-tg-note { min-height: 18px; margin: 4px 0 8px; }
+#ytd-tg-note.ok { color: #15803d; font-weight: 700; }
+#ytd-tg-note.err { color: #dc2626; font-weight: 700; }
+.ytd-tg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px 10px; max-height: 420px; overflow: auto; padding: 2px; }
+.ytd-tg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px 5px 10px; background: #fff; }
+.ytd-tg-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; color: var(--ink); }
+.ytd-tg-row small { margin-left: 6px; color: var(--muted); font-weight: 600; font-size: 11px; }
+.ytd-tg-row input { width: 84px; height: 32px; border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; text-align: right; font: inherit; font-weight: 700; color: var(--ink); background: #f8fafc; }
+.ytd-tg-row input:focus { outline: 2px solid rgba(37, 99, 235, 0.35); border-color: #2563eb; background: #fff; }
+.ytd-tg-file { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+.ytd-tg-file summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--muted); }
 #ytd-months-list { margin-top: 14px; }
 #ytd-months-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #ytd-months-list th, #ytd-months-list td { border-bottom: 1px solid #e6e8ee; text-align: left; padding: 7px 6px; vertical-align: top; }

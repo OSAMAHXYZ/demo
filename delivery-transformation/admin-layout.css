@@ -1,0 +1,485 @@
+/* Data collector (admin.html) layout: sidebar shell + one-screen VSND dashboard.
+   Loaded after admin.css, so it wins over the older top-bar rules. */
+
+/* ---------- Password gate ---------- */
+.collector-gate.auth {
+  display: grid;
+  place-items: stretch;
+  padding: 0;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+}
+@media (max-width: 900px) { .collector-gate.auth { grid-template-columns: 1fr; } }
+
+/* ---------- App shell ---------- */
+.collector-app,
+body.vsnd-screen .collector-app {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
+.collector-app.hidden { display: none !important; }
+
+.dt-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 12px 14px;
+  color: #fff;
+  background:
+    radial-gradient(420px 260px at 0% 0%, rgba(23, 105, 168, 0.35), transparent 70%),
+    linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.dt-side .brand { padding: 0 8px 6px; }
+.dt-side .brand strong { color: #fff; }
+.dt-side .brand span { color: rgba(255, 255, 255, 0.6); }
+
+.dt-nav { display: grid; gap: 2px; }
+.dt-nav-label {
+  margin: 12px 10px 4px;
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+.dt-nav-label:first-child { margin-top: 0; }
+.dt-nav .tab-btn,
+.dt-nav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: .84rem;
+  font-weight: 700;
+  text-align: left;
+  box-shadow: none;
+  transition: background .18s var(--ease), color .18s var(--ease);
+}
+.dt-nav i {
+  width: 22px;
+  flex: 0 0 22px;
+  font-style: normal;
+  text-align: center;
+  font-size: .95rem;
+  opacity: .8;
+}
+.dt-nav .tab-btn:hover,
+.dt-nav a:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.dt-nav .tab-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.dt-nav .tab-btn.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--red);
+}
+.dt-nav .tab-btn.active i { opacity: 1; }
+
+.dt-tools {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.dt-tools summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  list-style: none;
+  cursor: pointer;
+  font-size: .84rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+.dt-tools summary::-webkit-details-marker { display: none; }
+.dt-tools summary::after { content: "\25BE"; margin-left: auto; opacity: .6; transition: transform .2s var(--ease); }
+.dt-tools[open] summary::after { transform: rotate(180deg); }
+.dt-tools summary i { width: 22px; text-align: center; font-style: normal; }
+.dt-tools-list { display: grid; gap: 6px; padding: 0 10px 10px; }
+.dt-side .dt-tools-list .btn,
+body.vsnd-screen .dt-side .dt-tools-list .btn,
+body.vsnd-screen .dt-side #xls-live,
+body.vsnd-screen .dt-side #xls-admin {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: .74rem;
+  text-align: left;
+}
+.dt-side .dt-tools-list .btn:hover { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); color: #fff; }
+
+.dt-side-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+  padding: 12px 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.dt-side .live-clock {
+  justify-self: start;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: .72rem;
+}
+.dt-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dt-user .badge { background: rgba(255, 255, 255, 0.12); color: #fff; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-user .btn-ghost { color: rgba(255, 255, 255, 0.7); min-height: 30px; padding: 4px 10px; }
+.dt-user .btn-ghost:hover { background: rgba(235, 10, 30, 0.2); color: #fff; }
+
+/* ---------- Main area ---------- */
+.admin-wrap,
+body.vsnd-screen .admin-wrap {
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 24px 28px 48px;
+  overflow-y: auto;
+}
+.admin-wrap > .panel-tab:not(#tab-dash) { max-width: 1320px; margin: 0 auto; }
+.panel-tab.active { animation: dt-enter .28s var(--ease); }
+.admin-wrap .card + .card { margin-top: 16px; }
+.admin-wrap .hero { padding-bottom: 4px; }
+
+/* ---------- One-screen VSND dashboard ---------- */
+body.vsnd-screen .admin-wrap { padding: 16px 18px; overflow: hidden; }
+body.vsnd-screen #tab-dash.vsnd-board {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(150px, 0.72fr) minmax(0, 1.5fr) minmax(170px, 0.82fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.vsnd-dash-head { gap: 10px 18px; }
+.vsnd-dash-title h1 { font-size: 1.35rem; color: var(--navy); }
+.vsnd-dash-title p { font-size: .82rem; color: var(--muted); }
+.vsnd-controls { margin-left: 18px; }
+.vsnd-month-pick,
+.vsnd-nav {
+  border-color: var(--line-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+.vsnd-month-pick { padding: 4px 10px; min-height: 36px; }
+.vsnd-month-pick input[type="month"] { min-width: 8.6rem; font-size: .86rem; }
+.vsnd-nav-btn { width: 36px; height: 34px; transition: background .15s var(--ease); }
+.vsnd-updated { font-size: .74rem; }
+.vsnd-refresh { min-height: 36px; border-radius: 10px; }
+
+/* Cards on the board share one look */
+.vsnd-top-row,
+.vsnd-bottom-row { gap: 12px; min-height: 0; }
+.vsnd-top-row { grid-template-columns: minmax(0, .9fr) minmax(0, .9fr) minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 1.3fr); }
+.vsnd-bottom-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); }
+
+.vsnd-panel,
+.vsnd-board .vsnd-schedule-card,
+.vsnd-top-row .vsnd-pill {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: box-shadow .2s var(--ease), border-color .2s var(--ease);
+}
+.vsnd-panel:hover,
+.vsnd-board .vsnd-schedule-card:hover { box-shadow: 0 1px 2px rgba(15,29,46,.04), 0 12px 30px rgba(15,29,46,.09); }
+.vsnd-panel { padding: 12px 14px; overflow: hidden; }
+.vsnd-panel h3 {
+  margin: 0 0 8px;
+  font-size: .8rem;
+  color: var(--navy);
+  letter-spacing: .01em;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.vsnd-panel h3 .hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: .68rem;
+  color: var(--soft);
+  font-weight: 600 !important;
+}
+.vsnd-wide-btn,
+.inv-more {
+  border-radius: 999px !important;
+  border-color: #d6e4f2 !important;
+  background: #f2f7fc !important;
+  color: var(--blue) !important;
+  min-height: 0 !important;
+  padding: 3px 10px !important;
+  font-size: .66rem !important;
+  box-shadow: none !important;
+}
+.vsnd-wide-btn:hover, .inv-more:hover { background: #e3eef9 !important; }
+
+/* Panel bodies stack vertically; only the donut card keeps donut + legend side by side */
+.vsnd-panel-body {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+#vsnd-by-status-body {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+#vsnd-by-status-body .vsnd-legend-list { max-height: none; height: 100%; align-content: center; }
+.vsnd-expand-hit { display: none; }
+
+/* Stat cards: Delivered / Not delivered */
+.vsnd-top-row .vsnd-pill {
+  position: relative;
+  overflow: hidden;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 14px 16px;
+}
+.vsnd-top-row .vsnd-pill::after {
+  content: "";
+  position: absolute;
+  right: -30px;
+  bottom: -30px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  opacity: .5;
+}
+.vsnd-top-row .vsnd-pill-ok::after { background: radial-gradient(circle, #d6f2e1, transparent 70%); }
+.vsnd-top-row .vsnd-pill-bad::after { background: radial-gradient(circle, #fbdadd, transparent 70%); }
+.vsnd-top-row .vsnd-pill-ok { border-top: 3px solid #16a34a; }
+.vsnd-top-row .vsnd-pill-bad { border-top: 3px solid var(--red); }
+.vsnd-top-row .vsnd-pill-ico { width: 34px; height: 34px; background: #f3f6f9; font-size: .95rem; }
+.vsnd-top-row .vsnd-pill-lbl { font-size: .72rem; color: var(--muted); font-weight: 800; }
+.vsnd-top-row .vsnd-pill strong { font-size: 2rem; letter-spacing: -0.03em; margin: 2px 0; }
+.vsnd-top-row .vsnd-pill em { font-size: .66rem; color: var(--soft); }
+.vsnd-pill.is-hit { transition: box-shadow .2s var(--ease), transform .2s var(--ease); }
+.vsnd-pill.is-hit:hover { transform: translateY(-1px); filter: none; box-shadow: 0 12px 28px rgba(235, 10, 30, 0.14); }
+
+/* Donut + legend */
+.vsnd-legend-list { gap: 4px; }
+.vsnd-legend-list li { font-size: .7rem; }
+.vsnd-legend-list.is-clickable .vsnd-legend-hit { transition: background .15s var(--ease); }
+
+/* Horizontal bars, used by several panels */
+.vsnd-panel button.vsnd-hbar,
+.vsnd-panel button.acc-row,
+.vsnd-panel button.fleet-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 3px 4px;
+  margin: 0;
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  box-shadow: none;
+  transition: background .15s var(--ease);
+}
+.vsnd-panel button.vsnd-hbar:hover,
+.vsnd-panel button.acc-row:hover,
+.vsnd-panel button.fleet-row:hover { background: #f3f7fb; }
+.vsnd-hbars { gap: 4px; }
+.vsnd-hbar { grid-template-columns: minmax(64px, 34%) minmax(0, 1fr) auto; gap: 8px; }
+.vsnd-hbar-lbl { font-size: .7rem; color: #334155; }
+.vsnd-hbar-track { height: 8px; background: #eef2f6; }
+.vsnd-hbar-track i,
+.inv-hbar-track i,
+.ach-bar span,
+.ekpi-bar i { transition: width .6s var(--ease); }
+.vsnd-hbar b { font-size: .72rem; }
+.vsnd-panel .hint { margin: 2px 0 0 !important; font-size: .66rem; color: var(--soft); line-height: 1.4; }
+.acc-bars, .fleet-bars { max-height: none; overflow: visible; }
+
+/* Totals chips at the top of a panel */
+.inv-totals { gap: 6px; margin: 0; flex-wrap: nowrap; }
+.inv-total { padding: 4px 10px; border-radius: 10px; min-width: 0; background: #f5f7fa; }
+.inv-total span { font-size: .56rem; letter-spacing: .06em; }
+.inv-total strong { font-size: 1.05rem; }
+.acc-head { margin: 0; }
+.acc-avg { background: #f5f7fa; border-radius: 10px; padding: 4px 10px; }
+
+/* Stock In / Out rows */
+.inv-hbar-row { grid-template-columns: 64px minmax(0, 1fr) auto; }
+.inv-hbar-track { height: 6px; background: #eef2f6; }
+.vsnd-mini-legend { margin-top: auto; }
+
+/* Carrier panel */
+.cs-legend { margin: 0; }
+
+/* Schedule card */
+.vsnd-board .vsnd-schedule-card { padding: 12px 14px; gap: 8px; }
+.vsnd-sched-head { margin: 0; align-items: center; }
+.vsnd-sched-head > div:first-child { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.vsnd-sched-head h2 { font-size: .95rem; color: var(--navy); white-space: nowrap; }
+.vsnd-sched-head .hint { margin: 0; font-size: .68rem; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vsnd-legend { gap: 12px; font-size: .68rem; }
+.vsnd-legend i { border-radius: 4px; }
+
+.vsnd-board #vsnd-sla-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 !important;
+}
+.vsnd-board #vsnd-sla-kpis .kpi {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #f5f7fa;
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.vsnd-board #vsnd-sla-kpis .kpi .lbl { font-size: .6rem; letter-spacing: .06em; }
+.vsnd-board #vsnd-sla-kpis .kpi .val { margin: 0; font-size: .92rem; }
+.vsnd-board #vsnd-sla-kpis .kpi.ok { background: #effaf3; border-color: #d3efdd; }
+.vsnd-board #vsnd-sla-kpis .kpi.warn { background: #fffaeb; border-color: #f7e3b0; }
+.vsnd-board #vsnd-sla-kpis .kpi.bad { background: #fff3f4; border-color: #f8d3d7; }
+.sla-kpi-row .kpi.ok .val { color: var(--green); }
+.sla-kpi-row .kpi.warn .val { color: #b7791f; }
+.sla-kpi-row .kpi.bad .val { color: var(--red); }
+
+.vsnd-scroll { border-color: var(--line); border-radius: 12px; }
+body.vsnd-screen .vsnd-table { font-size: .66rem; }
+body.vsnd-screen .vsnd-val,
+body.vsnd-screen .vsnd-total-btn { min-height: 24px; font-size: .66rem; }
+.vsnd-table thead th { background: #f7f9fb; }
+.vsnd-cell { transition: filter .15s var(--ease); }
+.vsnd-cell.is-hit:hover { filter: brightness(.96); }
+.vsnd-grand { background: var(--navy) !important; }
+
+/* Schedule alerts */
+.vsnd-alert-list { max-height: none; gap: 5px; }
+#vsnd-fleet .vsnd-alert-list { max-height: none; }
+.vsnd-alert-row {
+  grid-template-columns: 104px 120px minmax(0, 1fr) 46px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: .72rem;
+  transition: border-color .15s var(--ease), transform .15s var(--ease);
+}
+#vsnd-fleet .vsnd-alert-row { min-width: 0; }
+.vsnd-alert-row .vsnd-alert-status,
+.vsnd-alert-row .vsnd-alert-pro { display: none; }
+.vsnd-alert-row .vsnd-alert-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vsnd-alert-row:hover { transform: translateX(2px); }
+.vsnd-alert-badge { font-size: .62rem; }
+
+/* Floating "Cars PDF copy" window: docked bottom-right, starts minimised */
+.pdf-win {
+  top: auto;
+  bottom: 16px;
+  right: 16px;
+  border-radius: 14px;
+  border-color: var(--line);
+  box-shadow: var(--shadow-lg);
+}
+body.vsnd-screen .pdf-win { top: auto; right: 16px; }
+.pdf-win-bar { background: var(--navy); padding: 9px 12px; }
+.pdf-win.is-min .pdf-win-bar { border-radius: 14px; }
+@media (min-width: 1201px) {
+  /* Minimised, it sits as the last item of the sidebar instead of over the dashboard */
+  .dt-side { padding-bottom: 66px; }
+  .pdf-win.is-min {
+    left: 12px !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: 14px !important;
+    width: 212px;
+    background: #0e2d4a;
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: none;
+  }
+  .pdf-win.is-min .pdf-win-bar { background: rgba(255, 255, 255, 0.06); color: #fff; }
+  .pdf-win.is-min .pdf-win-bar:hover { background: rgba(255, 255, 255, 0.12); }
+}
+
+/* ---------- Other tabs ---------- */
+.admin-wrap .kpi-row { gap: 12px; }
+.admin-wrap .grid-2 { gap: 16px; }
+.chart-row { border-radius: 12px; background: #f7f9fb; transition: border-color .15s var(--ease), background .15s var(--ease); }
+.tab-btn { box-shadow: none; }
+.ekpi-overall { border-radius: 18px; }
+
+/* ---------- Smaller screens ---------- */
+@media (max-width: 1200px) {
+  .collector-app,
+  body.vsnd-screen .collector-app { grid-template-columns: 76px minmax(0, 1fr); }
+  .dt-side { padding: 14px 8px; align-items: stretch; }
+  .dt-nav span,
+  .dt-tools summary span {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .dt-side .brand > div:last-child,
+  .dt-nav-label,
+  .dt-tools summary::after,
+  .dt-side-foot .live-clock,
+  .dt-user .badge { display: none; }
+  .dt-side .brand { justify-content: center; padding: 0 0 6px; }
+  .dt-nav .tab-btn, .dt-nav a { justify-content: center; padding: 8px 0; }
+  .dt-nav i { font-size: 1.05rem; }
+  .dt-tools summary { justify-content: center; padding: 10px 0; }
+  .dt-tools[open] { position: absolute; left: 84px; bottom: 90px; z-index: 60; width: 260px; background: var(--navy); }
+  .dt-tools[open] summary span { position: static; width: auto; height: auto; clip: auto; }
+  .dt-user { justify-content: center; }
+  .dt-user .btn-ghost { padding: 4px 6px; font-size: .72rem; }
+
+  body.vsnd-screen .admin-wrap { overflow-y: auto; }
+  body.vsnd-screen #tab-dash.vsnd-board { height: auto; grid-template-rows: none; }
+  .vsnd-top-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .vsnd-top-row > .vsnd-pill { grid-column: span 3; }
+  .vsnd-top-row > .vsnd-panel { grid-column: span 2; }
+  .vsnd-top-row .vsnd-panel { min-height: 170px; }
+  .vsnd-board .vsnd-schedule-card { min-height: 420px; }
+  .vsnd-bottom-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vsnd-bottom-row .vsnd-panel { min-height: 220px; }
+}
+@media (max-width: 700px) {
+  .collector-app,
+  body.vsnd-screen .collector-app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .dt-side { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px; gap: 6px; }
+  .dt-nav { display: flex; gap: 4px; }
+  .dt-nav-label, .dt-side-foot .live-clock { display: none; }
+  .dt-nav .tab-btn, .dt-nav a { width: auto; padding: 8px 12px; }
+  .dt-side-foot { margin: 0; padding: 0; border: 0; }
+  .admin-wrap, body.vsnd-screen .admin-wrap { height: auto; padding: 14px; }
+  .vsnd-top-row, .vsnd-bottom-row { grid-template-columns: 1fr; }
+  .vsnd-top-row > * { grid-column: auto; }
+}

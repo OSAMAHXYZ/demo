@@ -5,31 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Delivery Transformation — Sign in</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20261105lay3" />
 </head>
 <body>
-  <div class="login-card">
-    <div class="brand">
-      <div class="brand-mark">T</div>
-      <div>
-        <strong>TOYOTA</strong>
-        <span>Delivery Transformation</span>
+  <main class="auth">
+    <section class="auth-brand">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <strong>TOYOTA</strong>
+          <span>Delivery Transformation</span>
+        </div>
       </div>
-    </div>
-    <h1>Sign in</h1>
-    <p>Delivery Coordinator · Delivery Employee</p>
-    <div class="user-pills" id="login-pills"></div>
-    <div class="field">
-      <label for="login-user">User</label>
-      <select id="login-user"></select>
-    </div>
-    <div class="field">
-      <label for="login-pass">Password</label>
-      <input id="login-pass" type="password" value="1234" autocomplete="current-password" />
-    </div>
-    <button type="button" class="btn-primary" id="login-btn" style="width:100%">Enter</button>
-    <div class="login-error" id="login-error"></div>
-  </div>
+      <div class="auth-copy">
+        <h1>Every delivery,<br />one live sheet.</h1>
+        <p>Coordinators print delivery notes, employees move each VIN through its status, and the dashboard keeps the whole team on schedule.</p>
+        <ul class="auth-points">
+          <li><i aria-hidden="true">&#9638;</i>Live Sheet shared by the whole team</li>
+          <li><i aria-hidden="true">&#9201;</i>SLA timers on every status</li>
+          <li><i aria-hidden="true">&#9993;</i>Delivery notes printed in one click</li>
+        </ul>
+      </div>
+      <p class="auth-foot">Toyota · Delivery Transformation</p>
+    </section>
+
+    <section class="auth-panel">
+      <div class="login-card">
+        <h1>Sign in</h1>
+        <p>Delivery Coordinator · Delivery Employee</p>
+        <div class="user-pills" id="login-pills"></div>
+        <div class="field">
+          <label for="login-user">User</label>
+          <select id="login-user"></select>
+        </div>
+        <div class="field">
+          <label for="login-pass">Password</label>
+          <input id="login-pass" type="password" value="1234" autocomplete="current-password" />
+        </div>
+        <button type="button" class="btn-primary" id="login-btn" style="width:100%">Enter</button>
+        <div class="login-error" id="login-error"></div>
+      </div>
+    </section>
+  </main>
 
   <script src="shared.js?v=20261003scope2"></script>
   <script>

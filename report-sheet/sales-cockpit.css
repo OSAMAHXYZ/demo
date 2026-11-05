@@ -858,7 +858,7 @@ body.ytd-mode #panel-ytdsales {
 #panel-ytdsales .ytd-detail h3 { margin: 0; color: #fff; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
 #panel-ytdsales .ytd-detail h4 { margin: 0 0 8px; color: #f8fbff; font-size: 13px; }
 #panel-ytdsales .ytd-detail p { margin: 4px 0 0; color: #b7c3d6; font-size: 13px; }
-#panel-ytdsales .ytd-month-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-top: 10px; flex: none; }
+#panel-ytdsales .ytd-month-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 10px; flex: none; }
 #panel-ytdsales .ytd-month-kpis article { position: relative; overflow: hidden; min-width: 0; background: #0d1728; border: 1px solid var(--sr-line); border-radius: 10px; padding: 8px 10px 8px 12px; }
 #panel-ytdsales .ytd-month-kpis article::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--sr-blue-2); }
 #panel-ytdsales .ytd-month-kpis article.is-actual::before { background: var(--sr-green); }
@@ -903,12 +903,14 @@ body.ytd-mode #panel-ytdsales .ytd-table tr.is-below td { background: inherit; c
 body.ytd-mode #panel-ytdsales .ytd-table tr.is-aside td { background: rgba(245, 158, 11, 0.06) !important; }
 body.ytd-mode #panel-ytdsales .ytd-table tbody tr:hover td,
 body.ytd-mode #panel-ytdsales .ytd-inspect tbody tr:hover td { background: #172436 !important; }
-#panel-ytdsales .ytd-table td:not(:first-child), #panel-ytdsales .ytd-table th:not(:first-child) { text-align: right; }
-#panel-ytdsales .ytd-table th:first-child, #panel-ytdsales .ytd-table td:first-child { text-align: left; width: 32%; }
-#panel-ytdsales .ytd-table th:nth-child(2), #panel-ytdsales .ytd-table td:nth-child(2) { width: 140px; }
-#panel-ytdsales .ytd-table th:nth-child(3), #panel-ytdsales .ytd-table td:nth-child(3) { width: 14%; }
-#panel-ytdsales .ytd-table th:nth-child(4), #panel-ytdsales .ytd-table td:nth-child(4) { width: 22%; }
-#panel-ytdsales .ytd-table th:nth-child(5), #panel-ytdsales .ytd-table td:nth-child(5) { width: 16%; }
+#panel-ytdsales .ytd-table td, #panel-ytdsales .ytd-table th { text-align: right; }
+#panel-ytdsales .ytd-table th:first-child, #panel-ytdsales .ytd-table td:first-child { text-align: center; width: 44px; color: var(--sr-muted) !important; font-weight: 700; }
+#panel-ytdsales .ytd-table th:nth-child(2), #panel-ytdsales .ytd-table td:nth-child(2) { text-align: left; width: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+#panel-ytdsales .ytd-table th:nth-child(3), #panel-ytdsales .ytd-table td:nth-child(3) { width: 11%; }
+#panel-ytdsales .ytd-table th:nth-child(4), #panel-ytdsales .ytd-table td:nth-child(4) { width: 11%; }
+#panel-ytdsales .ytd-table th:nth-child(5), #panel-ytdsales .ytd-table td:nth-child(5) { width: 12%; }
+#panel-ytdsales .ytd-table th:nth-child(6), #panel-ytdsales .ytd-table td:nth-child(6) { width: 18%; }
+#panel-ytdsales .ytd-table th:nth-child(7), #panel-ytdsales .ytd-table td:nth-child(7) { width: 15%; }
 #panel-ytdsales .ytd-ach { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 #panel-ytdsales .ytd-ach-num { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
 #panel-ytdsales .ytd-ach-track { width: 52px; height: 4px; border-radius: 99px; background: rgba(148, 163, 184, 0.18); overflow: hidden; flex: none; }

@@ -3212,6 +3212,7 @@
         mode: 'admin',
         onOpen: (vin) => DTXLive.openDrawer(vin, { mode: 'admin', onSaved: loadAll }),
       });
+      if (window.DTXLiveExcel) DTXLiveExcel.attach($('live-table'));
       $('audit-table').innerHTML = `<thead><tr><th>Time</th><th>User</th><th>VIN</th><th>Action</th><th>Old</th><th>New</th></tr></thead>
         <tbody>${(audit.rows || []).map((a) => `<tr>
           <td>${esc(String(a.at || '').replace('T', ' ').slice(0, 19))}</td>

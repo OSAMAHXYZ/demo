@@ -22,6 +22,7 @@
     { id: "boerrors", label: "BO Errors" },
     { id: "boallocstock", label: "Allocation" },
     { id: "plantracker", label: "Plan Tracker" },
+    { id: "zonetracker", label: "Zone Tracker" },
     { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
   ];
 

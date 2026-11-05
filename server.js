@@ -4902,6 +4902,7 @@ app.post('/api/report-sheet/ytd-targets', (req, res) => {
     store.months[month] = next;
     fs.mkdirSync(REPORT_SHEET_DIR, { recursive: true });
     fs.writeFileSync(YTD_TARGETS_FILE, JSON.stringify(store));
+    broadcastReportSheetUpdate(Date.now());
     return res.json({ ok: true, month, employees: next });
   } catch (err) {
     console.error('[report-sheet/ytd-targets]', err);

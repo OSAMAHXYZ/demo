@@ -47,7 +47,14 @@
     b2c: "#toyota-b2c-tracker-host",
     summary: "#sales-host"
   };
-  var REVEAL_SEL = ".card, .sr-mock-card, .sr-kpi-card, .sr-emp-rail, .bo-kpi, .boe-kpi, .boe-breakdown, .pt-card, .ytd-card, .ytd-kpi, .ytd-trend, .rv-board-card, .rv-audit, .act-header, .kpi";
+  var REVEAL_SEL = ".card, .sr-mock-card, .sr-kpi-card, .sr-emp-rail, .bo-kpi, .boe-kpi, .boe-breakdown, .pt-card, .ytd-card, .ytd-kpi, .ytd-trend, .rv-board-card, .rv-audit, .act-header, .kpi, " +
+    ".act-filter-bar, .mv-wide-bar, .mv-tabs-bar, .bas-alloc-toolbar, .mv-table-col, .mv-detail";
+  /* cards whose pieces reveal one by one instead of the whole card at once */
+  var REVEAL_SKIP = ".bas-section-card";
+  /* KPI numbers that count up from 0 when their card is revealed */
+  var COUNT_SEL = ".bo-kpi .val, .sr-kpi-val, .boe-kpi-val, .ytd-kpi .val";
+  var COUNT_MS = 900;
+  var COUNT_RE = /^\s*\d[\d,]*(?:\s*\/\s*\d[\d,]*)*\s*$/;
   var WIDE_BODY = ["pbi-wide-open", "act-section-wide", "act-match-wide"];
   var OPEN_SEL = ".pbi-wide-backdrop.show, .emp-drawer.open, .bo-modal:not([hidden]), .pt-modal:not([hidden]), .pt-drawer:not([hidden])";
   var BLOCK_TARGET = "select, input, textarea, .app-sidebar, .app-topbar, .dx-menu, .dx-dock";
@@ -649,6 +656,7 @@
       el.style.setProperty("--dx-d", Math.min(step, 7) * 70 + "ms");
       step++;
       el.classList.add("dx-rv-in");
+      countUpIn(el);
       setTimeout(function () {
         el.classList.remove("dx-rv", "dx-rv-in");
         el.style.removeProperty("--dx-d");
@@ -663,12 +671,59 @@
       var els = root.querySelectorAll(REVEAL_SEL);
       for (var i = 0; i < els.length; i++) {
         var el = els[i];
+        if (el.matches(REVEAL_SKIP)) continue;
         if (el.hasAttribute("data-dx-seen") || el.classList.contains("dx-rv")) continue;
         el.classList.add("dx-rv");
         io.observe(el);
       }
     });
   }
+
+  /* ---------- KPI count-up ---------- */
+  /* Only plain numbers ("1,284", "842 / 442") count; %, dates and words stay as they are.
+     The exact original text is put back at the end. Stops if the page rewrites the number meanwhile. */
+  function countUp(el) {
+    if (reduced() || !el || el.children.length || el.hasAttribute("data-dx-counting")) return;
+    var original = el.textContent;
+    if (!COUNT_RE.test(original)) return;
+    var parts = original.split(/(\d[\d,]*)/);
+    var nums = [];
+    for (var i = 1; i < parts.length; i += 2) {
+      nums.push({ at: i, n: Number(parts[i].replace(/,/g, "")), comma: parts[i].indexOf(",") >= 0 });
+    }
+    var any = false;
+    for (var k = 0; k < nums.length; k++) if (nums[k].n > 0) any = true;
+    if (!any) return;
+    el.setAttribute("data-dx-counting", "1");
+    var start = now();
+    var written = null;
+    function frame() {
+      if (written !== null && el.textContent !== written) { el.removeAttribute("data-dx-counting"); return; }
+      var p = Math.min(1, (now() - start) / COUNT_MS);
+      if (p >= 1) {
+        el.textContent = original;
+        el.removeAttribute("data-dx-counting");
+        return;
+      }
+      var e = 1 - Math.pow(1 - p, 3);
+      var out = parts.slice();
+      for (var j = 0; j < nums.length; j++) {
+        var v = Math.round(nums[j].n * e);
+        out[nums[j].at] = nums[j].comma ? v.toLocaleString("en-US") : String(v);
+      }
+      written = out.join("");
+      el.textContent = written;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  }
+  function countUpIn(el) {
+    if (reduced()) return;
+    if (el.matches(COUNT_SEL)) countUp(el);
+    var inner = el.querySelectorAll(COUNT_SEL);
+    for (var i = 0; i < inner.length; i++) countUp(inner[i]);
+  }
+
   function scheduleScans() {
     scanTimers.forEach(clearTimeout);
     scanTimers = [60, 400, 1300].map(function (ms) { return setTimeout(scan, ms); });
