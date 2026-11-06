@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
     <title>Reserved Orders</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders.css">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261106d1">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261106d3">
 </head>
 <body>
     <section id="login" class="login-split">
         <div class="login-brand">
             <div class="brand-lockup">
-                <img src="images/logo/toyota.png" alt="" onerror="this.style.display='none'">
+                <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
                 <div>
                     <strong>TOYOTA</strong>
                     <span>Digital Retail</span>
@@ -33,174 +33,163 @@
                 <label class="field" for="employee-id"><span>Employee number</span>
                     <span class="pass-row">
                         <input id="employee-id" type="password" autocomplete="current-password" placeholder="Employee ID" required>
-                        <button type="button" class="login-ghost" id="toggle-pass">Show</button>
+                        <button type="button" class="btn login-ghost" id="toggle-pass">Show</button>
                     </span>
                 </label>
                 <div class="err" id="login-error"></div>
-                <button class="solid" type="submit">Login</button>
+                <button class="btn primary" type="submit">Sign in</button>
                 <p class="login-note">Session expires after 30 minutes of inactivity.</p>
             </form>
         </div>
     </section>
 
     <div id="app" class="hidden tower-app">
-        <header class="topbar">
+        <header class="top" id="top">
             <div class="brand">
-                <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
-                <div>
-                    <strong>Sales CRM</strong>
-                    <span>Reserved Orders</span>
-                </div>
+                <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
+                <span><b>Reserved Orders</b><small>Sales CRM · ALJ</small></span>
             </div>
-            <nav class="jump">
-                <button type="button" class="nav-on" data-view="inbox">Messages</button>
-                <button type="button" data-view="errors">Order Errors <span id="oe-badge" class="oe-badge" hidden></span></button>
-                <button type="button" data-view="orders">Reserved Orders</button>
-                <button type="button" data-view="marketing">طلبات التسويق</button>
-                <a href="bo-order-lookup.html">BO Lookup</a>
-                <a href="detailed-calculations.html">Detailed Calculator</a>
-                <button type="button" data-view="message">Message Builder</button>
-            </nav>
-            <div class="top-links">
-                <div class="who"><b id="who"></b><span id="who-id"></span></div>
-                <button class="ghost notif-toggle" id="notif-toggle" type="button" hidden>Enable laptop alerts</button>
-                <span class="session-pill" id="session-pill">Session: 03:00</span>
-                <button class="ghost" id="logout" type="button">Sign out</button>
-            </div>
+            <span class="spacer"></span>
+            <button class="btn notif-toggle" id="notif-toggle" type="button" hidden>Enable laptop alerts</button>
+            <div class="who"><span class="av" id="who-av"></span><div><b id="who"></b><small id="who-id"></small></div></div>
+            <span class="session" id="session-pill" title="Session time left">30:00</span>
+            <button class="btn" id="logout" type="button">Sign out</button>
         </header>
 
-        <main class="tower">
-            <div id="alerts-banner" class="alerts-banner" role="status" hidden></div>
-            <section class="mc-center" id="mc-center">
-                <header class="mc-head">
-                    <p>Toyota · ALJ · Sales CRM</p>
-                    <h1>Messages for My Orders</h1>
-                </header>
-                <section id="emp-notifications" class="emp-notifications" hidden></section>
-                <section class="mc-summary" id="mc-summary" aria-label="Message summary"></section>
-                <div class="mc-workspace">
-                    <section class="mc-list">
-                        <input id="mc-search" type="search" placeholder="Search order, VIN, car, or error" aria-label="Search my order messages">
-                        <div class="mc-scroll" id="mc-orders"></div>
-                    </section>
-                    <section class="mc-work" id="mc-work">
-                        <p class="mc-empty">Select an order to read and send its message.</p>
-                    </section>
-                </div>
-            </section>
-            <section id="order-errors" class="order-errors hidden">
-                <header class="mc-head">
-                    <p>Toyota · ALJ · Sales CRM</p>
-                    <h1>Order Errors</h1>
-                </header>
-                <p class="oe-note">Errors admin pushed for <b>your</b> orders. Each card shows which order has the error, what is wrong, and what it should be.</p>
-                <section class="mc-summary" id="oe-summary" aria-label="Order error summary"></section>
-                <div id="oe-list"><p class="mc-empty">Loading your order errors…</p></div>
-            </section>
-            <section id="my-bo-alerts" class="my-alerts" hidden></section>
-            <section class="kpis" id="kpis"></section>
-            <div id="order-board" class="hidden">
-            <div class="toolbar" id="order-toolbar">
-                <input class="search" id="search" type="search" placeholder="Search VIN, order, customer, advisor" aria-label="Search VIN, order number, customer, or advisor">
-                <select id="filter-status" aria-label="Status"><option value="">All statuses</option></select>
-                <select id="filter-product" aria-label="Car"><option value="">All cars</option></select>
-                <select id="filter-area" aria-label="Area"><option value="">All areas</option></select>
-                <select id="filter-advisor" aria-label="Salesman"><option value="">All salesmen</option></select>
-                <select id="filter-queue" aria-label="Queue number"><option value="">All queues</option></select>
-                <select id="sort" aria-label="Sorting">
-                    <option value="queue-asc">Queue ascending</option>
-                    <option value="queue-desc">Queue descending</option>
-                    <option value="remaining">Expiry date (soonest)</option>
-                </select>
-                <button class="ghost" id="filter-clear" type="button">Clear</button>
-                <button class="solid" id="filter-refresh" type="button">Refresh</button>
-                <span class="view-switch" role="group" aria-label="View">
-                    <button class="ghost is-on" id="view-sheet" type="button" aria-pressed="true">Sheet</button>
-                    <button class="ghost" id="view-cards" type="button" aria-pressed="false">Cards</button>
-                </span>
-            </div>
-            <!-- Same Excel look as the admin Live sheet (id "admin-app" only reuses that stylesheet's scope) -->
-            <div id="admin-app" class="emp-xl-shell">
-                <section id="panel-sheet" class="xlw">
-                    <div id="emp-sheet-shell">
-                        <div class="xl-titlebar">
-                            <span class="xl-appicon" aria-hidden="true">X</span>
-                            <span class="xl-autosave" aria-hidden="true">AutoSave <i class="xl-toggle"></i></span>
-                            <span class="xl-filename"><b>Live sheet.xlsx</b> <small>· Everyone sees every order · you update only your own</small></span>
-                        </div>
-                        <div class="xl-menutabs" aria-hidden="true">
-                            <span>File</span><span class="on">Home</span><span>Insert</span><span>Page Layout</span><span>Formulas</span><span>Data</span><span>Review</span><span>View</span>
-                        </div>
-                        <div class="xl-formulabar">
-                            <div class="xl-namebox" id="emp-xl-name" title="Name Box">A2</div>
-                            <span class="xl-fxbtns" aria-hidden="true"><i>&#10005;</i><i>&#10003;</i><em>fx</em></span>
-                            <div class="xl-formula" id="emp-xl-formula" title="Selected cell value"></div>
-                        </div>
-                        <p class="sheet-note xl-msgbar" id="emp-sheet-msg">Green rows are yours: choose Payment, In progress or Cancelled in Order status, then write the note. Everyone sees the status, the note and when it was updated. Other rows are view-only.</p>
-                        <div class="excel-live sheet-merged" id="emp-sheet" data-source="merged" tabindex="0"></div>
-                        <div class="sheet-sources xl-sheettabs" role="tablist" aria-label="Live sheet source">
-                            <button class="sheet-source active" type="button" role="tab" aria-selected="true"><strong>Live sheet</strong></button>
-                        </div>
-                        <div class="xl-statusbar"><span class="xl-ready">Ready</span><span class="xl-stat" id="emp-xl-stat"></span></div>
+        <div class="shell">
+            <aside class="rail">
+                <div class="rlabel">My workspace</div>
+                <nav class="jump rail-list" aria-label="Sections">
+                    <span class="rail-ind" id="rail-ind"></span>
+                    <button type="button" class="nav-on" data-view="inbox"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Messages</span></button>
+                    <button type="button" data-view="errors"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><span>Order Errors</span><span id="oe-badge" class="count" hidden></span></button>
+                    <button type="button" data-view="orders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg><span>Reserved Orders</span></button>
+                    <button type="button" data-view="marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l15-6v14L3 13z"/><path d="M7 13v5h3"/></svg><span dir="rtl">طلبات التسويق</span></button>
+                    <button type="button" data-view="message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg><span>Message Builder</span></button>
+                    <div class="rlabel rlabel-tools">Tools</div>
+                    <a href="bo-order-lookup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg><span>BO Lookup</span></a>
+                    <a href="detailed-calculations.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg><span>Detailed Calculator</span></a>
+                </nav>
+                <div class="rail-foot" id="updated-at">Waiting for a live push</div>
+            </aside>
+
+            <main class="tower" id="main">
+                <div id="alerts-banner" class="alertline" role="status" hidden></div>
+
+                <section class="mc-center view" id="mc-center">
+                    <div class="head"><div><h1>Messages</h1><p>Corrections admin found on your orders in the Back Order file. Fix the value, then send the customer the message.</p></div></div>
+                    <section id="emp-notifications" class="emp-notifications" hidden></section>
+                    <section class="kpis kpis-3" id="mc-summary" aria-label="Message summary"></section>
+                    <div class="mc-workspace msg">
+                        <section class="mc-list card mlist">
+                            <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="mc-search" type="search" placeholder="Search order, VIN, car, or error" aria-label="Search my order messages"></label>
+                            <div class="mc-scroll" id="mc-orders"></div>
+                        </section>
+                        <section class="mc-work card mdetail" id="mc-work">
+                            <p class="empty">Select an order to read and send its message.</p>
+                        </section>
                     </div>
                 </section>
-            </div>
-            <section class="cards" id="cards"></section>
-            </div>
-            <section id="marketing-board" class="marketing-board hidden">
-                <header class="mc-head">
-                    <p>Toyota · ALJ · Sales CRM</p>
-                    <h1 dir="rtl">طلبات التسويق</h1>
-                </header>
-                <form id="marketing-form" class="marketing-form">
-                    <label class="field"><span>Order number</span><input id="marketing-order" inputmode="numeric" placeholder="Order number from the BO file" required></label>
-                    <button class="solid" type="submit">Check BO file</button>
-                </form>
-                <p class="marketing-note" id="marketing-note">Enter the order number. If it is in the BO file, you can send it to admin.</p>
-                <div id="marketing-result"></div>
-                <section class="marketing-sent" id="marketing-sent">
-                    <h2>Orders you sent</h2>
-                    <div id="marketing-sent-list"></div>
+
+                <section id="order-errors" class="order-errors view hidden">
+                    <div class="head"><div><h1>Order Errors</h1><p>Errors admin pushed for your orders: which order, what is wrong, and what it should be.</p></div></div>
+                    <section class="kpis kpis-3" id="oe-summary" aria-label="Order error summary"></section>
+                    <div id="oe-list" class="oe-list"><p class="empty">Loading your order errors…</p></div>
                 </section>
-            </section>
-        </main>
 
-        <div id="note-modal" class="note-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
-            <section class="note-panel">
-                <h2 id="note-modal-title">Status: <b id="note-modal-status"></b></h2>
-                <p class="muted" id="note-modal-order"></p>
-                <label for="note-text">Write a note for this status (everyone can see it in the sheet)</label>
-                <textarea id="note-text" rows="4" maxlength="500" placeholder="Why is it Payment / In progress / Cancelled?"></textarea>
-                <div class="err" id="note-error"></div>
-                <div class="note-actions">
-                    <button class="ghost" id="note-cancel" type="button">Cancel</button>
-                    <button class="solid" id="note-save" type="button">Save status and note</button>
+                <section id="my-bo-alerts" class="my-alerts" hidden></section>
+
+                <div id="order-board" class="view hidden">
+                    <div class="head">
+                        <div>
+                            <h1>Reserved orders</h1>
+                            <p id="emp-sheet-msg">Everyone sees every car in the live sheet. Your cars are highlighted in blue; open one to set its status and write the note.</p>
+                        </div>
+                        <button class="btn primary" id="next-pending" type="button" hidden>Update next car <span class="mono" id="next-pending-count"></span></button>
+                    </div>
+                    <div class="bar">
+                        <section class="chips" id="kpis" aria-label="Filter by status"></section>
+                        <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="search" type="search" placeholder="Search VIN, order, customer, salesman" aria-label="Search VIN, order number, customer, or salesman"></label>
+                    </div>
+                    <div class="bar" id="order-toolbar">
+                        <select class="sel" id="filter-status" aria-label="Status" hidden><option value="">All statuses</option></select>
+                        <select class="sel" id="filter-product" aria-label="Car"><option value="">All cars</option></select>
+                        <select class="sel" id="filter-area" aria-label="Area"><option value="">All areas</option></select>
+                        <select class="sel" id="filter-advisor" aria-label="Salesman"><option value="">All salesmen</option></select>
+                        <select class="sel" id="filter-queue" aria-label="Queue number"><option value="">All queues</option></select>
+                        <select class="sel" id="sort" aria-label="Sorting">
+                            <option value="queue-asc">Queue ascending</option>
+                            <option value="queue-desc">Queue descending</option>
+                            <option value="remaining">Expiry date (soonest)</option>
+                        </select>
+                        <button class="btn" id="filter-clear" type="button">Clear</button>
+                        <button class="btn" id="filter-refresh" type="button">Refresh</button>
+                        <span class="spacer"></span>
+                        <div class="seg" id="view-seg" role="group" aria-label="View">
+                            <span class="ind"></span>
+                            <button id="view-sheet" type="button" aria-pressed="true">Sheet</button>
+                            <button id="view-cards" type="button" aria-pressed="false">Cards</button>
+                        </div>
+                    </div>
+                    <div id="admin-app" class="emp-xl-shell">
+                        <section id="panel-sheet">
+                            <div id="emp-sheet-shell">
+                                <span id="emp-xl-name" hidden></span>
+                                <span id="emp-xl-formula" hidden></span>
+                                <div class="card"><div class="tbl-wrap sheet-wrap" id="emp-sheet" tabindex="0"></div></div>
+                                <p class="legend" id="emp-xl-stat"></p>
+                            </div>
+                        </section>
+                    </div>
+                    <section class="cards rc-grid" id="cards"></section>
                 </div>
-            </section>
+
+                <section id="marketing-board" class="marketing-board view hidden">
+                    <div class="head"><div><h1 dir="rtl">طلبات التسويق</h1><p>Enter an order number from the Back Order file and send it to admin.</p></div></div>
+                    <form id="marketing-form" class="marketing-form card pane">
+                        <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="marketing-order" inputmode="numeric" placeholder="Order number from the BO file" aria-label="Order number" required></label>
+                        <button class="btn primary" type="submit">Check BO file</button>
+                    </form>
+                    <p class="marketing-note" id="marketing-note">Enter the order number. If it is in the BO file, you can send it to admin.</p>
+                    <div id="marketing-result"></div>
+                    <section class="marketing-sent" id="marketing-sent">
+                        <h2>Orders you sent</h2>
+                        <div id="marketing-sent-list"></div>
+                    </section>
+                </section>
+            </main>
         </div>
 
-        <div id="order-modal" class="overlay rc-modal hidden" role="dialog" aria-modal="true" aria-label="Order details">
-            <section class="overlay-panel rc-panel">
-                <div class="overlay-head"><h2>Order details</h2><button class="ghost rc-close" type="button" aria-label="Close order details">Close</button></div>
-                <div id="order-modal-body"></div>
-            </section>
+        <div id="note-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="note-modal-title" hidden>
+            <h2 id="note-modal-title">Status: <b id="note-modal-status"></b></h2>
+            <p id="note-modal-order"></p>
+            <textarea id="note-text" rows="4" maxlength="500"></textarea>
+            <div class="err" id="note-error"></div>
+            <button class="btn" id="note-cancel" type="button">Cancel</button>
+            <button class="btn primary" id="note-save" type="button">Save status and note</button>
         </div>
 
-        <div id="overlay-message" class="overlay hidden">
-            <section class="overlay-panel">
-                <div class="overlay-head"><h2>Message Builder</h2><button class="ghost" type="button" data-view="inbox">Close</button></div>
+        <div class="scrim" id="order-scrim"></div>
+        <aside id="order-modal" class="drawer" role="dialog" aria-modal="true" aria-label="Order details" aria-hidden="true">
+            <div id="order-modal-body"></div>
+        </aside>
+
+        <div class="scrim" id="message-scrim"></div>
+        <div id="overlay-message" class="modal" role="dialog" aria-modal="true" aria-labelledby="msg-title">
+            <section class="box box-wide overlay-panel">
+                <div class="dr-head"><div><h2 id="msg-title">Message Builder</h2><p>Write a WhatsApp message for a customer from a car and trim.</p></div><button class="x" type="button" data-view="inbox" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
                 <div class="message-grid">
-                    <div>
-                        <div class="facts">
+                    <div class="form-col">
+                        <div class="form-row">
                             <label class="field"><span>Customer name</span><input id="msg-customer"></label>
                             <label class="field"><span>Advisor name</span><input id="msg-advisor"></label>
                         </div>
                         <label class="field"><span>Customer WhatsApp</span><input id="msg-phone" placeholder="9665xxxxxxxx"></label>
-                        <div class="facts">
+                        <div class="form-row">
                             <label class="field"><span>Car</span><select id="msg-car"></select></label>
                             <label class="field"><span>Model / trim</span><select id="msg-model"></select></label>
                         </div>
-                        <div class="facts">
+                        <div class="form-row">
                             <label class="field"><span>Message type</span>
                                 <select id="msg-type">
                                     <option value="followup">After call — follow-up</option>
@@ -216,29 +205,27 @@
                                     <option value="both">Arabic + English</option>
                                 </select>
                             </label>
-                            
                         </div>
                         <label class="field"><span>Extra note</span><input id="msg-note"></label>
                         <div class="car-preview" id="msg-preview-car"></div>
                     </div>
-                    <div>
-                        <div class="preview-box" id="msg-preview-wrap">
-                            <div class="wa-bubble" id="msg-preview">Select a car and model to generate the message.</div>
+                    <div class="form-col">
+                        <div class="wa" id="msg-preview-wrap">
+                            <div class="bubble" id="msg-preview">Select a car and model to generate the message.</div>
                         </div>
-                        <div class="toolbar">
-                            <button class="solid" id="msg-wa" type="button">Send on WhatsApp</button>
-                            <button class="ghost" id="msg-copy" type="button">Copy message</button>
-                            <button class="ghost" id="msg-reset" type="button">Reset</button>
+                        <div class="row-end">
+                            <button class="btn" id="msg-reset" type="button">Reset</button>
+                            <button class="btn" id="msg-copy" type="button">Copy message</button>
+                            <button class="btn wa-btn" id="msg-wa" type="button">Send on WhatsApp</button>
                         </div>
                     </div>
                 </div>
                 <section class="msg-alerts" id="msg-alerts">
                     <h3>Messages from admin</h3>
-                    <div id="msg-alert-list"><p class="muted">No messages yet.</p></div>
+                    <div id="msg-alert-list"><p class="empty">No messages yet.</p></div>
                 </section>
             </section>
         </div>
-
     </div>
-    <script src="reserved-orders-page.js?v=20261106d1"></script>
+    <script src="reserved-orders-page.js?v=20261106d3"></script>
 </body></html>

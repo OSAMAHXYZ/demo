@@ -2,6 +2,7 @@
     // Employees choose one of only three statuses, and write a note with it.
     const STATUSES = ['Payment', 'In progress', 'Cancelled'];
     const NOT_UPDATED = '__none__'; // filter value for orders that have no status yet
+    const MINE = '__mine__';
     const CARS = [
         ['Camry', 'images/cars/camry.png'], ['Corolla', 'images/cars/corolla.png'], ['Crown', 'images/cars/crown.png'],
         ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux double cab.png'],
@@ -99,8 +100,33 @@
     function timeAgo(date) { if (!date) return ''; const m = Math.round((Date.now() - date.getTime()) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.round(m / 60); return h < 48 ? h + ' h ago' : Math.round(h / 24) + ' d ago'; }
     function statusPillHtml(value) {
         const s = String(value || '').trim();
-        const cls = s === 'Payment' ? 'p-Payment' : s === 'In progress' ? 'p-In' : s === 'Cancelled' ? 'p-Cancelled' : (s ? 'p-In' : 'p-none');
+        const cls = s === 'Payment' ? 'p-ok' : s === 'In progress' ? 'p-warn' : s === 'Cancelled' ? 'p-bad' : (s ? 'p-warn' : 'p-none');
         return `<span class="pill ${cls}"><span class="dot"></span>${esc(s || 'Not updated')}</span>`;
+    }
+    function flashRow(key) {
+        const row = document.querySelector(`#emp-sheet tr[data-key="${CSS.escape(key)}"]`);
+        if (!row) return;
+        row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 1300);
+    }
+    function expHtml(deadline, dateLabel, big) {
+        const info = expInfo(parseLocal(deadline));
+        if (!info) return '<span class="muted-text">No expiry date</span>';
+        return `<div class="exp ${info.tone}${big ? ' exp-big' : ''}" data-deadline="${esc(deadline)}"><b>${esc(info.text)}</b><div class="track"><i style="width:${info.pct.toFixed(1)}%"></i></div>${dateLabel ? `<small>${dateLabel}</small>` : ''}</div>`;
+    }
+    // KPI tiles: [label, value, dot class, sub line]. Counts up only when the numbers change.
+    function paintKpis(box, tiles) {
+        if (!box) return;
+        const sig = JSON.stringify(tiles);
+        if (box.dataset.sig === sig) return;
+        box.dataset.sig = sig;
+        box.innerHTML = tiles.map(([label, value, dot, sub]) => `<div class="kpi${dot ? ' k-' + dot.slice(2) : ''}"><span>${dot ? `<span class="dot ${dot}"></span>` : ''}${esc(label)}</span><b class="num" data-to="${Number(value) || 0}">0</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`).join('');
+        box.querySelectorAll('[data-to]').forEach(countUp);
+    }
+    function paintRail() {
+        slideIndicator($('rail-ind'), document.querySelector('#app .jump button.nav-on'));
+        const top = $('top');
+        if (top) document.documentElement.style.setProperty('--toph', top.offsetHeight + 'px');
     }
     const ICONS = {
         orders: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/>',
@@ -133,53 +159,9 @@
         const end = parseLocal(order.deadline);
         return end ? end.getTime() - Date.now() : null;
     }
-    function formatRemain(ms) {
-        if (ms == null) return '';
-        if (ms <= 0) return 'EXPIRED';
-        const total = Math.floor(ms / 1000);
-        return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
-    }
-    function timerLabel(dateText, ms) {
-        if (!dateText) return 'No Expiry Date';
-        const remain = formatRemain(ms);
-        return remain ? `${dateText} ( ${remain} )` : dateText;
-    }
-    // Live countdown to the Reserved Order File expiry (column J): "3d 04:12:09", then "Expired".
-    function expiryCountdown(ms) {
-        if (ms == null) return '';
-        if (ms <= 0) return 'Expired';
-        const total = Math.floor(ms / 1000);
-        const days = Math.floor(total / 86400);
-        const rest = total % 86400;
-        return `${days ? days + 'd ' : ''}${pad(Math.floor(rest / 3600))}:${pad(Math.floor((rest % 3600) / 60))}:${pad(rest % 60)}`;
-    }
-    function expiryTone(ms) {
-        if (ms == null) return '';
-        if (ms <= 0) return 'is-bad';
-        return ms < 86400000 ? 'is-warn' : 'is-ok';
-    }
-    // Green until 4h past expiry; yellow from 4–8h overdue; red after 8h overdue.
-    function timerClass(ms) {
-        if (ms == null) return '';
-        if (ms > -4 * 3600000) return 'ok';
-        if (ms > -8 * 3600000) return 'soon';
-        return 'expired';
-    }
     function isExpired(order) { const ms = remainingMs(order); return ms != null && ms <= 0; }
     function isCompleted(order) { return order.status === 'تم الفوترة' || order.status === 'Payment'; }
     function isCancelled(order) { return order.status === 'الغاء' || order.status === 'Cancelled'; }
-    function isActive(order) { return !isExpired(order) && !isCompleted(order) && !isCancelled(order); }
-    function isSoon(order) {
-        if (isCancelled(order) || isCompleted(order)) return false;
-        const ms = remainingMs(order);
-        return ms != null && ms <= -4 * 3600000 && ms > -8 * 3600000;
-    }
-    function hasNoAssign(order) { return remainingMs(order) == null; }
-    function queueLabel(n) {
-        if (n == null || n === '') return '#—';
-        const num = Number(n);
-        return '#' + (Number.isFinite(num) ? pad(num) : n);
-    }
     function badge(status) {
         if (status === 'تم الفوترة' || status === 'Payment') return 'done';
         if (status === 'الغاء' || status === 'Cancelled') return 'cancel';
@@ -232,7 +214,7 @@
         if (!session) return;
         const left = Math.max(0, IDLE_MS - (Date.now() - session.last));
         const total = Math.ceil(left / 1000);
-        $('session-pill').textContent = `Session: ${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+        $('session-pill').textContent = `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
         if (left <= 0) endSession('timeout');
     }
 
@@ -262,7 +244,8 @@
         } catch (err) {
             console.error('Reserved Orders load failed:', err);
             orders = [];
-            $('cards').innerHTML = '<div class="empty">Reserved orders could not be loaded.</div>';
+            $('cards').innerHTML = '<div class="empty card">Reserved orders could not be loaded.</div>';
+            if ($('emp-sheet')) $('emp-sheet').innerHTML = '<div class="empty">Reserved orders could not be loaded. Press Refresh to try again.</div>';
             return;
         }
         const next = Array.isArray(data.orders) ? data.orders : [];
@@ -271,7 +254,7 @@
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
-        if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet .xl-grid')) return tickTimers();
+        if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet table')) return tickTimers();
         loadLive.last = payload;
         fillFilters();
         render();
@@ -283,7 +266,7 @@
         const product = $('filter-product');
         const area = $('filter-area');
         const keep = [status.value, advisor.value, queue.value, product.value, area.value];
-        status.innerHTML = '<option value="">All statuses</option>' + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + `<option value="${NOT_UPDATED}">Not updated</option>`;
+        status.innerHTML = '<option value="">All statuses</option>' + `<option value="${MINE}">Mine</option>` + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + `<option value="${NOT_UPDATED}">Not updated</option>`;
         // Filters list exactly what the sheet columns show (salesman = column A, product = column E, area = RTL column N).
         const rows = dataOrders().map((order) => sheetValues(order));
         const distinct = (key) => Array.from(new Set(rows.map((row) => row[key]).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b)));
@@ -311,6 +294,7 @@
             const row = sheetValues(order);
             if (q && ![row.VIN, row['Order number'], row['Customer name'], row['Salesman name'], row.Product, order.statusNote].join(' ').toLowerCase().includes(q)) return false;
             if (status === NOT_UPDATED) { if (statusKey(order.status)) return false; }
+            else if (status === MINE) { if (!canUpdateOrder(order)) return false; }
             else if (status && statusKey(order.status) !== status) return false;
             if (product && row.Product !== product) return false;
             if (area && row.Area !== area) return false;
@@ -318,13 +302,27 @@
             if (queue && String(order.boQueuePosition) !== queue) return false;
             return true;
         });
+        return sortOrders(list, sort);
+    }
+    function sortOrders(list, sort) {
         const pos = (order) => (order.boQueuePosition == null ? 9e9 : Number(order.boQueuePosition));
-        list.sort((a, b) => {
+        const mine = new Map(list.map((order) => [order, canUpdateOrder(order)]));
+        return list.sort((a, b) => {
+            if (mine.get(a) !== mine.get(b)) return mine.get(a) ? -1 : 1;
             if (sort === 'queue-desc') return (b.boQueuePosition == null ? -1 : Number(b.boQueuePosition)) - (a.boQueuePosition == null ? -1 : Number(a.boQueuePosition));
             if (sort === 'remaining') return (remainingMs(a) ?? 9e15) - (remainingMs(b) ?? 9e15);
             return pos(a) - pos(b) || (a.queueNumber || 0) - (b.queueNumber || 0);
         });
-        return list;
+    }
+    function pendingMine() {
+        return sortOrders(dataOrders().filter((order) => canUpdateOrder(order) && !statusKey(order.status)), $('sort').value);
+    }
+    function paintNextPending() {
+        const button = $('next-pending');
+        if (!button) return;
+        const left = pendingMine().length;
+        button.hidden = left === 0;
+        $('next-pending-count').textContent = left + ' left';
     }
     function activeKpi() {
         const extras = $('search').value.trim() || chosen('filter-product') || chosen('filter-area') || chosen('filter-advisor') || chosen('filter-queue');
@@ -347,36 +345,29 @@
         const list = visibleOrders();
         const source = dataOrders();
         const activeKey = activeKpi();
-        const countOf = (key) => source.filter((order) => (key === NOT_UPDATED ? !statusKey(order.status) : statusKey(order.status) === key)).length;
-        $('kpis').innerHTML = [
-            ['total', 'All reserved', source.length, ''],
-            ['Payment', 'Payment', countOf('Payment'), 'ok'],
-            ['In progress', 'In progress', countOf('In progress'), 'warn'],
-            ['Cancelled', 'Cancelled', countOf('Cancelled'), 'bad'],
-            [NOT_UPDATED, 'Not updated', countOf(NOT_UPDATED), 'info']
-        ].map(([key, label, value, cls]) => `<button type="button" class="kpi ${cls}${activeKey === key ? ' on' : ''}" data-kpi="${key}"><em>${label}</em><strong>${value}</strong></button>`).join('');
+        const countOf = (key) => source.filter((order) => (key === NOT_UPDATED ? !statusKey(order.status) : key === MINE ? canUpdateOrder(order) : statusKey(order.status) === key)).length;
+        $('kpis').innerHTML = '<span class="ind"></span>' + [
+            ['total', 'All', source.length, ''],
+            [MINE, 'Mine', countOf(MINE), 'd-you'],
+            ['Payment', 'Payment', countOf('Payment'), 'd-ok'],
+            ['In progress', 'In progress', countOf('In progress'), 'd-warn'],
+            ['Cancelled', 'Cancelled', countOf('Cancelled'), 'd-bad'],
+            [NOT_UPDATED, 'Not updated', countOf(NOT_UPDATED), 'd-none']
+        ].map(([key, label, value, dot]) => `<button type="button" data-kpi="${key}" aria-pressed="${activeKey === key ? 'true' : 'false'}">${dot ? `<span class="dot ${dot}"></span>` : ''}${label}<i>${value}</i></button>`).join('');
+        slideIndicator($('kpis').querySelector('.ind'), $('kpis').querySelector('[aria-pressed="true"]'));
+        paintNextPending();
         paintViewMode();
         if (viewMode() === 'sheet') {
             $('cards').innerHTML = '';
             paintSheet(list);
         } else {
-            $('cards').classList.toggle('rc-grid', list.length > 0);
-            $('cards').innerHTML = list.length ? list.map((order) => tileHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
+            $('cards').innerHTML = list.length ? list.map((order) => tileHtml(order)).join('') : '<div class="empty card">No orders match this view. Clear the search or pick another filter.</div>';
         }
         paintOrderModal();
     }
     function retailMatch(value) {
         const text = String(value || '').trim().toLowerCase();
         return text === 'rtlesal' || text.includes('retail electronic sales');
-    }
-    function ageValue(days) {
-        if (days == null || days === '' || Number.isNaN(Number(days))) return '<span class="flag">—</span>';
-        const n = Number(days);
-        const tone = n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
-        return `<span class="flag ${tone}">${n}d</span>`;
-    }
-    function toneValue(value, good) {
-        return `<span class="flag ${good ? 'good' : 'bad'}">${esc(value)}</span>`;
     }
     function dataOrders() {
         return orders.filter((order) => !isSheetHeader(order));
@@ -429,18 +420,6 @@
         if (!name || !suffix) return name;
         if (name.toLowerCase().endsWith(' ' + suffix.toLowerCase())) return name.slice(0, name.length - suffix.length).trim();
         return name;
-    }
-    function areaText(order) {
-        if (isReservedFileOrder(order)) return '';
-        const fromB = columnText(order, 'B');
-        if (fromB) return fromB;
-        const first = sourceFields(order)[0];
-        if (!first) return '';
-        const label = String(first.label || '').trim();
-        if (/^[A-Z]{1,3}$/.test(label)) return '';
-        const value = String(first.value || '').replace(/\u00a0/g, ' ').trim();
-        if (isBlankValue(value) || /^vehicle search area$/i.test(value)) return '';
-        return value;
     }
     function isSheetHeader(order) {
         return columnText(order, 'I').toLowerCase() === '' && byCol(order, 'I').toLowerCase() === 'product' && /model year/i.test(byCol(order, 'K'));
@@ -501,24 +480,6 @@
         const p = (n) => String(n).padStart(2, '0');
         return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
     }
-    function ageHtml(raw) {
-        const match = String(raw || '').match(/-?\d+/);
-        if (!match) return esc(raw);
-        const n = Number(match[0]);
-        const tone = n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
-        return `<span class="flag ${tone}">${n}d</span>`;
-    }
-    function fieldTone(label, value) {
-        const name = String(label || '').toLowerCase();
-        if (/search area|share|sharing/.test(name)) return retailMatch(value) ? 'good' : 'bad';
-        if (/allocation ag|vin allocation|^age$|ageing|aging/.test(name)) {
-            const match = String(value || '').match(/-?\d+/);
-            if (!match) return '';
-            const n = Number(match[0]);
-            return n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
-        }
-        return '';
-    }
     function sourceFields(order) {
         if (isReservedFileOrder(order) && Array.isArray(order.reservedFields) && order.reservedFields.length) {
             return order.reservedFields;
@@ -552,30 +513,6 @@
         let vehicle = firstText(order, order.vehicle, (label) => label === 'product' || label === 'vehicle' || label === 'car' || label === 'المنتج');
         if (sfx && vehicle.endsWith(' ' + sfx)) vehicle = vehicle.slice(0, -(sfx.length + 1)).trim();
         return isBlankValue(vehicle) ? '' : vehicle;
-    }
-    function meta(label, valueHtml, plain) {
-        if (isBlankValue(plain)) return '';
-        return `<div class="meta"><span>${esc(label)}</span><b dir="auto">${valueHtml}</b></div>`;
-    }
-    function aheadHtml(order) {
-        const ahead = Array.isArray(order.ahead) ? order.ahead : [];
-        if (!ahead.length) return '<span class="ahead-empty">No orders ahead</span>';
-        return `<div class="ahead-list">${ahead.map((item) => {
-            const orderNo = item.orderNumber && item.orderNumber !== 'NO ORDER' ? item.orderNumber : '';
-            const who = item.salesAdvisor || '';
-            const text = ['#' + (item.queueNumber == null ? ahead.length : item.queueNumber), orderNo, who].filter(Boolean).join(' ');
-            return `<b title="${esc(text)}">${esc(text)}</b>`;
-        }).join('')}</div>`;
-    }
-    function excelFieldsHtml(order) {
-        const fields = sourceFields(order).filter((field) => !isBlankValue(field.value));
-        const body = fields.length
-            ? fields.map((field) => {
-                const tone = fieldTone(field.label, field.value);
-                return `<div class="excel-field${tone ? ' ' + tone : ''}"><span dir="auto" title="${esc(field.label)}">${esc(field.label)}</span><b dir="auto" title="${esc(field.value)}">${esc(field.value)}</b></div>`;
-            }).join('')
-            : '<div class="excel-field"><span>Source</span><b>No values on this order</b></div>';
-        return `<div class="excel-row hidden">${body}</div>`;
     }
     function statusWhen(value) {
         const date = parseLocal(value);
@@ -663,48 +600,31 @@
         if (!advisor || String(advisor).toLowerCase() === 'unassigned') advisor = '';
         return { product, sfx, advisor };
     }
-    function personInitials(name) {
-        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-        if (!parts.length) return '?';
-        return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
-    }
     function tileHtml(order) {
         const info = tileInfo(order);
         const deadline = columnDeadline(order);
-        const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
         const img = carImage(info.product, order.vehicle, productName(order));
         const carName = info.product || cleanVehicleName(order.vehicle) || 'Car not named';
-        const timeText = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
-        const tone = ms == null ? '' : timerClass(ms);
-        return `<button type="button" class="rc-tile${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}" data-tile-key="${esc(order.key)}" aria-label="Open details for ${esc(carName)}">
-            <span class="rc-top"><span class="rc-q" title="Back Order queue position">${order.boQueuePosition == null ? '—' : '#' + esc(String(order.boQueuePosition))}</span>${sheetStatusPill(order)}</span>
+        const mine = canUpdateOrder(order);
+        const cancelled = isCancelled(order) || statusKey(order.status) === 'Cancelled';
+        return `<button type="button" class="rc-tile card${mine ? ' mine' : ''}${cancelled ? ' cancelled' : ''}" data-tile-key="${esc(order.key)}" aria-label="Open details for ${esc(carName)}">
+            <span class="rc-top"><span class="q"><b>${order.boQueuePosition == null ? '—' : '#' + esc(String(order.boQueuePosition))}</b></span>${statusPillHtml(statusKey(order.status))}</span>
             <span class="rc-car">
                 <span class="rc-thumb">${img ? `<img src="${img}" alt="${esc(carName)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rc-fallback" hidden>${CAR_ICON}</span>` : `<span class="rc-fallback">${CAR_ICON}</span>`}</span>
                 <span class="rc-name"><b dir="auto" title="${esc(carName)}">${esc(carName)}</b>${info.sfx ? `<small dir="auto">${esc(info.sfx)}</small>` : ''}</span>
             </span>
-            <span class="rc-foot">
-                <span class="rc-who${info.advisor ? '' : ' none'}"><span class="rc-av">${esc(info.advisor ? personInitials(info.advisor) : '–')}</span><span dir="auto" title="${esc(info.advisor || 'Unassigned')}">${esc(info.advisor || 'Unassigned')}</span></span>
-                <span class="rc-time ${tone}" data-deadline="${esc(deadline || '')}">${esc(timeText)}</span>
-            </span>
+            <span class="person"><span class="av">${esc(info.advisor ? initials(info.advisor) : '–')}</span><span dir="auto" title="${esc(info.advisor || 'Unassigned')}">${esc(mine ? 'You' : (info.advisor || 'Unassigned'))}</span></span>
+            ${expHtml(deadline, '', false)}
         </button>`;
     }
-    // ---- Excel-style sheet: same look as the admin Live sheet. Everyone sees every row; only the advisor of an
-    // order can set its status (Payment / In progress / Cancelled) and must write a note with it. Double-click a row
-    // for the full card. ----
-    const SHEET_COLS = ['Queue 1', 'Queue 2', 'Queue 3', 'Order status', 'Note', 'Updated', 'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
-    const sheetSel = { r: 0, c: 0 };
+    // ---- Live sheet: everyone sees every row; only the salesman of an order can set its status (Payment /
+    // In progress / Cancelled), always with a note. A click or Enter on a row opens the drawer. ----
     function viewMode() {
         try { return localStorage.getItem('ro-orders-view') === 'cards' ? 'cards' : 'sheet'; } catch (e) { return 'sheet'; }
     }
     function setViewMode(mode) {
         try { localStorage.setItem('ro-orders-view', mode); } catch (e) { /* storage blocked: only this visit */ }
         render();
-    }
-    function sheetLetter(index) {
-        let n = index + 1;
-        let out = '';
-        while (n > 0) { const rem = (n - 1) % 26; out = String.fromCharCode(65 + rem) + out; n = Math.floor((n - 1) / 26); }
-        return out;
     }
     function realText(value) { return isBlankValue(value) ? '' : String(value).replace(/\u00a0/g, ' ').trim(); }
     // value of an RTL Stock column of the order's VIN (L usage, K allocation age, X area)
@@ -719,11 +639,6 @@
     function statusKey(value) {
         const text = String(value || '').trim().toLowerCase();
         return STATUSES.find((item) => item.toLowerCase() === text) || '';
-    }
-    function statusOptionsHtml(current) {
-        const key = statusKey(current);
-        return (key ? '' : '<option value="" selected disabled>Choose status…</option>')
-            + STATUSES.map((item) => `<option value="${esc(item)}"${item === key ? ' selected' : ''}>${esc(item)}</option>`).join('');
     }
     function sheetValues(order) {
         const info = tileInfo(order);
@@ -747,105 +662,80 @@
             'Share level': rtlByLabel(order, 'sharing level') || rtlCol(order, 'H') || realText(order.shareLevel)
         };
     }
-    function sheetStatusPill(order) {
+    function queueHtml(order) {
+        const tiers = order.boTierQueues || [];
+        const first = tiers[0];
+        const bars = `<div class="tiers" aria-hidden="true">${[0, 1, 2].map((i) => `<span${tiers[i] ? ' class="on"' : ''}></span>`).join('')}</div>`;
+        if (!first) return `<span class="ahead-empty" title="No colour choice 1 for this order in the Toyota Back Order file">—</span>${bars}`;
+        const pair = [first.exterior, first.interior].filter(Boolean).join(' / ');
+        const title = tiers.map((q, i) => (q ? `Choice ${i + 1}: #${q.position} of ${q.size}${q.exterior || q.interior ? ' (' + [q.exterior, q.interior].filter(Boolean).join(' / ') + ')' : ''}` : '')).filter(Boolean).join('\n');
+        return `<div class="q" title="${esc(title)}"><b>#${esc(String(first.position))}</b><small>/ ${esc(String(first.size))}</small></div>${pair ? `<div class="q-pair mono">${esc(pair)}</div>` : ''}${bars}`;
+    }
+    function carCellHtml(values) {
+        const sub = [values['ALJ suffix'], values['Model year']].filter(Boolean).map(esc).join(' · ');
+        const sw = values['Exterior color'] || values['Interior color']
+            ? `<span class="sw">${values['Exterior color'] ? swatch(values['Exterior color']) : ''}${values['Interior color'] ? swatch(values['Interior color']) : ''}</span>`
+            : '';
+        return `<div class="car"><div><b dir="auto">${esc(values.Product || 'Car not named')}</b><small>${sub}${sw}</small></div></div>`;
+    }
+    function ageTag(raw) {
+        const match = String(raw || '').match(/-?\d+/);
+        if (!match) return raw ? `<span class="tag">${esc(raw)}</span>` : '<span class="muted-text">—</span>';
+        const n = Number(match[0]);
+        return `<span class="tag${n <= 5 ? ' good' : n === 6 ? ' warntag' : ' badtag'}">${n} d</span>`;
+    }
+    function updatedHtml(order, mine) {
+        const who = order.statusNoteBy || order.statusChangedBy || '';
+        const at = parseLocal(order.statusChangedAt);
+        if (!statusKey(order.status) || (!who && !at)) return '<span class="muted-text">—</span>';
+        const self = who && samePerson(who, (readSession() || {}).name);
+        return `<div class="upd"><span>${esc(self || (mine && !who) ? 'You' : who || '—')}</span>${at ? `<small title="${esc(statusWhen(order.statusChangedAt))}">${esc(timeAgo(at))}</small>` : ''}</div>`;
+    }
+    function sheetRowHtml(order) {
+        const mine = canUpdateOrder(order);
+        const values = sheetValues(order);
         const key = statusKey(order.status);
-        const tone = key === 'Cancelled' ? 'is-bad' : key === 'Payment' ? 'is-ok' : key === 'In progress' ? 'is-hold' : 'is-none';
-        return `<span class="s-pill ${tone}">${esc(key || 'Not updated')}</span>`;
-    }
-    function tierQueueCell(order, tier) {
-        const q = (order.boTierQueues || [])[tier - 1];
-        if (!q) return `<td class="col-queue col-tier" title="No colour choice ${tier} for this order in the Toyota Back Order file"><span class="ahead-empty">—</span></td>`;
-        const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-        return `<td class="col-queue col-tier" title="Colour choice ${tier}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><span class="q-pill">#${esc(String(q.position))}</span><small class="q-of"> / ${esc(String(q.size))}</small>${pair ? `<small class="q-pair">${esc(pair)}</small>` : ''}</td>`;
-    }
-    function sheetCell(order, label, values, mine) {
-        const tierMatch = /^Queue ([123])$/.exec(label);
-        if (tierMatch) return tierQueueCell(order, Number(tierMatch[1]));
-        if (label === 'Order status') {
-            if (!mine) return `<td class="col-status">${sheetStatusPill(order)}</td>`;
-            return `<td class="col-status"><select class="xl-status-select admin-status-select" data-key="${esc(order.key)}" aria-label="Choose the status of your order">${statusOptionsHtml(order.status)}</select></td>`;
-        }
-        if (label === 'Note') {
-            const note = String(order.statusNote || '').trim();
-            const edit = mine && statusKey(order.status)
-                ? `<button type="button" class="xl-note-edit" data-key="${esc(order.key)}" title="Edit the note" aria-label="Edit the note">&#9998;</button>`
-                : '';
-            return `<td class="col-note" title="${esc(note)}">${note ? `<span class="xl-note-text" dir="auto">${esc(note)}</span>` : '<span class="ahead-empty">—</span>'}${edit}</td>`;
-        }
-        if (label === 'Updated') {
-            const who = order.statusNoteBy || order.statusChangedBy || '';
-            const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusNoteDisplay || order.statusChangedDisplay || '');
-            if (!statusKey(order.status) || (!who && !when)) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
-            return `<td class="col-updated-by">${who ? `<b>${esc(who)}</b>` : ''}${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}</td>`;
-        }
-        if (label === 'Usage') {
-            const value = values.Usage;
-            return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
-        }
-        if (label === 'Expiry date') {
-            const date = values['Expiry date'];
-            const deadline = date ? expiryDeadline(order) : '';
-            const end = parseLocal(deadline);
-            if (!end) return `<td class="col-expiry">${esc(date)}</td>`;
-            const ms = end.getTime() - Date.now();
-            return `<td class="col-expiry xl-expiry ${expiryTone(ms)}" data-expiry="${esc(deadline)}" title="Expires ${esc(date)}"><b class="xl-expiry-left">${esc(expiryCountdown(ms))}</b><small>${esc(date)}</small></td>`;
-        }
-        if (label === 'Salesman name') return `<td class="col-advisor">${values[label] ? (mine ? `<b>${esc(values[label])}</b>` : esc(values[label])) : ''}</td>`;
-        const value = values[label] == null ? '' : values[label];
-        const plain = String(value).trim();
-        return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
+        const cancelled = key === 'Cancelled' || isCancelled(order);
+        const note = String(order.statusNote || '').trim();
+        const salesman = values['Salesman name'];
+        const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
+        const pill = statusPillHtml(key);
+        const classes = ['rowlink', mine ? 'mine' : '', cancelled ? 'row-cancelled' : ''].filter(Boolean).join(' ');
+        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0">
+            <td>${queueHtml(order)}</td>
+            <td>${carCellHtml(values)}</td>
+            <td dir="auto">${esc(values['Customer name'] || '—')}</td>
+            <td><b class="num">${esc(values['Order number'] || '—')}</b><br><span class="mono muted-text">${esc(values.VIN || '')}</span></td>
+            <td>${salesman ? `<span class="person"><span class="av">${esc(initials(salesman))}</span><span dir="auto">${esc(mine ? 'You' : salesman)}</span></span>` : '<span class="muted-text">Unassigned</span>'}</td>
+            <td>${deadline ? expHtml(deadline, esc(values['Expiry date']), false) : '<span class="muted-text">No expiry date</span>'}</td>
+            <td>${mine ? `<span class="edit">${pill}${icon('chevron', 'chev')}</span>` : pill}</td>
+            <td><div class="note" title="${esc(note)}" dir="auto">${note ? esc(note) : '—'}</div></td>
+            <td>${updatedHtml(order, mine)}</td>
+            <td>${values.Usage ? `<span class="tag${retailMatch(values.Usage) ? ' good' : ''}">${esc(values.Usage)}</span>` : '<span class="muted-text">—</span>'}</td>
+            <td>${ageTag(values['Allocation age'])}</td>
+            <td dir="auto">${esc(values.Area || '—')}</td>
+            <td dir="auto">${esc(values['Share level'] || '—')}</td>
+        </tr>`;
     }
     function paintSheet(list) {
         const box = $('emp-sheet');
         if (!box) return;
-        const cols = SHEET_COLS;
         const keepTop = box.scrollTop;
         const keepLeft = box.scrollLeft;
         const mineCount = list.filter(canUpdateOrder).length;
-        if (!list.length) {
-            box.innerHTML = '<p class="empty">No reserved orders match this view.</p>';
-        } else {
-            const rows = list.map((order, rowIndex) => {
-                const mine = canUpdateOrder(order);
-                const values = sheetValues(order);
-                const classes = [mine ? 'is-mine' : '', statusKey(order.status) === 'Cancelled' || isCancelled(order) ? 'row-cancelled' : ''].filter(Boolean).join(' ');
-                return `<tr class="${classes}" data-key="${esc(order.key)}"><th class="xl-rn" data-r="${rowIndex}">${rowIndex + 2}</th>${cols.map((label) => sheetCell(order, label, values, mine)).join('')}</tr>`;
-            }).join('');
-            box.innerHTML = `<table class="xl-grid"><thead>
-                <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}">${sheetLetter(index)}</th>`).join('')}</tr>
-                <tr class="xl-head"><th class="xl-rn">1</th>${cols.map((label) => `<th class="xl-h">${esc(label)}</th>`).join('')}</tr>
-            </thead><tbody>${rows}</tbody></table>`;
-        }
+        const heads = ['Queue', 'Car', 'Customer', 'Order · VIN', 'Salesman', 'Expiry', 'Status', 'Note', 'Updated', 'Usage', 'Allocation age', 'Area', 'Share level'];
+        box.innerHTML = list.length
+            ? `<table class="sheet-table"><thead><tr>${heads.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${list.map(sheetRowHtml).join('')}</tbody></table>`
+            : '<div class="empty">No orders match this view. Clear the search or pick another filter.</div>';
         box.scrollTop = keepTop;
         box.scrollLeft = keepLeft;
         const stat = $('emp-xl-stat');
-        if (stat) stat.textContent = `${list.length.toLocaleString('en-GB')} rows × ${cols.length} columns · ${mineCount} yours`;
-        sheetSelect(sheetSel.r, sheetSel.c, false);
-    }
-    function sheetSelect(r, c, scroll) {
-        const box = $('emp-sheet');
-        const body = box && box.querySelector('.xl-grid tbody');
-        if (!body || !body.rows.length) return;
-        r = Math.max(0, Math.min(body.rows.length - 1, r));
-        c = Math.max(0, Math.min(body.rows[0].cells.length - 2, c));
-        sheetSel.r = r;
-        sheetSel.c = c;
-        box.querySelectorAll('.xl-sel, .xl-active').forEach((el) => el.classList.remove('xl-sel', 'xl-active'));
-        const tr = body.rows[r];
-        const td = tr && tr.cells[c + 1];
-        if (!td) return;
-        td.classList.add('xl-sel');
-        if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
-        const letters = box.querySelector('.xl-letters');
-        if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
-        const name = $('emp-xl-name');
-        if (name) name.textContent = sheetLetter(c) + (r + 2);
-        const formula = $('emp-xl-formula');
-        if (formula) {
-            const select = td.querySelector('select');
-            formula.textContent = select ? select.value : String(td.textContent || '').replace(/\s+/g, ' ').trim();
+        if (stat) {
+            stat.innerHTML = `<span class="mono">${list.length.toLocaleString('en-GB')} rows · ${mineCount} yours</span>`
+                + '<span><span class="dot d-you"></span>Your car</span>'
+                + '<span><span class="tiers" aria-hidden="true"><span class="on"></span><span class="on"></span><span></span></span>Colour choices with a queue place</span>'
+                + '<span>Expiry bar shows the last 72 hours</span>';
         }
-        if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     function paintViewMode() {
         const sheet = viewMode() === 'sheet';
@@ -854,262 +744,192 @@
         $('cards').classList.toggle('hidden', sheet);
         const a = $('view-sheet');
         const b = $('view-cards');
-        if (a) { a.classList.toggle('is-on', sheet); a.setAttribute('aria-pressed', sheet ? 'true' : 'false'); }
-        if (b) { b.classList.toggle('is-on', !sheet); b.setAttribute('aria-pressed', sheet ? 'false' : 'true'); }
+        if (a) a.setAttribute('aria-pressed', sheet ? 'true' : 'false');
+        if (b) b.setAttribute('aria-pressed', sheet ? 'false' : 'true');
+        const seg = $('view-seg');
+        if (seg) slideIndicator(seg.querySelector('.ind'), sheet ? a : b);
     }
-    // ---- Note dialog: choosing a status always asks for a note first; nothing is saved until the note is written. ----
-    let noteTarget = null;
-    function requestStatus(key, status, select) {
-        const order = orders.find((item) => item.key === key);
-        if (!order || !statusKey(status)) { if (select) render(); return; }
-        const chosen = statusKey(status);
-        noteTarget = { key, status: chosen };
-        const modal = $('note-modal');
-        if (!modal) { changeStatus(key, chosen, ''); return; }
-        $('note-modal-status').textContent = chosen;
-        $('note-modal-order').textContent = [order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'Order ' + order.orderNumber : '', looksLikeVinText(order.vin) ? order.vin : ''].filter(Boolean).join(' · ');
-        $('note-text').value = statusKey(order.status) === chosen ? String(order.statusNote || '') : '';
-        $('note-error').textContent = '';
-        $('note-save').disabled = false;
-        modal.classList.remove('hidden');
-        setTimeout(() => { try { $('note-text').focus(); } catch (e) { /* ignore */ } }, 30);
+    // ---- Order drawer: pick a status, write the required note, save. Polling never repaints it while someone types. ----
+    let drawerPick = '';
+    let drawerDraft = '';
+    let drawerDirty = false;
+    const PICKS = [
+        ['Payment', 'k-Payment', 'd-ok', 'Money received or contract signed'],
+        ['In progress', 'k-In', 'd-warn', 'Customer is completing payment'],
+        ['Cancelled', 'k-Cancelled', 'd-bad', 'Reservation will be released']
+    ];
+    function requestStatus(key, status) {
+        if (orders.some((item) => item.key === key)) openOrderModal(key, statusKey(status));
     }
-    function closeNoteDialog() {
-        const modal = $('note-modal');
-        if (modal) modal.classList.add('hidden');
-        noteTarget = null;
-        render();            // puts every status dropdown back to what is saved
-    }
-    async function saveNoteDialog() {
-        if (!noteTarget) return;
-        const text = $('note-text').value.trim();
-        if (!text) { $('note-error').textContent = 'Write a note first. It is required with every status.'; return; }
-        $('note-save').disabled = true;
-        const error = await changeStatus(noteTarget.key, noteTarget.status, text);
-        if (error) { $('note-error').textContent = error; $('note-save').disabled = false; return; }
-        $('note-modal').classList.add('hidden');
-        noteTarget = null;
-    }
-    function paintOrderModal() {
-        const modal = $('order-modal');
+    function paintOrderModal(force) {
+        const drawer = $('order-modal');
         const body = $('order-modal-body');
-        if (!modal || !body) return;
+        if (!drawer || !body) return;
         const order = openOrderKey ? orders.find((item) => item.key === openOrderKey) : null;
         if (!order) {
-            openOrderKey = '';
-            modal.classList.add('hidden');
-            body.innerHTML = '';
+            if (drawer.classList.contains('open')) closeOrderModal();
             return;
         }
-        const panel = modal.querySelector('.overlay-panel');
-        const scroll = panel ? panel.scrollTop : 0;
-        const wasExpanded = Boolean(body.querySelector('.excel-row:not(.hidden)'));
+        const note = $('dr-note');
+        if (!force && drawer.classList.contains('open') && note && (document.activeElement === note || drawerDirty)) return;
+        const scroller = body.querySelector('.dr-body');
+        const scroll = scroller ? scroller.scrollTop : 0;
         body.innerHTML = detailHtml(order);
-        if (wasExpanded) {
-            const row = body.querySelector('.excel-row');
-            const toggle = body.querySelector('.bo-toggle');
-            if (row) row.classList.remove('hidden');
-            if (toggle) { toggle.setAttribute('aria-expanded', 'true'); toggle.textContent = 'Hide Full BO Details'; }
+        if (drawerPick && $('dr-notebox')) {
+            body.querySelectorAll('[data-pick]').forEach((button) => button.setAttribute('aria-pressed', button.dataset.pick === drawerPick ? 'true' : 'false'));
+            $('dr-pick-name').textContent = drawerPick;
+            $('dr-note').value = drawerDraft;
+            $('dr-notebox').classList.add('open');
         }
-        modal.classList.remove('hidden');
-        if (panel) panel.scrollTop = scroll;
+        const nextScroller = body.querySelector('.dr-body');
+        if (nextScroller) nextScroller.scrollTop = scroll;
+        requestAnimationFrame(() => requestAnimationFrame(() => body.querySelectorAll('.tierline [data-l]').forEach((el) => {
+            if (el.tagName === 'EM') el.style.width = el.dataset.l + '%';
+            else el.style.left = el.dataset.l + '%';
+        })));
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        $('order-scrim').classList.add('open');
     }
-    function openOrderModal(key) {
+    function openOrderModal(key, pick) {
+        const order = orders.find((item) => item.key === key);
+        if (!order) return;
         openOrderKey = key;
-        paintOrderModal();
-        const close = document.querySelector('#order-modal .rc-close');
-        if (close) close.focus({ preventScroll: true });
+        drawerPick = pick && canUpdateOrder(order) ? pick : '';
+        drawerDraft = drawerPick && statusKey(order.status) === drawerPick ? String(order.statusNote || '') : '';
+        drawerDirty = false;
+        paintOrderModal(true);
+        setTimeout(() => {
+            const target = drawerPick ? $('dr-note') : document.querySelector('#order-modal .rc-close');
+            if (target) target.focus({ preventScroll: true });
+        }, 30);
     }
     function closeOrderModal() {
+        const key = openOrderKey;
         openOrderKey = '';
-        paintOrderModal();
+        drawerPick = '';
+        drawerDraft = '';
+        drawerDirty = false;
+        $('order-modal').classList.remove('open');
+        $('order-modal').setAttribute('aria-hidden', 'true');
+        $('order-scrim').classList.remove('open');
+        const row = key && document.querySelector(`#emp-sheet tr[data-key="${CSS.escape(key)}"]`);
+        if (row) row.focus({ preventScroll: true });
     }
-    // Order details dialog: the same information as the sheet columns, nothing else.
+    function choosePick(status) {
+        const order = orders.find((item) => item.key === openOrderKey);
+        if (!order || !canUpdateOrder(order)) return;
+        drawerPick = status;
+        document.querySelectorAll('#order-modal [data-pick]').forEach((button) => button.setAttribute('aria-pressed', button.dataset.pick === status ? 'true' : 'false'));
+        $('dr-pick-name').textContent = status;
+        if (!drawerDirty) {
+            drawerDraft = statusKey(order.status) === status ? String(order.statusNote || '') : '';
+            $('dr-note').value = drawerDraft;
+        }
+        $('dr-note-err').textContent = '';
+        $('dr-notebox').classList.add('open');
+        setTimeout(() => $('dr-note').focus(), 60);
+    }
+    function cancelPick() {
+        drawerPick = '';
+        drawerDraft = '';
+        drawerDirty = false;
+        document.querySelectorAll('#order-modal [data-pick]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+        $('dr-notebox').classList.remove('open');
+    }
+    async function saveDrawer() {
+        const order = orders.find((item) => item.key === openOrderKey);
+        const button = $('dr-save');
+        if (!order || !drawerPick || !button || button.disabled) return;
+        const text = $('dr-note').value.trim();
+        if (!text) {
+            $('dr-note-err').textContent = 'Write a note first. It is required with every status.';
+            $('dr-note').focus();
+            return;
+        }
+        const key = openOrderKey;
+        const status = drawerPick;
+        const values = sheetValues(order);
+        $('dr-note-err').textContent = '';
+        button.disabled = true;
+        const error = await changeStatus(key, status, text);
+        if (error) {
+            if ($('dr-note-err')) $('dr-note-err').textContent = error;
+            if ($('dr-save')) $('dr-save').disabled = false;
+            return;
+        }
+        closeOrderModal();
+        flashRow(key);
+        const dot = status === 'Payment' ? 'd-ok' : status === 'Cancelled' ? 'd-bad' : 'd-warn';
+        toast('Saved · ' + status, [values.Product, values['Order number']].filter(Boolean).join(' ') + '. Everyone sees it in the live sheet now.', dot);
+        paintNextPending();
+    }
     function detailHtml(order) {
         const values = sheetValues(order);
         const mine = canUpdateOrder(order);
         const key = statusKey(order.status);
-        const carName = values.Product || 'Car not named';
-        const img = carImage(values.Product, order.vehicle, productName(order));
-        const tierText = (tier) => {
-            const q = (order.boTierQueues || [])[tier - 1];
-            if (!q) return '—';
-            const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-            return `#${q.position} / ${q.size}${pair ? ` (${pair})` : ''}`;
-        };
         const who = order.statusNoteBy || order.statusChangedBy || '';
-        const when = order.statusChangedAt ? statusWhen(order.statusChangedAt) : (order.statusNoteDisplay || order.statusChangedDisplay || '');
+        const at = parseLocal(order.statusChangedAt);
         const note = String(order.statusNote || '').trim();
-        const item = (label, value) => `<div class="rd-item"><span>${esc(label)}</span><b dir="auto">${isBlankValue(value) ? '—' : esc(value)}</b></div>`;
-        const grid = [
-            item('Queue 1', tierText(1)),
-            item('Queue 2', tierText(2)),
-            item('Queue 3', tierText(3)),
-            item('Salesman name', values['Salesman name']),
-            item('Customer name', values['Customer name']),
-            item('Order number', values['Order number']),
-            item('Model year', values['Model year']),
-            item('Product', values.Product),
-            item('ALJ suffix', values['ALJ suffix']),
-            item('Exterior color', values['Exterior color']),
-            item('Interior color', values['Interior color']),
-            item('VIN', values.VIN),
-            item('Expiry date', values['Expiry date']),
-            item('Usage', values.Usage),
-            item('Allocation age', values['Allocation age']),
-            item('Area', values.Area),
-            item('Share level', values['Share level'])
-        ].join('');
-        const statusBox = mine
-            ? `<select class="rd-status-select" data-key="${esc(order.key)}" aria-label="Choose the status of your order">${statusOptionsHtml(order.status)}</select>${key ? `<button type="button" class="rd-note-edit" data-key="${esc(order.key)}">Edit note</button>` : ''}`
-            : `${sheetStatusPill(order)}<small class="rd-lock">Only ${esc(values['Salesman name'] || 'the assigned salesman')} can update this order</small>`;
-        return `<article class="rd${isCancelled(order) || key === 'Cancelled' ? ' cancelled' : ''}">
-            <header class="rd-head">
-                <div class="rd-thumb">${img ? `<img src="${img}" alt="${esc(carName)}" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="rd-fallback" hidden>${CAR_ICON}</span>` : `<span class="rd-fallback">${CAR_ICON}</span>`}</div>
-                <div class="rd-title"><h3 dir="auto">${esc(carName)}${values['ALJ suffix'] ? ` <small>${esc(values['ALJ suffix'])}</small>` : ''}</h3><span dir="auto">${esc(values['Customer name'] || '')}</span></div>
-            </header>
-            <div class="rd-grid">${grid}</div>
-            <section class="rd-status">
-                <h4>Order status</h4>
-                <div class="rd-status-row">${statusBox}</div>
-                <p class="rd-note" dir="auto">${note ? esc(note) : '<span class="muted">No note yet.</span>'}</p>
-                ${key && (who || when) ? `<small class="rd-updated">Updated by <b>${esc(who || '—')}</b>${when ? ` · ${esc(when)}` : ''}</small>` : ''}
-            </section>
-        </article>`;
-    }
-    function cardHtml(order) {
-        const deadline = columnDeadline(order);
-        const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
-        const hours = order.paymentHours || 48;
-        const reservedOnly = isReservedFileOrder(order);
-        let sfx;
-        let product;
-        let year;
-        let ageRaw;
-        let area;
-        let share;
-        let colors;
-        let advisor;
-        if (reservedOnly) {
-            // Reserved Order File layout: E product, F sfx, D year, G/H colors, B name, C order, I VIN, J expiry.
-            sfx = reservedField(order, 'F');
-            const rawProduct = reservedField(order, 'E') || (!looksLikeVinText(order.vehicle) ? order.vehicle : '');
-            product = productOnly(rawProduct, sfx);
-            year = reservedField(order, 'D') || order.modelYear || '';
-            ageRaw = '';
-            area = '';
-            share = '';
-            colors = [reservedField(order, 'G') || order.exterior, reservedField(order, 'H') || order.interior]
-                .filter((item) => !isBlankValue(item)).join(' / ');
-            advisor = '';
-        } else {
-            sfx = columnText(order, 'J');
-            if (looksLikeDateText(sfx)) sfx = '';
-            product = productOnly(columnText(order, 'I'), sfx);
-            if (looksLikeVinText(product)) product = productName(order) || '';
-            year = columnText(order, 'K');
-            ageRaw = columnText(order, 'P');
-            area = areaText(order);
-            share = columnText(order, 'C');
-            colors = [columnText(order, 'M'), columnText(order, 'N')].filter((item) => !isBlankValue(item)).join(' / ');
-            advisor = columnText(order, 'T');
-        }
-        const expiryOn = expiryText(order);
-        const customer = reservedOnly
-            ? (firstText(order, order.customerName, (label) => label === 'name' || label === 'customer' || label === 'customer name' || label === 'العميل') || reservedField(order, 'B'))
-            : firstText(order, order.customerName, (label) => label === 'customer' || label === 'customer name' || label === 'العميل');
-        const img = carImage(product, order.vehicle, productName(order));
-        const assigned = Boolean(advisor && String(advisor).toLowerCase() !== 'unassigned');
-        const orderLabel = order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER';
-        const vin = show(order.vin, 'VIN NOT FOUND');
-        const initial = product ? product.slice(0, 1) : '';
-        const specs = [
-            meta('Product', esc(product), product),
-            meta('SFX', esc(sfx), sfx),
-            meta('Model year', esc(year), year),
-            meta('Reservation age', ageHtml(ageRaw), ageRaw),
-            meta('Area', toneValue(area, retailMatch(area)), area),
-            meta('Share level', toneValue(share, retailMatch(share)), share),
-            meta('Colors', esc(colors), colors)
-        ].join('');
-        return `<article class="order-block${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}">
-            <div class="lane${isExpired(order) ? ' expired' : ''}${specs ? '' : ' no-specs'}" data-key="${esc(order.key)}">
-            <div class="lane-id">
-                <div class="qmark">${queueLabel(order.queueNumber)}</div>
-                <div class="thumb">${img ? `<img class="car" src="${img}" alt="${esc(product)}" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="thumb-fallback" hidden>${CAR_ICON}</span>` : `<span class="thumb-fallback">${CAR_ICON}</span>`}</div>
-                <b dir="auto" title="${esc(orderLabel)}">${esc(orderLabel)}</b>
-                <span class="muted" dir="auto" title="${esc(vin)}">VIN ${esc(vin)}</span>
-                ${isBlankValue(customer) ? '' : `<span class="muted" dir="auto" title="${esc(customer)}">${esc(customer)}</span>`}
-            </div>
-            ${specs ? `<div class="lane-mid">${specs}</div>` : ''}
-            <div class="lane-assign">
-                <span class="assign-pill ${assigned ? 'on' : 'off'}">${assigned ? 'Assigned' : 'Unassigned'}</span>
-                ${assigned ? meta('Advisor', esc(advisor), advisor) : ''}
-                ${expiryOn ? meta('Expiry date', esc(expiryOn), expiryOn) : ''}
-                ${(!reservedOnly && order.paymentLabel && order.paymentLabel !== 'UNKNOWN') ? meta('Payment', esc(order.paymentLabel), order.paymentLabel) : ''}
-                <div class="meta ahead-meta"><span>Upcoming queue</span>${aheadHtml(order)}</div>
-            </div>
-            <div class="lane-side">
-                <div class="timer ${timerClass(ms)}" data-deadline="${esc(deadline || '')}" data-date="${esc(expiryOn || '')}">${esc(timerLabel(expiryOn, ms))}</div>
-                <span class="muted time-left">${ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left')}</span>
-                <span class="muted">${hours} HOURS</span>
-                <div class="status-glow">
-                    <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
-                    <small>${esc(order.statusChangedBy || 'No update yet')}${order.statusChangedAt ? ' · ' + esc(statusWhen(order.statusChangedAt)) : ''}</small>
-                </div>
-                ${canUpdateOrder(order)
-                    ? `<div class="status-row"><select class="status-select" aria-label="Choose status">${statusOptionsHtml(order.status)}</select></div>`
-                    : '<p class="status-lock">Only the assigned advisor can update</p>'}
-            </div>
-            </div>
-            ${notesHtml(order)}
-            <button class="bo-toggle" type="button" aria-expanded="false">View Full BO Details</button>
-            ${excelFieldsHtml(order)}
-        </article>`;
-    }
-    function notesHtml(order) {
         const leader = String(order.leaderNote || '').trim();
-        return `<section class="order-notes" data-notes-key="${esc(order.key)}">
-            <div class="note-block leader-note">
-                <h4>Leader note</h4>
-                ${leader
-                    ? `<p dir="auto">${esc(leader)}</p><small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small>`
-                    : '<p class="muted">No leader note from admin yet.</p>'}
-            </div>
+        const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
+        const fact = (label, value, extra) => `<div><span>${esc(label)}</span><b dir="auto"${extra === 'mono' ? ' class="mono"' : ''}>${isBlankValue(value) ? '—' : esc(value)}${extra && extra !== 'mono' ? extra : ''}</b></div>`;
+        const tierLine = (i) => {
+            const q = (order.boTierQueues || [])[i];
+            if (!q) return `<div class="tierline"><span>Choice ${i + 1}</span><span class="muted-text">No colour choice</span><b></b></div>`;
+            const pct = q.size ? Math.max(0, Math.min(100, (Number(q.position) / Number(q.size)) * 100)) : 0;
+            const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
+            return `<div class="tierline" title="${esc(pair)}"><span>Choice ${i + 1}</span><span class="rail2"><em data-l="${pct.toFixed(1)}" style="width:0"></em><i data-l="${pct.toFixed(1)}" style="left:0"></i></span><b>#${esc(String(q.position))} / ${esc(String(q.size))}</b></div>`;
+        };
+        const statusSec = `<section class="sec">
+            <h3>Status</h3>
+            <div class="cur-status">${statusPillHtml(key)}${key && (who || at) ? `<small>by ${esc(who || '—')}${at ? ' · ' + esc(timeAgo(at)) : ''}</small>` : ''}</div>
+            ${note ? `<div class="cur-note" dir="auto">${esc(note)}${at ? `<small>${esc(statusWhen(order.statusChangedAt))}</small>` : ''}</div>` : ''}
+            ${mine ? `<div class="status-picks">${PICKS.map(([name, cls, dot, hint]) => `<button type="button" class="pick ${cls}" data-pick="${esc(name)}" aria-pressed="false"><b><span class="dot ${dot}"></span>${esc(name)}</b><small>${esc(hint)}</small></button>`).join('')}</div>
+            <div class="notebox" id="dr-notebox"><div><div class="inner">
+                <label for="dr-note">Note for <b id="dr-pick-name"></b> (required, everyone sees it)</label>
+                <textarea id="dr-note" maxlength="500" dir="auto" placeholder="Why is it Payment / In progress / Cancelled?"></textarea>
+                <div class="err" id="dr-note-err"></div>
+                <div class="row-end"><button type="button" class="btn" id="dr-cancel">Cancel</button><button type="button" class="btn primary" id="dr-save">Save status and note</button></div>
+            </div></div></div>`
+            : `<div class="lock">${icon('lock')}Only ${esc(values['Salesman name'] || 'the assigned salesman')} can update this car.</div>`}
         </section>`;
+        return `<div class="dr-head">
+                <div><h2 dir="auto">${esc(values.Product || 'Car not named')}${values['ALJ suffix'] ? ` <span class="sfx">${esc(values['ALJ suffix'])}</span>` : ''}</h2>
+                <p dir="auto">${esc(values['Customer name'] || 'No customer name')}${values['Order number'] ? ' · order ' + esc(values['Order number']) : ''}</p></div>
+                <button type="button" class="x rc-close" aria-label="Close">${icon('close')}</button>
+            </div>
+            <div class="dr-body">
+                ${statusSec}
+                ${leader ? `<section class="sec"><h3>Leader note</h3><div class="cur-note" dir="auto">${esc(leader)}<small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small></div></section>` : ''}
+                <section class="sec"><h3>Expiry</h3>${deadline ? expHtml(deadline, `Reserved Order File column J · ${esc(values['Expiry date'])}`, true) : '<span class="muted-text">No expiry date</span>'}</section>
+                <section class="sec"><h3>Back Order queue</h3>${[0, 1, 2].map(tierLine).join('')}<p class="hint">Position among orders for the same product, suffix and colours. Lower is sooner.</p></section>
+                <section class="sec"><h3>Car</h3><div class="facts">
+                    ${fact('VIN', values.VIN, 'mono')}
+                    ${fact('Model year', values['Model year'])}
+                    ${fact('Exterior', values['Exterior color'], values['Exterior color'] ? `<span class="sw">${swatch(values['Exterior color'])}</span>` : '')}
+                    ${fact('Interior', values['Interior color'], values['Interior color'] ? `<span class="sw">${swatch(values['Interior color'])}</span>` : '')}
+                    ${fact('Usage', values.Usage)}
+                    ${fact('Allocation age', values['Allocation age'])}
+                    ${fact('Area', values.Area)}
+                    ${fact('Share level', values['Share level'])}
+                    ${fact('Salesman', values['Salesman name'])}
+                </div></section>
+            </div>`;
     }
     function tickTimers() {
         paintSession();
-        document.querySelectorAll('.xl-expiry').forEach((cell) => {
-            const end = parseLocal(cell.dataset.expiry);
-            if (!end) return;
-            const ms = end.getTime() - Date.now();
-            const left = cell.querySelector('.xl-expiry-left');
-            if (left) left.textContent = expiryCountdown(ms);
-            cell.classList.remove('is-ok', 'is-warn', 'is-bad');
-            const tone = expiryTone(ms);
-            if (tone) cell.classList.add(tone);
-        });
-        document.querySelectorAll('.rc-tile .rc-time').forEach((el) => {
-            const end = parseLocal(el.dataset.deadline);
-            const ms = end ? end.getTime() - Date.now() : null;
-            el.textContent = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
-            el.className = `rc-time ${ms == null ? '' : timerClass(ms)}`;
-            const tile = el.closest('.rc-tile');
-            if (tile && !tile.classList.contains('cancelled')) tile.classList.toggle('expired', ms != null && ms <= 0);
-        });
-        document.querySelectorAll('.timer').forEach((el) => {
-            const end = parseLocal(el.dataset.deadline);
-            const ms = end ? end.getTime() - Date.now() : null;
-            el.textContent = timerLabel(el.dataset.date || '', ms);
-            el.className = `timer ${timerClass(ms)}`;
-            const left = el.parentElement && el.parentElement.querySelector('.time-left');
-            if (left) left.textContent = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
-            const card = el.closest('.lane');
-            const expired = ms != null && ms <= 0;
-            if (card) card.classList.toggle('expired', expired);
-            const block = el.closest('.order-block');
-            if (block && !block.classList.contains('cancelled')) block.classList.toggle('expired', expired);
+        document.querySelectorAll('.exp[data-deadline]').forEach((el) => {
+            const info = expInfo(parseLocal(el.dataset.deadline));
+            if (!info) return;
+            const text = el.querySelector('b');
+            if (text && text.textContent !== info.text) text.textContent = info.text;
+            const bar = el.querySelector('.track i');
+            if (bar) bar.style.width = info.pct.toFixed(1) + '%';
+            if (!el.classList.contains(info.tone)) {
+                el.classList.remove('t-ok', 't-warn', 't-bad');
+                el.classList.add(info.tone);
+            }
         });
     }
     // Saves the status together with its note. Returns '' on success or the error text.
@@ -1130,12 +950,6 @@
         }
         loadLive.last = '';
         await loadLive();
-        if (error) {
-            const lock = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
-            if (lock) lock.textContent = error;
-            const bar = $('emp-sheet-msg');
-            if (bar) bar.textContent = error;
-        }
         return error;
     }
     async function loadAlertRules() {
@@ -1152,19 +966,20 @@
         const data = res.ok ? await res.json().catch(() => ({})) : {};
         const items = data.alerts || [];
         if (!items.length) {
-            box.innerHTML = '<p class="muted">No messages from admin yet.</p>';
+            box.innerHTML = '<p class="empty">No messages from admin yet.</p>';
             return;
         }
         box.innerHTML = items.map((item) => {
             const dated = hasMessageDate(item.message);
-            return `<article class="msg-alert ${item.sentAt ? 'sent' : 'warning'}">
-            <small>${esc(item.name)} · ${esc(item.product || 'All cars')} · ${esc(item.column)}</small>
+            return `<article class="msg-alert card pane">
+            <div class="mdetail-head"><small class="muted-line">${esc(item.name)} · ${esc(item.product || 'All cars')} · ${esc(item.column)}</small>${item.sentAt ? '<span class="pill p-ok"><span class="dot"></span>Sent</span>' : '<span class="pill p-none"><span class="dot"></span>Not sent yet</span>'}</div>
             <p><b>${item.affectedOrderCount}</b> found under your name in the BO file. Change ${esc(item.incorrectValue || 'blank')} to ${esc(item.correctValue || '—')}.</p>
-            <textarea data-admin-msg="${esc(item.ruleId)}" rows="3">${esc(item.message)}</textarea>
-            ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" data-shift="-1" data-rule="${esc(item.ruleId)}">−</button><button type="button" data-shift="1" data-rule="${esc(item.ruleId)}">+</button></div>` : ''}
-            <p>${item.sentAt ? 'Sent' : 'Not sent yet'}</p>
-            <button type="button" data-open-wa="${esc(item.ruleId)}">Open WhatsApp</button>
-            <button type="button" data-confirm-sent="${esc(item.ruleId)}">${item.sentAt ? 'Sent again' : 'Mark as sent'}</button>
+            <textarea data-admin-msg="${esc(item.ruleId)}" rows="3" dir="auto">${esc(item.message)}</textarea>
+            ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" class="btn sm" data-shift="-1" data-rule="${esc(item.ruleId)}">−1 day</button><button type="button" class="btn sm" data-shift="1" data-rule="${esc(item.ruleId)}">+1 day</button></div>` : ''}
+            <div class="row-end">
+                <button type="button" class="btn wa-btn" data-open-wa="${esc(item.ruleId)}">Open WhatsApp</button>
+                <button type="button" class="btn primary" data-confirm-sent="${esc(item.ruleId)}">${item.sentAt ? 'Sent again' : 'Mark as sent'}</button>
+            </div>
         </article>`;
         }).join('');
         box.querySelectorAll('[data-open-wa]').forEach((button) => button.addEventListener('click', () => openWhatsApp(messageText(button.dataset.openWa))));
@@ -1210,8 +1025,9 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: session.token, ruleId, boNumber, message: text })
         });
-        if (!res.ok) return;
+        if (!res.ok) { toast('Not saved', 'The message could not be marked as sent. Try again.', 'd-bad'); return; }
         delete mcDrafts[ruleId + '::' + boNumber];
+        toast('Marked as sent', boNumber ? 'Order ' + boNumber + '. Admin sees it as sent.' : 'Admin sees it as sent.', 'd-ok');
         await paintMyAlerts();
         paintMessageAlerts();
     }
@@ -1400,20 +1216,31 @@
     }
 
     function showView(name) {
-        $('overlay-message').classList.toggle('hidden', name !== 'message');
+        const builder = name === 'message';
+        $('overlay-message').classList.toggle('open', builder);
+        $('message-scrim').classList.toggle('open', builder);
         const center = $('mc-center');
         const board = $('order-board');
         const marketing = $('marketing-board');
         const errors = $('order-errors');
-        if (center) center.classList.toggle('hidden', name === 'orders' || name === 'marketing' || name === 'errors');
-        if (board) board.classList.toggle('hidden', name !== 'orders');
-        if (marketing) marketing.classList.toggle('hidden', name !== 'marketing');
-        if (errors) errors.classList.toggle('hidden', name !== 'errors');
-        document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
+        const shown = name === 'orders' ? board : name === 'marketing' ? marketing : name === 'errors' ? errors : (builder ? null : center);
+        if (!builder) {
+            [center, board, marketing, errors].forEach((section) => { if (section) section.classList.toggle('hidden', section !== shown); });
+            document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
+        }
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
         if (name === 'inbox') paintMyAlerts();
         if (name === 'errors') paintMyAlerts();
         if (name === 'marketing') loadMyMarketing();
+        paintRail();
+        if (shown) {
+            replayView(shown);
+            window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        }
+        if (name === 'orders') requestAnimationFrame(() => {
+            slideIndicator($('kpis').querySelector('.ind'), $('kpis').querySelector('[aria-pressed="true"]'));
+            paintViewMode();
+        });
     }
     function oeStatusLabel(order) {
         const status = (order && order.status) || 'new';
@@ -1437,14 +1264,9 @@
         const items = boAlerts || [];
         const totalOrders = items.reduce((sum, item) => sum + (item.orders || []).length, 0);
         const openOrders = items.reduce((sum, item) => sum + (item.orders || []).filter((order) => (order.status || 'new') !== 'completed').length, 0);
-        if (summary) {
-            summary.innerHTML = `
-            <article class="is-need"><span>Error types pushed to you</span><strong>${items.length}</strong></article>
-            <article class="is-soon"><span>Your orders with errors</span><strong>${totalOrders}</strong></article>
-            <article class="is-sent"><span>Still open</span><strong>${openOrders}</strong></article>`;
-        }
+        paintKpis(summary, [['Error types', items.length, 'd-warn', 'Pushed to you'], ['Orders with errors', totalOrders, '', 'Under your name'], ['Still open', openOrders, 'd-bad', 'Not done yet']]);
         if (!items.length) {
-            list.innerHTML = '<p class="mc-empty">No order errors were pushed to you. When admin pushes an error for one of your orders, it appears here.</p>';
+            list.innerHTML = '<p class="empty card">No order errors were pushed to you. When admin pushes an error for one of your orders, it appears here.</p>';
             return;
         }
         list.innerHTML = items.map((item) => {
@@ -1458,20 +1280,20 @@
                     <td>${esc(order.product || item.product || '—')}</td>
                     <td>${esc(order.orderDate || '—')}</td>
                     <td>${esc(item.column || order.column || '—')}: <b>${esc(wrong)}</b></td>
-                    <td><span class="oe-status ${state.cls}">${state.label}</span></td>
+                    <td><span class="pill ${state.cls === 'is-sent' ? 'p-ok' : state.cls ? 'p-warn' : 'p-bad'}"><span class="dot"></span>${state.label}</span></td>
                 </tr>`;
             }).join('');
-            return `<article class="oe-card${allDone ? ' is-done' : ''}">
-                <div class="oe-card-head">
-                    <h2>${esc(item.name || 'Order error')}</h2>
-                    <span class="oe-status ${allDone ? 'is-sent' : ''}">${orders.length} order${orders.length === 1 ? '' : 's'}</span>
+            return `<article class="oe-card card pane${allDone ? ' is-done' : ''}">
+                <div class="mdetail-head">
+                    <h2 dir="auto">${esc(item.name || 'Order error')}</h2>
+                    <span class="pill ${allDone ? 'p-ok' : 'p-bad'}"><span class="dot"></span>${orders.length} order${orders.length === 1 ? '' : 's'}</span>
                 </div>
-                <p class="oe-what">In <b>${esc(item.column || 'the BO file')}</b>, the value <b>${esc(item.incorrectValue || 'blank')}</b> is wrong${item.correctValue ? ` — it should be <span class="oe-fix">${esc(item.correctValue)}</span>` : ''}.${item.product ? ` Car: ${esc(item.product)}.` : ''}</p>
-                ${item.message ? `<div class="oe-msg">${esc(item.message)}</div>` : ''}
-                <div style="overflow:auto;"><table class="oe-table"><thead><tr><th>Order number</th><th>Car</th><th>Order date</th><th>What is wrong</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No orders listed.</td></tr>'}</tbody></table></div>
-                <div class="oe-actions">
-                    ${allDone ? '' : `<button type="button" data-oe-viewed="${esc(item.ruleId)}">Mark as viewed</button>`}
-                    <button type="button" data-oe-open="${esc(item.ruleId)}">Open in Messages</button>
+                <div class="fixline"><span class="muted-text">${esc(item.column || 'BO file')}</span><span class="from">${esc(item.incorrectValue || 'blank')}</span>${item.correctValue ? `${icon('chevron')}<span class="to">${esc(item.correctValue)}</span>` : ''}${item.product ? `<span class="muted-text">· ${esc(item.product)}</span>` : ''}</div>
+                ${item.message ? `<div class="cur-note" dir="auto">${esc(item.message)}</div>` : ''}
+                <div class="tbl-wrap"><table class="oe-table"><thead><tr><th>Order number</th><th>Car</th><th>Order date</th><th>What is wrong</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No orders listed.</td></tr>'}</tbody></table></div>
+                <div class="row-end">
+                    ${allDone ? '' : `<button type="button" class="btn" data-oe-viewed="${esc(item.ruleId)}">Mark as viewed</button>`}
+                    <button type="button" class="btn" data-oe-open="${esc(item.ruleId)}">Open in Messages</button>
                 </div>
             </article>`;
         }).join('');
@@ -1484,10 +1306,10 @@
         if (!box) return;
         if (!order) { box.innerHTML = ''; return; }
         const fields = (order.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b title="${esc(field.value)}">${esc(field.value)}</b></div>`).join('');
-        box.innerHTML = `<article class="marketing-card">
+        box.innerHTML = `<article class="marketing-card card pane">
             <h2>Order ${esc(order.orderNumber)}</h2>
-            <div class="marketing-fields">${fields || '<div><span>BO file</span><b>No other values on this row</b></div>'}</div>
-            <button class="solid" id="marketing-send" type="button">Send to admin</button>
+            <div class="facts marketing-fields">${fields || '<div><span>BO file</span><b>No other values on this row</b></div>'}</div>
+            <div class="row-end"><button class="btn primary" id="marketing-send" type="button">Send to admin</button></div>
         </article>`;
         $('marketing-send').addEventListener('click', sendMarketing);
     }
@@ -1533,9 +1355,10 @@
         const input = $('marketing-order');
         if (input) input.value = '';
         const box = $('marketing-result');
-        if (box) box.innerHTML = `<article class="marketing-card marketing-thanks"><h2>Thank you</h2><p>Order ${esc(sentNumber)} was sent to admin. Enter another order number.</p></article>`;
+        if (box) box.innerHTML = '';
         note.classList.add('is-thanks');
         note.textContent = `Thank you. Order ${sentNumber} was sent to admin. You can enter another order number.`;
+        toast('Sent to admin', 'Order ' + sentNumber + ' is now in the marketing list.', 'd-ok');
         loadMyMarketing();
     }
     function paintMyMarketing(requests) {
@@ -1546,14 +1369,14 @@
             ? rows.map((item) => {
                 const fields = (item.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b title="${esc(field.value)}">${esc(field.value)}</b></div>`).join('');
                 const cancelled = item.cancelled === true;
-                return `<article class="marketing-card${cancelled ? ' is-cancelled' : ''}">
-                    <h2>Order ${esc(item.orderNumber)}</h2>
-                    <p class="marketing-sent-meta">Sent ${esc(item.display || item.at || '—')}${item.product ? ' · ' + esc(item.product) : ''}${cancelled ? `<span class="marketing-cancel-label">Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>` : ''}</p>
-                    <div class="marketing-fields">${fields || '<div><span>BO file</span><b>No other values saved for this order</b></div>'}</div>
-                    ${cancelled ? '' : `<button class="ghost" type="button" data-cancel="${esc(item.id)}" data-order="${esc(item.orderNumber)}">Cancel</button>`}
+                return `<article class="marketing-card card pane${cancelled ? ' is-cancelled' : ''}">
+                    <div class="mdetail-head"><h2>Order ${esc(item.orderNumber)}</h2>${cancelled ? `<span class="pill p-bad"><span class="dot"></span>Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>` : ''}</div>
+                    <p class="muted-line">Sent ${esc(item.display || item.at || '—')}${item.product ? ' · ' + esc(item.product) : ''}</p>
+                    <div class="facts marketing-fields">${fields || '<div><span>BO file</span><b>No other values saved for this order</b></div>'}</div>
+                    ${cancelled ? '' : `<div class="row-end"><button class="btn" type="button" data-cancel="${esc(item.id)}" data-order="${esc(item.orderNumber)}">Cancel</button></div>`}
                 </article>`;
             }).join('')
-            : '<p class="marketing-note">You have not sent any orders yet.</p>';
+            : '<p class="empty card">You have not sent any orders yet.</p>';
     }
     async function loadMyMarketing() {
         const session = readSession();
@@ -1590,6 +1413,7 @@
             note.classList.add('is-cancel');
             note.textContent = `Order ${orderNumber || ''} was cancelled. Admin will see it as cancelled.`;
         }
+        toast('Cancelled', 'Order ' + (orderNumber || '') + '. Admin sees it as cancelled.', 'd-bad');
         loadMyMarketing();
     }
     const togglePass = $('toggle-pass');
@@ -1633,13 +1457,6 @@
     });
     $('logout').addEventListener('click', () => endSession('logout'));
     ['click', 'keydown', 'input', 'change', 'scroll'].forEach((type) => window.addEventListener(type, touch, { passive: true }));
-    document.addEventListener('change', (event) => {
-        const select = event.target.closest('.status-select');
-        if (!select) return;
-        const card = select.closest('.lane');
-        if (!card) return;
-        requestStatus(card.dataset.key, select.value, select);
-    });
     ['search', 'filter-status', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'sort'].forEach((id) => {
         $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
         $(id).addEventListener('change', render);
@@ -1657,83 +1474,63 @@
         const button = event.target.closest('[data-kpi]');
         if (button) applyKpi(button.dataset.kpi);
     });
-    function toggleBoDetails(event) {
-        const toggle = event.target.closest('.bo-toggle');
-        if (!toggle) return;
-        const row = toggle.nextElementSibling;
-        if (!row || !row.classList.contains('excel-row')) return;
-        const collapsed = row.classList.toggle('hidden');
-        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        toggle.textContent = collapsed ? 'View Full BO Details' : 'Hide Full BO Details';
-    }
     $('cards').addEventListener('click', (event) => {
         const tile = event.target.closest('.rc-tile');
         if (tile) openOrderModal(tile.dataset.tileKey);
     });
-    // Sheet: click selects a cell, double-click opens the full card, the status select (own orders only) saves.
     if ($('emp-sheet')) {
         $('emp-sheet').addEventListener('click', (event) => {
-            const td = event.target.closest('tbody td');
-            if (!td) return;
-            const tr = td.parentElement;
-            sheetSelect(tr.sectionRowIndex, td.cellIndex - 1, false);
-        });
-        $('emp-sheet').addEventListener('dblclick', (event) => {
-            if (event.target.closest('select')) return;
-            const tr = event.target.closest('tbody tr');
-            if (tr && tr.dataset.key) openOrderModal(tr.dataset.key);
-        });
-        $('emp-sheet').addEventListener('change', (event) => {
-            const select = event.target.closest('.xl-status-select');
-            if (select) requestStatus(select.dataset.key, select.value, select);
-        });
-        $('emp-sheet').addEventListener('click', (event) => {
-            const edit = event.target.closest('.xl-note-edit');
-            if (!edit) return;
-            const order = orders.find((item) => item.key === edit.dataset.key);
-            if (order && statusKey(order.status)) requestStatus(order.key, order.status, null);
+            const tr = event.target.closest('tbody tr[data-key]');
+            if (tr) openOrderModal(tr.dataset.key);
         });
         $('emp-sheet').addEventListener('keydown', (event) => {
-            if (event.target.closest('select')) return;
-            const moves = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, 1], ArrowLeft: [0, -1] };
-            if (!moves[event.key]) return;
+            if (event.key !== 'Enter') return;
+            const tr = event.target.closest('tbody tr[data-key]');
+            if (!tr) return;
             event.preventDefault();
-            sheetSelect(sheetSel.r + moves[event.key][0], sheetSel.c + moves[event.key][1], true);
+            openOrderModal(tr.dataset.key);
         });
     }
-    if ($('note-modal')) {
-        $('note-save').addEventListener('click', saveNoteDialog);
-        $('note-cancel').addEventListener('click', closeNoteDialog);
-        $('note-modal').addEventListener('click', (event) => { if (event.target === $('note-modal')) closeNoteDialog(); });
-        $('note-text').addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveNoteDialog(); }
-        });
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && !$('note-modal').classList.contains('hidden')) closeNoteDialog();
-        });
-    }
+    if ($('next-pending')) $('next-pending').addEventListener('click', () => {
+        const next = pendingMine()[0];
+        if (next) openOrderModal(next.key);
+    });
     if ($('view-sheet')) $('view-sheet').addEventListener('click', () => setViewMode('sheet'));
     if ($('view-cards')) $('view-cards').addEventListener('click', () => setViewMode('cards'));
     if ($('order-modal')) {
-        $('order-modal').addEventListener('change', (event) => {
-            const select = event.target.closest('.rd-status-select');
-            if (select) requestStatus(select.dataset.key, select.value, select);
-        });
         $('order-modal').addEventListener('click', (event) => {
-            const edit = event.target.closest('.rd-note-edit');
-            if (edit) {
-                const target = orders.find((item) => item.key === edit.dataset.key);
-                if (target && statusKey(target.status)) requestStatus(target.key, target.status, null);
-                return;
-            }
-            if (event.target === $('order-modal') || event.target.closest('.rc-close')) { closeOrderModal(); return; }
-            toggleBoDetails(event);
+            if (event.target.closest('.rc-close')) { closeOrderModal(); return; }
+            const pick = event.target.closest('[data-pick]');
+            if (pick) { choosePick(pick.dataset.pick); return; }
+            if (event.target.closest('#dr-cancel')) { cancelPick(); return; }
+            if (event.target.closest('#dr-save')) saveDrawer();
         });
+        $('order-modal').addEventListener('input', (event) => {
+            if (event.target.id !== 'dr-note') return;
+            drawerDraft = event.target.value;
+            drawerDirty = true;
+            if (drawerDraft.trim()) $('dr-note-err').textContent = '';
+        });
+        $('order-modal').addEventListener('keydown', (event) => {
+            if (event.target.id === 'dr-note' && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveDrawer(); }
+        });
+        $('order-scrim').addEventListener('click', closeOrderModal);
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && openOrderKey) closeOrderModal();
         });
     }
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
+    $('message-scrim').addEventListener('click', () => showView('inbox'));
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && $('overlay-message').classList.contains('open')) showView('inbox');
+    });
+    const repaintIndicators = () => {
+        paintRail();
+        slideIndicator($('kpis').querySelector('.ind'), $('kpis').querySelector('[aria-pressed="true"]'));
+        paintViewMode();
+    };
+    window.addEventListener('resize', repaintIndicators);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(repaintIndicators);
     if ($('marketing-form')) $('marketing-form').addEventListener('submit', checkMarketing);
     if ($('marketing-sent-list')) $('marketing-sent-list').addEventListener('click', (event) => {
         const button = event.target.closest('[data-cancel]');
@@ -1760,7 +1557,11 @@
         const number = phone($('msg-phone').value);
         window.open((number ? `https://wa.me/${number}?text=` : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank', 'noopener');
     });
-    $('msg-copy').addEventListener('click', () => { const text = buildMessage(); if (text) navigator.clipboard.writeText(text).catch(() => {}); });
+    $('msg-copy').addEventListener('click', () => {
+        const text = buildMessage();
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => toast('Message copied', 'Paste it in WhatsApp or anywhere else.', 'd-ok')).catch(() => toast('Copy blocked', 'Select the message and press Ctrl+C.', 'd-warn'));
+    });
     $('msg-reset').addEventListener('click', () => { ['msg-customer', 'msg-phone', 'msg-note'].forEach((id) => { $(id).value = ''; }); paintMessage(); });
 
     function mcRows() {
@@ -1808,26 +1609,23 @@
         const need = rows.filter((row) => mcStatus(row).cls === 'is-need' || mcStatus(row).cls === 'is-viewed').length;
         const sent = rows.filter((row) => mcStatus(row).cls === 'is-sent').length;
         const soon = rows.filter((row) => mcSoon(row.order) && mcStatus(row).cls !== 'is-sent').length;
-        summary.innerHTML = `
-            <article class="is-need"><span>Needs action</span><strong>${need}</strong></article>
-            <article class="is-sent"><span>Sent messages</span><strong>${sent}</strong></article>
-            <article class="is-soon"><span>Approaching deadlines</span><strong>${soon}</strong></article>`;
+        paintKpis(summary, [['Needs action', need, 'd-warn', 'Fix and send'], ['Sent', sent, 'd-ok', 'Messages confirmed'], ['Approaching deadlines', soon, 'd-bad', 'Within 3 days']]);
         if (!rows.length) {
-            list.innerHTML = '<p class="mc-empty">No messages for your orders yet.</p>';
-            $('mc-work').innerHTML = '<p class="mc-empty">When an alert is pushed for your name, the orders appear here.</p>';
+            list.innerHTML = '<p class="empty">No messages for your orders yet.</p>';
+            $('mc-work').innerHTML = '<p class="empty">When an alert is pushed for your name, the orders appear here.</p>';
             return;
         }
         if (!visible.some((row) => row.key === mcKey)) mcKey = (visible[0] && visible[0].key) || '';
         list.innerHTML = visible.map((row) => {
             const state = mcStatus(row);
-            return `<button type="button" class="mc-card${row.key === mcKey ? ' is-on' : ''}" data-mc="${esc(row.key)}">
-                <b>${esc(row.order.product || row.alert.product || 'Vehicle')}</b>
-                <span>Order ${esc(row.order.boNumber || '—')}</span>
-                <span>${row.vin ? 'VIN ' + esc(row.vin) : esc(row.alert.column || 'Error')}</span>
-                <span class="${mcSoon(row.order) && state.cls !== 'is-sent' ? 'is-soon' : ''}">${esc(row.order.orderDate || 'No BO date')}</span>
-                <em class="${state.cls}">${state.label}</em>
+            const pill = state.cls === 'is-sent' ? 'p-ok' : state.cls === 'is-need' ? 'p-bad' : 'p-warn';
+            const error = row.alert.name || row.alert.column || 'Error';
+            return `<button type="button" class="mitem" aria-current="${row.key === mcKey ? 'true' : 'false'}" data-mc="${esc(row.key)}">
+                <b dir="auto">${esc(row.order.product || row.alert.product || 'Vehicle')} · ${esc(row.order.boNumber || '—')}</b>
+                <small dir="auto">${esc(error)}${row.order.orderDate ? ` · <span class="${mcSoon(row.order) && state.cls !== 'is-sent' ? 'soon' : ''}">${esc(row.order.orderDate)}</span>` : ''}</small>
+                <span class="pill ${pill}"><span class="dot"></span>${state.label}</span>
             </button>`;
-        }).join('') || '<p class="mc-empty">No orders match this search.</p>';
+        }).join('') || '<p class="empty">No orders match this search.</p>';
         list.querySelectorAll('[data-mc]').forEach((button) => button.addEventListener('click', () => {
             const current = document.querySelector('#mc-work [data-admin-msg]');
             if (current) mcDrafts[current.dataset.draftKey] = current.value;
@@ -1847,33 +1645,28 @@
         const draft = mcDrafts[row.key] != null ? mcDrafts[row.key] : row.alert.message;
         const dated = hasMessageDate(draft);
         const when = row.order.at ? new Date(row.order.at).toLocaleString() : '';
-        work.innerHTML = `<div class="mc-detail">
-            <div class="mc-detail-head">
-                <div>
-                    <h2>${esc(row.order.product || 'Order')} · ${esc(row.order.boNumber || '—')}</h2>
-                    <p>${row.vin ? 'VIN ' + esc(row.vin) + ' · ' : ''}${esc(row.alert.name && row.alert.name !== row.alert.column ? row.alert.name + ' · ' + (row.alert.column || 'Error') : (row.alert.column || row.alert.name || 'Error'))}</p>
-                </div>
-                <em class="${state.cls}">${state.label}</em>
+        const pill = state.cls === 'is-sent' ? 'p-ok' : state.cls === 'is-need' ? 'p-bad' : 'p-warn';
+        work.innerHTML = `<div class="mdetail-head">
+                <h2 dir="auto">${esc(row.alert.name || row.alert.column || 'Order error')}</h2>
+                <span class="pill ${pill}"><span class="dot"></span>${state.label}</span>
             </div>
-            <div class="mc-facts">
-                <span>Incorrect<b>${esc(row.alert.incorrectValue || 'blank')}</b></span>
-                <span>Correct<b>${esc(row.order.correctValue || row.alert.correctValue || '—')}</b></span>
-                <span>BO date<b>${esc(row.order.orderDate || '—')}</b></span>
-                <span>Saved<b>${esc(when || 'Not confirmed')}</b></span>
-                <span>WhatsApp<b>${esc(phone(row.order.phone) || 'No number in column X')}</b></span>
+            <p class="muted-line" dir="auto">${[row.order.product, row.order.boNumber ? 'order ' + row.order.boNumber : '', row.alert.column, row.vin ? 'VIN ' + row.vin : ''].filter(Boolean).map(esc).join(' · ')}</p>
+            <div class="fixline"><span class="from">${esc(row.alert.incorrectValue || 'blank')}</span>${icon('chevron')}<span class="to">${esc(row.order.correctValue || row.alert.correctValue || '—')}</span></div>
+            <div class="facts">
+                <div><span>BO date</span><b>${esc(row.order.orderDate || '—')}</b></div>
+                <div><span>WhatsApp</span><b class="mono">${esc(phone(row.order.phone) || 'No number in column X')}</b></div>
+                <div><span>Saved</span><b>${esc(when || 'Not confirmed')}</b></div>
             </div>
-            <label class="mc-editor"><span>Message</span>
-                <textarea id="mc-message" data-admin-msg="${esc(row.ruleId)}" data-draft-key="${esc(row.key)}" rows="5">${esc(draft)}</textarea>
-            </label>
-            ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" id="mc-minus">−1 day</button><button type="button" id="mc-plus">+1 day</button></div>` : '<p class="mc-note">This message has no date to adjust.</p>'}
-            <div class="mc-preview-box"><div class="wa-bubble" id="mc-preview"></div></div>
-            <div class="mc-actions">
-                <button type="button" id="mc-wa">Open WhatsApp</button>
-                <button type="button" class="ghost" id="mc-copy">Copy message</button>
-                <button type="button" class="solid" id="mc-sent">${state.cls === 'is-sent' ? 'Confirm sent again' : 'Mark as sent'}</button>
+            <label class="field" for="mc-message"><span>Message</span></label>
+            <textarea id="mc-message" data-admin-msg="${esc(row.ruleId)}" data-draft-key="${esc(row.key)}" rows="5" dir="auto">${esc(draft)}</textarea>
+            ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" class="btn sm" id="mc-minus">−1 day</button><button type="button" class="btn sm" id="mc-plus">+1 day</button></div>` : '<p class="muted-line">This message has no date to adjust.</p>'}
+            <div class="wa"><div class="bubble" id="mc-preview" dir="auto"></div></div>
+            <div class="row-end">
+                <button type="button" class="btn" id="mc-copy">Copy message</button>
+                <button type="button" class="btn wa-btn" id="mc-wa">Open WhatsApp</button>
+                <button type="button" class="btn primary" id="mc-sent">${state.cls === 'is-sent' ? 'Confirm sent again' : 'Mark as sent'}</button>
             </div>
-            <p class="mc-note" id="mc-note">${esc(mcNotice || 'Opening WhatsApp does not mark the message as sent.')}</p>
-        </div>`;
+            <p class="muted-line" id="mc-note">${esc(mcNotice || 'Opening WhatsApp does not mark the message as sent.')}</p>`;
         const field = $('mc-message');
         const paint = () => {
             mcDrafts[row.key] = field.value;
@@ -1886,7 +1679,7 @@
         if ($('mc-plus')) $('mc-plus').addEventListener('click', () => shift(1));
         mcNotice = '';
         $('mc-copy').addEventListener('click', () => {
-            const done = () => { $('mc-note').textContent = 'Message copied.'; };
+            const done = () => { $('mc-note').textContent = 'Message copied.'; toast('Message copied', 'Paste it in WhatsApp or anywhere else.', 'd-ok'); };
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(field.value).then(done).catch(() => { field.focus(); field.select(); $('mc-note').textContent = 'Message selected. Press Ctrl+C to copy it.'; });
             } else { field.focus(); field.select(); $('mc-note').textContent = 'Message selected. Press Ctrl+C to copy it.'; }
@@ -1896,6 +1689,7 @@
             mcNotice = digits
                 ? `WhatsApp opened for ${digits}. Mark as sent only after you press Send there.`
                 : 'This order has no number in column X. WhatsApp opened without a number.';
+            toast('WhatsApp opened', digits ? 'Press Send there, then mark the message as sent.' : 'No number in column X: pick the chat yourself.', digits ? 'd-ok' : 'd-warn');
             if (row.order.status === 'new' || row.order.status === 'viewed') markAlert(row.ruleId, 'in_progress', row.order.boNumber);
             else paintMessageCenter();
         });
@@ -1910,28 +1704,9 @@
     // Fallback for everyone else (blocked, not asked yet, old browser, plain-http address): the same alert as a card
     // inside this page, so every user still gets the alert while the page is open.
     function showPageToast(title, body, view) {
-        let box = document.getElementById('ro-toasts');
-        if (!box) {
-            box = document.createElement('div');
-            box.id = 'ro-toasts';
-            box.setAttribute('role', 'status');
-            box.setAttribute('aria-live', 'polite');
-            document.body.appendChild(box);
-        }
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = 'ro-toast';
-        const strong = document.createElement('b');
-        strong.textContent = title;
-        const text = document.createElement('span');
-        text.textContent = body || '';
-        card.appendChild(strong);
-        card.appendChild(text);
-        const close = () => { card.remove(); };
-        card.addEventListener('click', () => { try { showView(view || 'inbox'); } catch (e) { /* view may not be ready */ } close(); });
-        box.appendChild(card);
-        while (box.children.length > 4) box.firstChild.remove();
-        setTimeout(close, 12000);
+        const card = toast(title, body, 'd-ok');
+        card.classList.add('clickable');
+        card.addEventListener('click', () => { try { showView(view || 'inbox'); } catch (e) { /* view may not be ready */ } card.remove(); });
     }
     function notifiedStoreKey(session) { return 'ro-desktop-notified-v1-' + (session && (session.recordId || session.employeeNumber) || 'x'); }
     function readNotified(session) {
@@ -2071,9 +1846,9 @@
         box.hidden = state === 'hidden';
         box.dataset.state = state;
         if (state === 'ask') {
-            box.innerHTML = '<span><b>Turn on computer pop-up alerts.</b> You will get a pop-up on this computer when admin sends you a message or a new order is assigned to you.</span><button type="button" class="solid" data-alerts="enable">Turn on</button>';
+            box.innerHTML = '<span class="dot d-warn"></span><p><b>Turn on computer pop-up alerts.</b> You will get a pop-up on this computer when admin sends you a message or a new order is assigned to you.</p><button type="button" class="btn" data-alerts="enable">Turn on</button>';
         } else if (state === 'blocked') {
-            box.innerHTML = '<span><b>Computer pop-ups are blocked for this site.</b> Click the lock icon in the address bar, set Notifications to Allow, then reload this page.</span><button type="button" class="ghost" data-alerts="dismiss">Dismiss</button>';
+            box.innerHTML = '<span class="dot d-warn"></span><p><b>Computer pop-ups are blocked for this site.</b> Click the lock icon in the address bar, set Notifications to Allow, then reload this page.</p><button type="button" class="btn" data-alerts="dismiss">Dismiss</button>';
         } else {
             box.innerHTML = '';
         }
@@ -2137,10 +1912,10 @@
             if (!items.length) { box.innerHTML = ''; return; }
             box.innerHTML = items.map((item) => {
                 const at = item.at ? new Date(item.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-                return `<article class="emp-notif${item.seen ? ' is-seen' : ''}">
-                    <div class="emp-notif-head"><b>${esc(item.title || 'Notification from admin')}</b><span>${esc(at)}</span></div>
-                    <p>${esc(item.message || '')}</p>
-                    ${item.seen ? '' : `<button type="button" data-notif-seen="${esc(item.id)}">Mark as read</button>`}
+                return `<article class="emp-notif card pane${item.seen ? ' is-seen' : ''}">
+                    <div class="mdetail-head"><b dir="auto">${esc(item.title || 'Notification from admin')}</b><small class="mono muted-text">${esc(at)}</small></div>
+                    <p dir="auto">${esc(item.message || '')}</p>
+                    ${item.seen ? '' : `<div class="row-end"><button type="button" class="btn sm" data-notif-seen="${esc(item.id)}">Mark as read</button></div>`}
                 </article>`;
             }).join('');
             box.querySelectorAll('[data-notif-seen]').forEach((button) => button.addEventListener('click', async () => {
@@ -2167,9 +1942,10 @@
         $('login').classList.add('hidden');
         $('app').classList.remove('hidden');
         document.body.classList.add('dash');
-        showView('inbox');
         $('who').textContent = session.name;
-        $('who-id').textContent = 'ID: ' + session.employeeNumber;
+        $('who-id').textContent = 'ID ' + session.employeeNumber;
+        $('who-av').textContent = initials(session.name);
+        showView('inbox');
         $('msg-advisor').value = session.name;
         loadLive();
         loadVehicles();

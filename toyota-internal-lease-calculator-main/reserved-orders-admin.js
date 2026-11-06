@@ -91,8 +91,41 @@
     function timeAgo(date) { if (!date) return ''; const m = Math.round((Date.now() - date.getTime()) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.round(m / 60); return h < 48 ? h + ' h ago' : Math.round(h / 24) + ' d ago'; }
     function statusPillHtml(value) {
         const s = String(value || '').trim();
-        const cls = s === 'Payment' ? 'p-Payment' : s === 'In progress' ? 'p-In' : s === 'Cancelled' ? 'p-Cancelled' : (s ? 'p-In' : 'p-none');
-        return `<span class="pill ${cls}"><span class="dot"></span>${esc(s || 'Not updated')}</span>`;
+        const cls = s === 'Payment' || s === 'تم الفوترة' ? 'p-ok' : s === 'Cancelled' || s === 'الغاء' ? 'p-bad' : s === 'In progress' ? 'p-warn' : (s ? 'p-warn' : 'p-none');
+        const label = !s || (s === 'محجوز' && arguments[1] === 'none') ? 'Not updated' : s;
+        return `<span class="pill ${cls}"><span class="dot"></span>${esc(label || 'Not updated')}</span>`;
+    }
+    function expHtml(deadline, dateLabel, big) {
+        const info = expInfo(parseLocal(deadline));
+        if (!info) return '<span class="muted-text">No expiry date</span>';
+        return `<div class="exp ${info.tone}${big ? ' exp-big' : ''}" data-deadline="${esc(deadline)}"><b>${esc(info.text)}</b><div class="track"><i style="width:${info.pct.toFixed(1)}%"></i></div>${dateLabel ? `<small>${dateLabel}</small>` : ''}</div>`;
+    }
+    function flashRow(key) {
+        const row = document.querySelector(`#live-sheet-merged tr[data-key="${CSS.escape(key)}"], #st-detail tr[data-open="${CSS.escape(key)}"]`);
+        if (!row) return;
+        row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 1300);
+    }
+    function paintAdminRail() {
+        const on = Array.from(document.querySelectorAll('#admin-nav button')).find((button) => button.classList.contains('active') && button.offsetParent);
+        slideIndicator($('admin-rail-ind'), on);
+        const top = $('admin-top');
+        if (top) document.documentElement.style.setProperty('--toph', top.offsetHeight + 'px');
+    }
+    function closeDrawer() {
+        const drawer = $('drawer');
+        if (drawer) drawer.classList.remove('open', 'hidden');
+        if ($('admin-scrim')) $('admin-scrim').classList.remove('open');
+    }
+    function showDrawer(html) {
+        const drawer = $('drawer');
+        drawer.classList.remove('hidden');
+        drawer.innerHTML = html;
+        drawer.classList.add('open');
+        if ($('admin-scrim')) $('admin-scrim').classList.add('open');
+        const close = $('close-drawer');
+        if (close) close.addEventListener('click', closeDrawer);
+        if (close) setTimeout(() => close.focus({ preventScroll: true }), 30);
     }
     const ICONS = {
         orders: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/>',
@@ -242,10 +275,14 @@
         return data;
     }
     function showGate(message) { $('gate').classList.remove('hidden'); $('admin-app').classList.add('hidden'); $('gate-error').textContent = message || ''; }
-    function showApp() { $('gate').classList.add('hidden'); $('admin-app').classList.remove('hidden'); }
+    function showApp() { $('gate').classList.add('hidden'); $('admin-app').classList.remove('hidden'); requestAnimationFrame(paintAdminRail); }
     function showPanel(name) {
         document.querySelectorAll('[id^="panel-"]').forEach((panel) => panel.classList.toggle('hidden', panel.id !== 'panel-' + name));
         document.querySelectorAll('#admin-nav button').forEach((button) => button.classList.toggle('active', button.dataset.panel === name));
+        requestAnimationFrame(() => requestAnimationFrame(paintAdminRail));
+        replayView($('panel-' + name));
+        if (!reduceMotion) window.scrollTo({ top: 0, behavior: 'smooth' });
+        else window.scrollTo(0, 0);
     }
 
     // ---- Sales type analysis (column U) · display only ----
@@ -285,7 +322,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN in the Reserved Order File (columns A to J). Expiry date counts down to column J of the Reserved Order File. Usage (L), Allocation age (K), Area (X) and Share level (the Sharing level column) come from the RTL Stock row of the same VIN. Queue 1, 2 and 3 are the positions for colour choices 1, 2 and 3 in the Toyota Back Order file (same as BO Order Lookup). Employees choose Payment, In progress or Cancelled and write a note; Updated by shows who and when (Saudi time). You can also change a status here. Use Columns to hide any column.'
+        merged: 'One row per VIN of the Reserved Order File, matched with RTL Stock and ranked against the Toyota Back Order file. Click a row to change its status.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -501,7 +538,13 @@
         return `<td>${esc(expiryText(order))}</td><td class="timer-cell st-timer ${timerTone(ms)}" data-deadline="${esc(deadline || '')}">${esc(remain(order))}</td>`;
     }
     // ---- Overview: the three statuses employees choose (plus "Not updated"), from the same rows as the Live sheet ----
+    function isNotUpdated(order) {
+        const raw = String(order && order.status || '').trim();
+        if (!raw) return true;
+        return (raw === 'محجوز' || raw.toLowerCase() === 'reserved') && !String(order.statusChangedAt || '').trim() && !String(order.statusChangedBy || '').trim();
+    }
     function statusBucket(order) {
+        if (isNotUpdated(order)) return 'none';
         return employeeStatusKey(order.status) || (String(order.status || '').trim() ? 'other' : 'none');
     }
     function renderSalesTypes() {
@@ -512,22 +555,38 @@
         rows.forEach((order) => { counts[statusBucket(order)] += 1; });
         const total = rows.length;
         $('st-meta').textContent = `${total} car${total === 1 ? '' : 's'} in the Live sheet (one per VIN of the Reserved Order File)`;
-        const card = (key, label, name, value, tone) => {
-            const share = total ? Math.round((value / total) * 100) : 0;
-            return `<button type="button" class="st-card ${tone}${salesTypePick === key ? ' is-on' : ''}" data-st="${esc(key)}">
-                <span class="st-code">${esc(label)}</span>
-                <span class="st-name">${esc(name)}</span>
-                <strong>${value}</strong>
-                <span class="st-share"><i style="width:${share}%"></i></span>
-                <em>${share}% of cars</em>
-            </button>`;
-        };
-        cardsBox.innerHTML = card('', 'Total', 'All reserved cars', total, 't-total')
-            + card('Payment', 'Payment', 'Chosen by the employee', counts.Payment, 't-teal')
-            + card('In progress', 'In progress', 'Chosen by the employee', counts['In progress'], 't-blue')
-            + card('Cancelled', 'Cancelled', 'Chosen by the employee', counts.Cancelled, 't-red')
-            + card('none', 'Not updated', 'No status yet', counts.none, 't-grey')
-            + (counts.other ? card('other', 'Other', 'Status added by admin', counts.other, 't-violet') : '');
+        const chip = (key, label, value, dot) => `<button type="button" data-st="${esc(key)}" aria-pressed="${salesTypePick === key ? 'true' : 'false'}">${dot ? `<span class="dot ${dot}"></span>` : ''}${esc(label)}<i>${value}</i></button>`;
+        cardsBox.classList.add('chips');
+        cardsBox.innerHTML = '<span class="ind"></span>'
+            + chip('', 'All', total, '')
+            + chip('Payment', 'Payment', counts.Payment, 'd-ok')
+            + chip('In progress', 'In progress', counts['In progress'], 'd-warn')
+            + chip('Cancelled', 'Cancelled', counts.Cancelled, 'd-bad')
+            + chip('none', 'Not updated', counts.none, 'd-none')
+            + (counts.other ? chip('other', 'Other', counts.other, 'd-you') : '');
+        const stack = $('st-stack');
+        if (stack && total) {
+            stack.innerHTML = `<i class="s-ok" data-w="${Math.round(counts.Payment / total * 100)}"></i><i class="s-warn" data-w="${Math.round(counts['In progress'] / total * 100)}"></i><i class="s-bad" data-w="${Math.round(counts.Cancelled / total * 100)}"></i><i class="s-none" data-w="${Math.round(counts.none / total * 100)}"></i>`;
+            growBars(stack);
+        }
+        slideIndicator(cardsBox.querySelector('.ind'), cardsBox.querySelector('[aria-pressed="true"]'));
+        const soon = $('st-expiring');
+        if (soon) {
+            const cutoff = Date.now() + 86400000;
+            const list = rows.filter((order) => isNotUpdated(order)).map((order) => {
+                const deadline = expiryDeadlineOf(order);
+                const end = parseLocal(deadline);
+                return { order, end, deadline };
+            }).filter((item) => item.end && item.end.getTime() <= cutoff).sort((a, b) => a.end - b.end);
+            soon.innerHTML = list.length
+                ? list.map((item) => {
+                    const name = sheetValue(item.order, 'Product', 'merged') || item.order.vehicle || 'Car';
+                    const who = sheetValue(item.order, 'Salesman name', 'merged') || item.order.salesAdvisor || '—';
+                    const num = sheetValue(item.order, 'Order number', 'merged') || item.order.orderNumber || '';
+                    return `<button type="button" class="salesman" data-open="${esc(item.order.key)}"><span class="person"><span class="av">${esc(initials(who))}</span><span dir="auto">${esc(name)} · ${esc(who)}${num ? ' · ' + esc(num) : ''}</span></span>${expHtml(item.deadline, '', false)}</button>`;
+                }).join('')
+                : '<p class="muted">None in the next 24 hours.</p>';
+        }
         renderSalesTypeDetail();
     }
     function renderSalesTypeDetail() {
@@ -554,8 +613,8 @@
     }
     function statusPill(status) {
         const value = employeeStatusKey(status) || String(status || '').trim();
-        const cls = value === 'Payment' || value === 'تم الفوترة' ? 'p-Payment' : value === 'Cancelled' || value === 'الغاء' ? 'p-Cancelled' : value ? 'p-In' : 'p-none';
-        return `<span class="pill ${cls}"><span class="dot"></span>${esc(value || 'Not updated')}</span>`;
+        if (!value || value === 'محجوز') return statusPillHtml('', 'none');
+        return statusPillHtml(value);
     }
 
     function renderOverview() {
@@ -563,11 +622,28 @@
         const count = (key) => rows.filter((order) => statusBucket(order) === key).length;
         const activeStaff = staff.filter((person) => person.active).length;
         const today = audit.filter((event) => String(event.at || '').slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
-        $('admin-kpis').innerHTML = [
-            ['Reserved cars', rows.length], ['Payment', count('Payment')], ['In progress', count('In progress')],
-            ['Cancelled', count('Cancelled')], ['Not updated', count('none')], ['Active employees', activeStaff], ["Today's changes", today]
-        ].map(([label, value]) => `<article class="kpi"><em>${label}</em><strong>${value}</strong></article>`).join('');
-        // Updates by salesman: how many of each salesman's cars already have a status.
+        const none = count('none');
+        const expiredNone = rows.filter((order) => isNotUpdated(order) && remain(order) === 'EXPIRED').length;
+        const total = rows.length || 1;
+        const tiles = [
+            ['Reserved cars', rows.length, '', 'From the latest push'],
+            ['Payment', count('Payment'), 'd-ok', Math.round(count('Payment') / total * 100) + '% of cars'],
+            ['In progress', count('In progress'), 'd-warn', 'Customer paying'],
+            ['Cancelled', count('Cancelled'), 'd-bad', 'To release'],
+            ['Not updated', none, 'd-none', expiredNone + ' expired']
+        ];
+        $('admin-kpis').innerHTML = tiles.map(([label, value, dot, sub]) =>
+            `<article class="kpi${dot ? ' k-' + dot.slice(2) : ''}"><span>${dot ? `<span class="dot ${dot}"></span>` : ''}${esc(label)}</span><b class="num" data-to="${value}">0</b><small>${esc(sub)}</small></article>`
+        ).join('');
+        $('admin-kpis').querySelectorAll('[data-to]').forEach(countUp);
+        const meta = $('ov-head-meta');
+        if (meta) meta.textContent = `${activeStaff} active employees · ${today} changes today`;
+        const alert = $('ov-alert');
+        if (alert) {
+            alert.innerHTML = none
+                ? `<div class="alertline"><span class="dot d-warn"></span><p><b>${none} cars have no status yet</b>, ${expiredNone} of them already past expiry.</p><button class="btn" type="button" data-notify-pending>Notify salesmen</button></div>`
+                : '';
+        }
         const bySales = new Map();
         rows.forEach((order) => {
             const name = sheetValue(order, 'Salesman name', 'merged') || 'No salesman';
@@ -576,10 +652,12 @@
             if (statusBucket(order) !== 'none') entry.done += 1;
             bySales.set(name, entry);
         });
-        const list = Array.from(bySales.entries()).sort((a, b) => b[1].total - a[1].total);
-        $('pay-bars').innerHTML = list.map(([name, entry]) =>
-            `<div class="bar"><span>${esc(name)}</span><i style="width:${entry.total ? Math.round(entry.done / entry.total * 100) : 0}%"></i><b>${entry.done} / ${entry.total}</b></div>`
-        ).join('') || '<div class="bar"><span>No cars</span><i style="width:0%"></i><b>0</b></div>';
+        const list = Array.from(bySales.entries()).sort((a, b) => (a[1].done / a[1].total) - (b[1].done / b[1].total) || b[1].total - a[1].total);
+        $('pay-bars').innerHTML = list.map(([name, entry]) => {
+            const pct = entry.total ? Math.round(entry.done / entry.total * 100) : 0;
+            return `<div class="salesman"><span class="person"><span class="av">${esc(initials(name))}</span>${esc(name)}</span><span class="meter"><i class="${pct === 100 ? 'full' : ''}" data-w="${pct}"></i></span><b>${entry.done}/${entry.total}</b></div>`;
+        }).join('') || '<div class="salesman"><span>No cars</span><span class="meter"><i data-w="0"></i></span><b>0</b></div>';
+        growBars($('pay-bars'));
         renderSalesTypes();
     }
     function renderOrders() {
@@ -622,27 +700,67 @@
         const related = audit.filter((event) => event.vin === order.vin || event.orderNumber === order.orderNumber).slice(0, 30);
         const lastBy = order.statusChangedBy
             ? `${order.statusChangedBy}${order.statusChangedEmployeeNumber ? ' · ' + order.statusChangedEmployeeNumber : ''}`
-            : '—';
+            : '';
         const lastAt = order.statusChangedDisplay
             || (parseLocal(order.statusChangedAt)
                 ? parseLocal(order.statusChangedAt).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' (Saudi)'
-                : (order.statusChangedAt || '—'));
-        $('drawer').classList.remove('hidden');
-        $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button>
-            <h2>Order #${esc(order.orderNumber || 'NO ORDER')}</h2>
-            <p>${esc(order.vin)} · ${esc(order.vehicle || '')}<br>Status ${esc(order.status)} · Queue #${order.queueNumber == null ? '—' : order.queueNumber}<br>Expiry ${esc(formatExpiryDate(order))} · Time left ${esc(remain(order))}</p>
-            <p><b>Last status change:</b> ${esc(lastBy)} · <span class="saudi-time">${esc(lastAt)}</span></p>
-            <h3>Leader note</h3>
-            <p class="muted">Only admin can write notes. Employees can read this on their page.</p>
-            <textarea id="leader-note-input" rows="4" maxlength="2000" placeholder="Write a leader note for this order">${esc(order.leaderNote || '')}</textarea>
-            <div style="display:flex;gap:8px;margin:8px 0 16px;align-items:center;">
-                <button class="solid" type="button" id="leader-note-save">Save leader note</button>
-                <button class="ghost" type="button" id="leader-note-clear">Clear</button>
-                <span class="muted" id="leader-note-feedback"></span>
-            </div>
-            <h3>Status history (Saudi time)</h3>${history}
-            <h3>Audit</h3>${related.map((event) => `<div>${esc(event.display || event.at)} · ${esc(event.action)} · ${esc(event.user)}</div>`).join('') || '<div>No audit events</div>'}`;
-        $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
+                : (order.statusChangedAt || ''));
+        const product = sheetValue(order, 'Product', 'merged') || order.vehicle || 'Car not named';
+        const suffix = sheetValue(order, 'ALJ suffix', 'merged') || '';
+        const customer = sheetValue(order, 'Customer name', 'merged') || order.customerName || 'No customer name';
+        const orderNo = sheetValue(order, 'Order number', 'merged') || order.orderNumber || '';
+        const deadline = expiryDeadlineOf(order);
+        const current = employeeStatusKey(order.status) || (isNotUpdated(order) ? '' : String(order.status || '').trim());
+        const picks = offeredStatuses().map((name) => {
+            const cls = name === 'Payment' ? 'k-Payment' : name === 'Cancelled' ? 'k-Cancelled' : 'k-In';
+            const dot = name === 'Payment' ? 'd-ok' : name === 'Cancelled' ? 'd-bad' : 'd-warn';
+            return `<button type="button" class="pick ${cls}" data-admin-pick="${esc(name)}" data-key="${esc(order.key)}" aria-pressed="${name === current ? 'true' : 'false'}"><b><span class="dot ${dot}"></span>${esc(name)}</b></button>`;
+        }).join('');
+        const tierLine = (i) => {
+            const q = (order.boTierQueues || [])[i];
+            if (!q) return `<div class="tierline"><span>Choice ${i + 1}</span><span class="muted-text">No colour choice</span><b></b></div>`;
+            const pct = q.size ? Math.max(0, Math.min(100, (Number(q.position) / Number(q.size)) * 100)) : 0;
+            return `<div class="tierline"><span>Choice ${i + 1}</span><span class="rail2"><em data-l="${pct.toFixed(1)}" style="width:0"></em><i data-l="${pct.toFixed(1)}" style="left:0"></i></span><b>#${esc(String(q.position))} / ${esc(String(q.size))}</b></div>`;
+        };
+        const fact = (label, value, extra) => `<div><span>${esc(label)}</span><b dir="auto"${extra === 'mono' ? ' class="mono"' : ''}>${value ? esc(value) : '—'}${extra && extra !== 'mono' ? extra : ''}</b></div>`;
+        showDrawer(`<div class="dr-head"><div><h2 dir="auto">${esc(product)}${suffix ? ` <span class="sfx">${esc(suffix)}</span>` : ''}</h2><p dir="auto">${esc(customer)}${orderNo ? ' · order ' + esc(orderNo) : ''}</p></div><button class="x" id="close-drawer" type="button" aria-label="Close">${icon('close')}</button></div>
+            <div class="dr-body">
+                <section class="sec"><h3>Status</h3>
+                    <div class="cur-status">${statusPill(order.status)}${lastBy || lastAt ? `<small>by ${esc(lastBy || '—')}${lastAt ? ' · ' + esc(lastAt) : ''}</small>` : ''}</div>
+                    ${order.statusNote ? `<div class="cur-note" dir="auto">${esc(order.statusNote)}<small>Note from the salesman</small></div>` : ''}
+                    <div class="status-picks">${picks}</div>
+                </section>
+                <section class="sec"><h3>Leader note</h3>
+                    <textarea id="leader-note-input" rows="3" maxlength="2000" placeholder="Write a leader note for this order">${esc(order.leaderNote || '')}</textarea>
+                    <div class="row-end">
+                        <button class="btn" type="button" id="leader-note-clear">Clear</button>
+                        <button class="btn primary" type="button" id="leader-note-save">Save leader note</button>
+                    </div>
+                    <span class="muted" id="leader-note-feedback"></span>
+                </section>
+                <section class="sec"><h3>Expiry</h3>${deadline ? expHtml(deadline, 'Reserved Order File column J · ' + esc(formatExpiryDate(order)), true) : '<span class="muted-text">No expiry date</span>'}</section>
+                <section class="sec"><h3>Back Order queue</h3>${[0, 1, 2].map(tierLine).join('')}<p class="hint">Position among orders for the same product, suffix and colours. Lower is sooner.</p></section>
+                <section class="sec"><h3>Car</h3><div class="facts">
+                    ${fact('VIN', sheetValue(order, 'VIN', 'merged') || order.vin, 'mono')}
+                    ${fact('Model year', sheetValue(order, 'Model year', 'merged') || order.modelYear)}
+                    ${fact('Exterior', sheetValue(order, 'Exterior color', 'merged'), sheetValue(order, 'Exterior color', 'merged') ? `<span class="sw">${swatch(sheetValue(order, 'Exterior color', 'merged'))}</span>` : '')}
+                    ${fact('Interior', sheetValue(order, 'Interior color', 'merged'), sheetValue(order, 'Interior color', 'merged') ? `<span class="sw">${swatch(sheetValue(order, 'Interior color', 'merged'))}</span>` : '')}
+                    ${fact('Usage', sheetValue(order, 'Usage', 'merged'))}
+                    ${fact('Allocation age', sheetValue(order, 'Allocation age', 'merged'))}
+                    ${fact('Area', sheetValue(order, 'Area', 'merged'))}
+                    ${fact('Share level', sheetValue(order, 'Share level', 'merged'))}
+                    ${fact('Salesman', sheetValue(order, 'Salesman name', 'merged') || order.salesAdvisor)}
+                </div></section>
+                <section class="sec"><h3>Status history (Saudi time)</h3>${history}</section>
+                <section class="sec"><h3>Audit</h3>${related.map((event) => `<div class="status-history-row"><b>${esc(event.user)}</b><span class="saudi-time">${esc(event.display || event.at)}</span><div>${esc(event.action)}</div></div>`).join('') || '<div>No audit events</div>'}</section>
+            </div>`);
+        requestAnimationFrame(() => requestAnimationFrame(() => $('drawer').querySelectorAll('.tierline [data-l]').forEach((el) => {
+            if (el.tagName === 'EM') el.style.width = el.dataset.l + '%';
+            else el.style.left = el.dataset.l + '%';
+        })));
+        $('drawer').querySelectorAll('[data-admin-pick]').forEach((button) => {
+            button.addEventListener('click', () => adminSetStatus(button.dataset.key, button.dataset.adminPick));
+        });
         const saveLeader = async (text) => {
             const feedback = $('leader-note-feedback');
             if (feedback) feedback.textContent = 'Saving…';
@@ -1008,16 +1126,17 @@
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
             if (label === 'Status') {
+                const pill = statusPill(order.status);
                 if (source === 'merged' && order.key) {
-                    return `<td class="col-status">${statusSelectHtml(order)}</td>`;
+                    return `<td class="col-status"><span class="edit">${pill}${icon('chevron', 'chev')}</span></td>`;
                 }
-                return `<td class="col-status">${statusPill(value)}</td>`;
+                return `<td class="col-status">${pill}</td>`;
             }
             if (label === 'Leader note') {
                 const key = order.key || '';
                 return `<td class="col-notes col-leader-note">
                     <textarea class="sheet-leader-note" data-key="${esc(key)}" data-prev="${esc(order.leaderNote || '')}" rows="2" maxlength="2000" placeholder="Leader note for the team">${esc(order.leaderNote || '')}</textarea>
-                    <button type="button" class="ghost sheet-leader-save" data-key="${esc(key)}">Save</button>
+                    <button type="button" class="btn sm sheet-leader-save" data-key="${esc(key)}">Save</button>
                     ${order.leaderNoteDisplay ? `<small>${esc(order.leaderNoteBy || 'Admin')} · ${esc(order.leaderNoteDisplay)}</small>` : ''}
                 </td>`;
             }
@@ -1036,19 +1155,16 @@
                             hour12: true
                         }) + ' (Saudi)'
                         : (order.statusChangedAt || ''));
-                if (!who && !when) return '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
-                return `<td class="col-updated-by">
-                    ${who ? `<b>${esc(who)}</b>${id ? `<small>${esc(id)}</small>` : ''}` : ''}
-                    ${when ? `<span class="saudi-time">${esc(when)}</span>` : ''}
-                </td>`;
+                if (!who && !when) return '<td class="col-updated-by"><span class="muted-text">—</span></td>';
+                return `<td class="col-updated-by upd">${who ? `<span>${esc(who)}</span>` : ''}${when ? `<small>${esc(when)}</small>` : ''}</td>`;
             }
             const tierMatch = /^Queue ([123])$/.exec(label);
             if (tierMatch) {
                 const tier = Number(tierMatch[1]);
                 const q = (order.boTierQueues || [])[tier - 1];
-                if (!q) return `<td class="col-queue col-tier" title="No colour choice ${tier} for this order in the Toyota Back Order file"><span class="ahead-empty">—</span></td>`;
+                if (!q) return `<td class="col-queue col-tier" title="No colour choice ${tier} for this order in the Toyota Back Order file"><span class="muted-text">—</span></td>`;
                 const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-                return `<td class="col-queue col-tier" title="Colour choice ${tier}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><span class="q-pill">#${esc(String(q.position))}</span><small class="q-of"> / ${esc(String(q.size))}</small>${pair ? `<small class="q-pair">${esc(pair)}</small>` : ''}</td>`;
+                return `<td class="col-queue col-tier" title="Colour choice ${tier}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><div class="q"><b>#${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div>${pair ? `<span class="q-pair">${esc(pair)}</span>` : ''}</td>`;
             }
             if (label === 'Queue position') {
                 if (order.boQueuePosition == null) return '<td class="col-queue" title="Not found in the Toyota Back Order file"><span class="ahead-empty">—</span></td>';
@@ -1056,16 +1172,14 @@
                 return `<td class="col-queue" title="Back Order queue position"><span class="q-pill">#${esc(String(order.boQueuePosition))}</span>${size}</td>`;
             }
             if (label === 'Note') {
-                return `<td class="col-note" title="${esc(value)}">${value ? `<span class="xl-note-text" dir="auto">${esc(value)}</span>` : '<span class="ahead-empty">—</span>'}</td>`;
+                return `<td class="col-note"><div class="note" title="${esc(value)}" dir="auto">${value ? esc(value) : '—'}</div></td>`;
             }
-            if (label === 'Salesman name') return `<td class="col-advisor">${value ? `<b>${esc(value)}</b>` : ''}</td>`;
-            if (label === 'Usage') return value ? `<td class="col-source"><span class="source-pill is-both">${esc(value)}</span></td>` : '<td class="col-source"></td>';
+            if (label === 'Salesman name') return `<td class="col-advisor">${value ? `<span class="person"><span class="av">${esc(initials(value))}</span>${esc(value)}</span>` : ''}</td>`;
+            if (label === 'Usage') return value ? `<td class="col-source"><span class="tag${retailOk(value) ? ' good' : ''}">${esc(value)}</span></td>` : '<td class="col-source"></td>';
             if (label === 'Expiry date') {
                 const deadline = value ? expiryDeadlineOf(order) : '';
-                const end = parseLocal(deadline);
-                if (!end) return `<td class="col-expiry">${esc(value)}</td>`;
-                const ms = end.getTime() - Date.now();
-                return `<td class="col-expiry xl-expiry ${expiryTone(ms)}" data-expiry="${esc(deadline)}" title="Expires ${esc(value)}"><b class="xl-expiry-left">${esc(expiryCountdown(ms))}</b><small>${esc(value)}</small></td>`;
+                if (!parseLocal(deadline)) return `<td class="col-expiry">${esc(value || '—')}</td>`;
+                return `<td class="col-expiry">${expHtml(deadline, esc(value), false)}</td>`;
             }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'Expiry') return `<td class="col-expiry">${esc(value || '—')}</td>`;
@@ -1104,15 +1218,13 @@
         const note = noVin ? `${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} <button type="button" class="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button>` : '';
         // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
         box.innerHTML = rows.length
-            ? `<table class="xl-grid"><thead>
-                <tr class="xl-letters"><th class="xl-corner"></th>${cols.map((label, index) => `<th class="xl-col" data-c="${index}" data-label="${esc(label)}" title="Right-click to hide or move this column">${xlLetter(index)}</th>`).join('')}</tr>
-                <tr class="xl-head"><th class="xl-rn">1</th>${cols.map(head).join('')}</tr>
-            </thead><tbody>${rows.map((order, rowIndex) => {
+            ? `<table class="xl-grid"><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => {
                 const classes = [
+                    'rowlink',
                     hasVin(order) ? '' : 'is-novin',
                     isCancelledStatus(order) ? 'row-cancelled' : ''
                 ].filter(Boolean).join(' ');
-                return `<tr class="${classes}"><th class="xl-rn" data-r="${rowIndex}">${rowIndex + 2}</th>${cols.map((label) => cell(order, label)).join('')}</tr>`;
+                return `<tr class="${classes}" data-key="${esc(order.key || '')}" tabindex="0">${cols.map((label) => cell(order, label)).join('')}</tr>`;
             }).join('')}</tbody></table>`
             : `<p class="empty">${emptyMsg}</p>`;
         const grid = box.querySelector('.xl-grid');
@@ -1240,8 +1352,8 @@
         if (btn) {
             const info = xlInfo[sheetSource];
             const hidden = info ? info.all.length - xlVisibleCols(sheetSource, info.all).length : 0;
-            const label = btn.querySelector('span');
-            if (label) label.textContent = hidden > 0 ? `Columns (${hidden} hidden)` : 'Columns';
+            const label = btn.querySelector('.mono');
+            if (label) label.textContent = hidden > 0 ? `(${hidden} hidden)` : '';
         }
     }
     function xlAfterLayoutChange() {
@@ -1302,6 +1414,7 @@
         if (!pop) return;
         const open = typeof force === 'boolean' ? force : pop.classList.contains('hidden');
         pop.classList.toggle('hidden', !open);
+        pop.classList.toggle('open', open);
         if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (open) xlRenderColsPop();
     }
@@ -1384,19 +1497,18 @@
             : '<p class="empty">No marketing orders sent yet.</p>';
     }
     function soldTone(kind) {
-        if (kind === 'delivered') return 'is-ok';
-        if (kind === 'proforma') return 'is-info';
-        return 'is-none';
+        if (kind === 'delivered') return 'p-ok';
+        if (kind === 'proforma') return 'p-info';
+        return 'p-none';
     }
     function openSoldDetail(vin) {
         const item = sold.find((row) => String(row.vin || '').toUpperCase() === String(vin || '').toUpperCase());
         if (!item) return;
         const rtlFields = (item.rtlRow || []).map((field) => `<div><span>${esc(field.label)}</span><b>${esc(field.value)}</b></div>`).join('');
         const salesFields = (item.salesRow || []).map((field) => `<div><span>${esc(field.label)}</span><b>${esc(field.value)}</b></div>`).join('');
-        $('drawer').classList.remove('hidden');
-        $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button>
-            <h2>Sold VIN ${esc(item.vin || '')}</h2>
-            <p><span class="s-pill ${soldTone(item.soldKind)}">${esc(item.soldLabel || item.soldKind || 'Sold')}</span>
+        const tone = soldTone(item.soldKind);
+        showDrawer(`<div class="dr-head"><div><h2>Sold VIN ${esc(item.vin || '')}</h2><p>${esc(item.orderNumber || '—')}</p></div><button class="x" id="close-drawer" type="button" aria-label="Close">${icon('close')}</button></div><div class="dr-body">
+            <p><span class="pill ${tone}"><span class="dot"></span>${esc(item.soldLabel || item.soldKind || 'Sold')}</span>
             · Order ${esc(item.orderNumber || '—')} · Advisor ${esc(item.salesAdvisor || '—')}<br>
             Last status ${esc(item.lastStatus || item.status || '—')} · Removed ${esc(item.removedDisplay || item.removedAt || '—')}</p>
             <h3>Where it is</h3>
@@ -1407,10 +1519,10 @@
                 ? `Found in Sales Raw${item.salesSheetName ? ' · ' + esc(item.salesSheetName) : ''}${item.invoiceDate ? ' · invoice (col V) ' + esc(item.invoiceDate) : ' · no invoice date in column V (proforma)'}${item.proformaDate ? ' · proforma ' + esc(item.proformaDate) : ''}`
                 : 'Not found in the current Sales Raw file.'}</p>
             <h3>RTL row</h3>
-            <div class="mkt-fields">${rtlFields || `<div><span>RTL</span><b>${esc(item.rtlDescription || 'No RTL row captured')}</b></div>`}</div>
+            <div class="facts">${rtlFields || `<div><span>RTL</span><b>${esc(item.rtlDescription || 'No RTL row captured')}</b></div>`}</div>
             <h3>Sales Raw row</h3>
-            <div class="mkt-fields">${salesFields || `<div><span>Sales Raw</span><b>${esc(item.salesDescription || 'No Sales Raw row captured')}</b></div>`}</div>`;
-        $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
+            <div class="facts">${salesFields || `<div><span>Sales Raw</span><b>${esc(item.salesDescription || 'No Sales Raw row captured')}</b></div>`}</div>
+        </div>`);
     }
     function renderSold() {
         const box = $('sold-rows');
@@ -1431,7 +1543,7 @@
         }
         box.innerHTML = rows.length
             ? rows.map((item) => `<tr>
-                <td><span class="s-pill ${soldTone(item.soldKind)}">${esc(item.soldLabel || item.soldKind || 'Sold')}</span></td>
+                <td><span class="pill ${soldTone(item.soldKind)}"><span class="dot"></span>${esc(item.soldLabel || item.soldKind || 'Sold')}</span></td>
                 <td class="mono">${esc(item.vin || '—')}</td>
                 <td>${esc(item.orderNumber || '—')}</td>
                 <td>${esc(item.salesAdvisor || '—')}</td>
@@ -1451,7 +1563,7 @@
                 <span dir="auto">${esc(item)}</span>
                 ${locked
                     ? '<small class="muted">default</small>'
-                    : `<button class="ghost" type="button" data-remove-status="${esc(item)}">Remove</button>`}
+                    : `<button class="btn sm" type="button" data-remove-status="${esc(item)}">Remove</button>`}
             </li>`;
         }).join('');
     }
@@ -1511,7 +1623,10 @@
         try { await refresh(); showApp(); } catch (e) { if (e.message !== 'unauthorized') $('gate-error').textContent = e.message; }
     });
     $('admin-out').addEventListener('click', () => { sessionStorage.removeItem(passKey); showGate(''); });
-    $('admin-nav').addEventListener('click', (event) => { const button = event.target.closest('[data-panel]'); if (button) showPanel(button.dataset.panel); });
+    $('admin-app').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-panel]');
+        if (button && !event.target.closest('#pending-modal')) showPanel(button.dataset.panel);
+    });
     ['admin-search', 'admin-status', 'admin-payment', 'admin-expired'].forEach((id) => $(id).addEventListener('input', renderOrders));
     ['sold-search', 'sold-kind'].forEach((id) => { if ($(id)) $(id).addEventListener('input', renderSold); });
     ['audit-q', 'audit-employee', 'audit-action'].forEach((id) => $(id).addEventListener('input', renderAudit));
@@ -1585,9 +1700,7 @@
         if (!button) return;
         const eventRow = audit.find((item) => item.at === button.dataset.audit);
         if (!eventRow) return;
-        $('drawer').classList.remove('hidden');
-        $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button><h2>${esc(eventRow.action)}</h2><pre>${esc(JSON.stringify(eventRow, null, 2))}</pre>`;
-        $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
+        showDrawer(`<div class="dr-head"><div><h2>${esc(eventRow.action)}</h2></div><button class="x" id="close-drawer" type="button" aria-label="Close">${icon('close')}</button></div><div class="dr-body"><pre class="cur-note">${esc(JSON.stringify(eventRow, null, 2))}</pre></div>`);
     });
     $('archive-rows').addEventListener('click', async (event) => {
         const button = event.target.closest('[data-version]');
@@ -1684,22 +1797,69 @@
         const next = del ? alerts.filter((rule) => rule.id !== id) : alerts.map((rule) => rule.id === id ? { ...rule, active: rule.active === false } : rule);
         try { await saveAlertList(next); } catch (e) { if (e.message !== 'unauthorized') $('alert-error').textContent = e.message; }
     });
+    function markPushSteps(upto, cls) {
+        document.querySelectorAll('#push-steps li').forEach((li, i) => {
+            li.classList.remove('run', 'done', 'fail');
+            if (i < upto) li.classList.add('done');
+            else if (i === upto) li.classList.add(cls || 'run');
+        });
+    }
     $('push-live').addEventListener('click', async () => {
         $('push-error').textContent = '';
         const rtl = $('rtl-file').files[0];
         const reserved = $('reserved-file') ? $('reserved-file').files[0] : null;
         if (!rtl && !reserved) { $('push-error').textContent = 'Choose the RTL Stock and/or the Reserved Order File first.'; return; }
+        const button = $('push-live');
+        button.disabled = true;
+        let step = 0;
+        markPushSteps(0, 'run');
+        const tick = setInterval(() => { if (step < 2) { step += 1; markPushSteps(step, 'run'); } }, 700);
         try {
             const body = { password: password() };
             if (rtl) { body.rtlBase64 = await fileToBase64(rtl); body.rtlName = rtl.name; }
             if (reserved) { body.reservedBase64 = await fileToBase64(reserved); body.reservedName = reserved.name; }
             const pushed = await api('/api/reserved-orders/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-            if ($('push-report') && pushed.reportSheet) $('push-report').textContent = 'Report Sheet admin now has these files too.';
+            clearInterval(tick);
+            document.querySelectorAll('#push-steps li').forEach((li) => { li.classList.remove('run', 'fail'); li.classList.add('done'); });
+            const report = pushed || {};
+            const smalls = document.querySelectorAll('#push-steps li small');
+            if (smalls[0]) smalls[0].textContent = (report.reservedVinCount || orders.length || '') + ' rows';
+            if (smalls[1]) smalls[1].textContent = (report.matchedOrders != null ? report.matchedOrders + ' of ' + (report.reservedVinCount || '') : '') + '';
+            if (smalls[2]) smalls[2].textContent = 'queues ranked';
+            if (smalls[3]) smalls[3].textContent = 'Live now';
+            if ($('push-report')) {
+                $('push-report').innerHTML = `<section class="card pane"><h2>Push report</h2>
+                    <div class="report">
+                        <div><span>New VINs</span><b>${report.reservedFileAddedVins || 0}</b></div>
+                        <div><span>Changed so status cleared</span><b>${report.reservedFileChangedVins || 0}</b></div>
+                        <div><span>Unchanged so status kept</span><b>${report.reservedFileKeptVins || 0}</b></div>
+                        <div><span>Moved to Sold VINs</span><b>${report.soldCaptured || 0}</b></div>
+                    </div>
+                    <button class="btn" type="button" data-panel="overview">Open overview</button>
+                </section>`;
+            }
+            toast('Live sheet updated', (report.reservedVinCount || 0) + ' VINs published.', 'd-ok');
             await refresh();
-            showPanel('overview');
-        } catch (e) { if (e.message !== 'unauthorized') $('push-error').textContent = e.message; }
+        } catch (e) {
+            clearInterval(tick);
+            const running = document.querySelector('#push-steps li.run') || document.querySelector('#push-steps li:last-child');
+            if (running) { running.classList.remove('run'); running.classList.add('fail'); }
+            if (e.message !== 'unauthorized') $('push-error').textContent = e.message;
+        } finally { button.disabled = false; }
     });
     setInterval(() => {
+        document.querySelectorAll('.exp[data-deadline]').forEach((el) => {
+            const info = expInfo(parseLocal(el.dataset.deadline));
+            if (!info) return;
+            const text = el.querySelector('b');
+            if (text && text.textContent !== info.text) text.textContent = info.text;
+            const bar = el.querySelector('.track i');
+            if (bar) bar.style.width = info.pct.toFixed(1) + '%';
+            if (!el.classList.contains(info.tone)) {
+                el.classList.remove('t-ok', 't-warn', 't-bad');
+                el.classList.add(info.tone);
+            }
+        });
         document.querySelectorAll('.xl-expiry').forEach((cell) => {
             const end = parseLocal(cell.dataset.expiry);
             if (!end) return;
@@ -1952,10 +2112,12 @@
         }
         list.innerHTML = groups.map((group) => {
             const last = group.recordId && log[group.recordId] ? `<small>Last notified ${esc(ago(Date.now() - log[group.recordId]))}</small>` : '';
-            return `<label class="pn-row${group.recordId ? '' : ' is-locked'}" data-record="${esc(group.recordId)}" data-key="${esc(group.key)}">
+            return `<label class="checkrow${group.recordId ? '' : ' is-locked'}" data-record="${esc(group.recordId)}" data-key="${esc(group.key)}">
                 <input type="checkbox" class="pn-check"${group.recordId ? ' checked' : ' disabled'}>
-                <span class="pn-name"><b dir="auto">${esc(group.name)}</b>${group.recordId ? '' : '<small>No login account in Employees, cannot be notified</small>'}${last}</span>
-                <span class="pn-count"><b>${group.orders.length}</b> pending${group.expired ? ` · <em>${group.expired} expired</em>` : ''}</span>
+                <span class="person"><span class="av">${esc(initials(group.name))}</span><span dir="auto">${esc(group.name)}</span></span>
+                ${group.recordId ? '' : '<small class="muted">No login account</small>'}${last}
+                <em>${group.orders.length} cars</em>
+                ${group.expired ? `<span style="color:var(--bad)">${group.expired} expired</span>` : ''}
             </label>`;
         }).join('');
         const send = $('pending-send');
@@ -1966,19 +2128,20 @@
     function openPendingModal() {
         const modal = $('pending-modal');
         if (!modal) return;
+        modal.classList.add('open');
         modal.classList.remove('hidden');
         paintPendingModal();
     }
     function closePendingModal() {
         const modal = $('pending-modal');
-        if (modal) modal.classList.add('hidden');
+        if (modal) { modal.classList.remove('open'); }
     }
     async function sendPendingNotices() {
         const send = $('pending-send');
         const error = $('pending-error');
         const intro = ($('pending-intro') && $('pending-intro').value.trim()) || 'Please update the status of your reserved orders on the Reserved Orders page.';
         const groups = pendingGroups($('pending-expired-only') && $('pending-expired-only').checked);
-        const chosen = Array.from(document.querySelectorAll('#pending-list .pn-row')).filter((row) => {
+        const chosen = Array.from(document.querySelectorAll('#pending-list .checkrow, #pending-list .pn-row')).filter((row) => {
             const box = row.querySelector('.pn-check');
             return box && box.checked && !box.disabled;
         }).map((row) => groups.find((group) => group.key === row.dataset.key)).filter(Boolean);
@@ -2010,6 +2173,7 @@
                 ? `Sent to ${sent}. Could not notify: ${failed.join(', ')}.`
                 : `Notified ${sent} employee${sent === 1 ? '' : 's'}. They see it on their Reserved Orders page and as a laptop alert if enabled.`;
         }
+        if (!failed.length && sent) toast('Reminder sent to ' + sent + ' salesmen', 'They see it on their page and as a laptop pop-up.', 'd-ok');
     }
     document.addEventListener('click', (event) => {
         if (event.target.closest('[data-notify-pending]')) {
@@ -2018,7 +2182,7 @@
             return;
         }
         const modal = $('pending-modal');
-        if (!modal || modal.classList.contains('hidden')) return;
+        if (!modal || !modal.classList.contains('open')) return;
         if (event.target === modal || event.target.closest('#pending-close')) closePendingModal();
         else if (event.target.closest('#pending-all')) {
             document.querySelectorAll('#pending-list .pn-check:not(:disabled)').forEach((box) => { box.checked = true; });
@@ -2031,7 +2195,7 @@
     async function adminSetStatus(key, status, selectEl) {
         if (!key || !status) return;
         try {
-            selectEl.disabled = true;
+            if (selectEl) selectEl.disabled = true;
             const data = await api('/api/reserved-orders/admin/status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2047,17 +2211,23 @@
                 order.statusChangedDisplay = next.statusChangedDisplay || '';
                 if (Array.isArray(next.history)) order.history = next.history;
             }
-            selectEl.dataset.prev = status;
-            selectEl.classList.add('is-saved');
-            setTimeout(() => selectEl.classList.remove('is-saved'), 900);
+            if (selectEl) {
+                selectEl.dataset.prev = status;
+                selectEl.classList.add('is-saved');
+                setTimeout(() => selectEl.classList.remove('is-saved'), 900);
+            }
+            closeDrawer();
+            flashRow(key);
+            toast('Saved · ' + status, (order && (order.vehicle || order.orderNumber) || '') + '', status === 'Payment' ? 'd-ok' : status === 'Cancelled' ? 'd-bad' : 'd-warn');
             renderOrders();
             renderSalesTypes();
             renderSheet();
+            renderOverview();
         } catch (e) {
-            if (selectEl.dataset.prev != null) selectEl.value = selectEl.dataset.prev;
-            if (e.message !== 'unauthorized') alert(e.message || 'Could not update status.');
+            if (selectEl && selectEl.dataset.prev != null) selectEl.value = selectEl.dataset.prev;
+            if (e.message !== 'unauthorized') toast('Could not save', e.message || 'Could not update status.', 'd-bad');
         } finally {
-            selectEl.disabled = false;
+            if (selectEl) selectEl.disabled = false;
         }
     }
     const mergedBox = $('live-sheet-merged');
@@ -2067,6 +2237,16 @@
             if (!select) return;
             if (select.value === select.dataset.prev) return;
             adminSetStatus(select.dataset.key, select.value, select);
+        });
+        mergedBox.addEventListener('click', (event) => {
+            if (event.target.closest('textarea, button, input, select, a')) return;
+            const row = event.target.closest('tr[data-key]');
+            if (row && row.dataset.key) openOrder(row.dataset.key);
+        });
+        mergedBox.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            const row = event.target.closest('tr[data-key]');
+            if (row && row.dataset.key) openOrder(row.dataset.key);
         });
     }
     if ($('st-cards')) $('st-cards').addEventListener('click', (event) => {
@@ -2081,6 +2261,38 @@
         const row = event.target.closest('[data-open]');
         if (row) openOrder(row.dataset.open);
     });
+    if ($('st-expiring')) $('st-expiring').addEventListener('click', (event) => {
+        const row = event.target.closest('[data-open]');
+        if (row) openOrder(row.dataset.open);
+    });
+    if ($('admin-scrim')) $('admin-scrim').addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeDrawer();
+    });
+    window.addEventListener('resize', paintAdminRail);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(paintAdminRail);
+    function bindDrop(box, input) {
+        if (!box || !input) return;
+        const label = box.querySelector('small');
+        const paint = () => {
+            const file = input.files && input.files[0];
+            box.classList.toggle('ready', !!file);
+            if (label) label.textContent = file ? (file.name + ' · ' + Math.round(file.size / 1024) + ' KB') : 'Choose a file';
+        };
+        input.addEventListener('change', paint);
+        ['dragenter', 'dragover'].forEach((name) => box.addEventListener(name, (event) => { event.preventDefault(); box.classList.add('ready'); }));
+        box.addEventListener('dragleave', () => { if (!(input.files && input.files[0])) box.classList.remove('ready'); });
+        box.addEventListener('drop', (event) => {
+            event.preventDefault();
+            if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+                input.files = event.dataTransfer.files;
+                paint();
+            }
+        });
+    }
+    bindDrop($('drop-reserved'), $('reserved-file'));
+    bindDrop($('drop-rtl'), $('rtl-file'));
     try {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(`${protocol}//${location.host}`);
