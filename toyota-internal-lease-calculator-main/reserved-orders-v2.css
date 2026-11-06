@@ -68,6 +68,7 @@ button{cursor:pointer}
 .rail-foot{margin-top:18px;padding:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 main{padding-block:22px 48px;padding-left:16px;padding-right:max(16px,env(safe-area-inset-right,0px));min-width:0}
 .view{max-width:1240px;display:flex;flex-direction:column;gap:18px}
+#panel-sheet.view,#panel-overview.view{max-width:none}
 .view>*{animation:rise var(--dur) var(--ease) both;animation-delay:calc(var(--i,0) * 45ms)}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -410,8 +411,7 @@ body.dash #app.tower-app{height:auto;min-height:100vh;background:var(--bg);color
 .overlay-panel{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px}
 .overlay-head h2{font-family:var(--f-display)}
 .drawer{padding-left:0;overflow:hidden;color:var(--ink)}
-/* Bridge until the admin drawer switches from .hidden to .open (section 7). */
-#admin-app #drawer:not(.hidden):not(.open){transform:none;padding:18px;overflow:auto}
+.drawer:not(.open){pointer-events:none}
 
 /* old sheet + tables */
 table{font-size:13.5px}
