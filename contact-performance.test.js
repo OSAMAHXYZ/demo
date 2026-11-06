@@ -12,170 +12,86 @@ function assert(cond, message) {
 
 function workbook(sheetName, rows) {
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), sheetName);
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
-function contactFile() {
+/** Columns deliberately out of the usual order: mapping must use header names. */
+function exportFile(month) {
+  const m = month || '10';
   return workbook('Export', [
-    ['Lead Number', 'Ignore', 'Lead Number', 'Initial Contact', 'Employee Responsible', 'Created Date', 'Status', 'Source', 'Centre Name', 'Lead Type'],
-    ['NOT-THIS', '', '00123', 'Yes', 'Sara Nasser', '01.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['NOT-THIS', '', '00123', 'Yes', 'Sara Nasser', '02.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['NOT-THIS', '', '200', 'No', 'Ali', '03.10.2026', 'Not Contacted', 'Walk-in', 'Riyadh', 'Used'],
-    ['NOT-THIS', '', '200', 'No', 'Omar', '03.10.2026', 'Contacted', 'Walk-in', 'Riyadh', 'Used'],
-    ['NOT-THIS', '', '300', 'Yes', 'Ali M', '04.10.2026', 'In Progress', 'Web', 'Jeddah', 'New'],
-    ['NOT-THIS', '', '400', '', 'Nora', '05.10.2026', 'Mystery', 'Event', 'Dammam', 'Fleet'],
-    ['NOT-THIS', '', '500', 'Yes', 'Hadi', 'not-a-date', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['NOT-THIS', '', '', 'Yes', 'Blank', '06.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['NOT-THIS', '', '700', 'Yes', 'Contact Only', '07.10.2026', 'Not Contacted', 'Web', 'Jeddah', 'New'],
+    ['Centre Name', 'Source', 'Initial Contact', 'Lead Type', 'Status', 'Created Date', 'Employee Responsible', 'Lead Number'],
+    ['Jeddah', 'Web', 'Contacted', 'New', 'Open', `01.${m}.2026`, 'Sara Nasser', '00123'],
+    ['Jeddah', 'Web', 'Not Contacted', 'New', 'Open', `01.${m}.2026`, 'Sara Nasser', '00123'],
+    ['', 'Walk-in', 'Not Contacted', 'Used', 'Won', `02.${m}.2026`, 'Ali M', '200'],
+    ['Riyadh', 'Web', 'In Progress', 'New', 'Open', `02.${m}.2026`, 'Ali M', '300'],
+    ['Dammam', 'Event', 'Mystery', 'Fleet', 'Lost', `03.${m}.2026`, 'Nora', '400'],
+    ['Jeddah', 'Web', '', 'New', 'Open', `03.${m}.2026`, 'Nora', '401'],
+    ['Jeddah', 'Web', 'contacted', 'New', 'Open', `03.${m}.2026`, 'Sara  Nasser', '500'],
+    ['Jeddah', 'Web', 'Contacted', 'New', 'Open', `04.${m}.2026`, '', '600'],
+    ['Jeddah', 'Web', 'Contacted', 'New', 'Open', `04.${m}.2026`, 'Hadi', ''],
+    [],
+    ['Applied filters: Created Date is in October 2026'],
   ]);
-}
-
-function crmCsv() {
-  const lines = [
-    ['Transaction No.', 'Ignore', 'Transaction No.', 'Prospect', 'Model', 'Status', 'Employee Responsible', 'Telephone', 'Employee Number', 'Centre'].join('\t'),
-    ['NOT-THIS', '', '00123', 'Prospect A', 'Camry', 'Open', 'Sara Nasser', '0550000001', '1001', 'Jeddah'].join('\t'),
-    ['NOT-THIS', '', '200', 'Prospect B', 'Hilux', 'Won', 'Ali Saleh', '0550000002', '2002', 'Riyadh'].join('\t'),
-    ['NOT-THIS', '', '300', 'Prospect C', 'Yaris', 'Open', 'Ali M', '0550000003', '3003', 'Jeddah'].join('\t'),
-    ['NOT-THIS', '', '400', 'Prospect D', 'Raize', 'Lost', 'Nora', '0550000004', '4004', 'Dammam'].join('\t'),
-    ['NOT-THIS', '', '500', 'Prospect E', 'Corolla', 'Open', 'Hadi', '0550000005', '5005', 'Jeddah'].join('\t'),
-    ['NOT-THIS', '', '800', 'Prospect F', 'Fortuner', 'Open', 'Unmatched Person', '0550000006', '8008', 'Jeddah'].join('\t'),
-    ['NOT-THIS', '', '', 'No Id', 'Camry', 'Open', 'Nobody', '0550000007', '1', 'Jeddah'].join('\t'),
-  ];
-  return Buffer.from(lines.join('\n'), 'utf8');
 }
 
 async function main() {
-  assert(api.classifyContactStatus('Not Contacted Yet') === 'not_contacted', 'not contacted phrase');
-  assert(api.classifyContactStatus('Customer Contacted') === 'contacted', 'contacted phrase');
-  assert(api.classifyContactStatus('Mystery') === 'unknown', 'unknown stays unknown');
-  assert(api.classifyContactStatus('') === 'missing', 'blank is missing');
+  assert(api.classifyInitialContact('Contacted') === 'contacted', 'contacted');
+  assert(api.classifyInitialContact(' NOT  contacted ') === 'not_contacted', 'not contacted, case and spaces');
+  assert(api.classifyInitialContact('In Progress') === 'in_progress', 'in progress');
+  assert(api.classifyInitialContact('Mystery') === 'unknown', 'other text is unknown');
+  assert(api.classifyInitialContact('') === 'unknown', 'blank is unknown');
   assert(api.normalizeId('00123') === '00123', 'leading zeros stay on text');
 
-  const contact = api.parseTable(contactFile(), 'contacts.xlsx', 'contact', XLSX);
-  const crm = api.parseTable(crmCsv(), 'crm.txt', 'crm', XLSX);
-  assert(!contact.errors.length, contact.errors.join('; '));
-  assert(!crm.errors.length, crm.errors.join('; '));
-  const lead123 = contact.rows.find((row) => row.leadNumber === '00123');
-  assert(lead123, 'parsed lead 00123');
-  assert(!contact.rows.some((row) => row.leadNumber === 'NOT-THIS'), 'column A is not the match key');
-  const dataset = api.buildDataset(contact, crm);
+  const parsed = api.parseLeadSheet(exportFile(), 'data.xlsx', 'export', XLSX);
+  assert(!parsed.errors.length, parsed.errors.join('; '));
+  assert(parsed.columns.leadNumber === 7 && parsed.columns.employeeName === 6, 'columns found by header name');
+  assert(parsed.skipped.footer === 1, 'footer row skipped');
+  assert(parsed.skipped.noEmployee === 1 && parsed.skipped.noLead === 1, 'rows without lead or employee skipped');
+
+  const dataset = api.buildExportDataset(parsed, null);
   assert(!dataset.errors.length, dataset.errors.join('; '));
-  const rec = dataset.reconciliation;
-  assert(rec.matched === 4, `matched ${rec.matched}`);
-  assert(rec.crmOnly === 1, `crm only ${rec.crmOnly}`);
-  assert(rec.contactOnly === 1, `contact only ${rec.contactOnly}`);
-  assert(rec.contactUnresolved === 1, 'conflicting duplicate left unmatched');
-  assert(rec.contactMissingId === 1, 'blank lead counted');
-  assert(rec.crmMissingId === 1, 'blank transaction counted');
-  assert(rec.unknownStatus === 1, 'mystery status counted as unknown');
-  const matchedKeys = dataset.records.filter((row) => row.matchKind === 'matched').map((row) => row.leadNumber);
-  assert(!matchedKeys.includes('200'), 'unresolved duplicate 200 is not matched');
-  const mystery = dataset.records.find((row) => row.leadNumber === '400');
-  assert(mystery.bucket === 'unknown', 'mystery is not not-contacted');
-  const only = dataset.records.find((row) => row.transactionNo === '800');
-  assert(only.bucket === 'unmatched', 'crm only is unmatched');
-  const summary = api.summarize(dataset, { employee: '', centre: '', source: '', leadType: '', crm: '', q: '' });
-  assert(summary.kpis.totalCrm === 5, `total crm ${summary.kpis.totalCrm}`);
-  assert(summary.kpis.matched === 4, 'kpi matched');
-  assert(summary.kpis.contacted === 2, `contacted ${summary.kpis.contacted}`);
-  assert(contact.columns.status === 6, 'contact status is export column G');
-  assert(contact.columns.employeeName === 4, 'contact employee is column E');
-  assert(summary.kpis.exportContacted === 2, `export contacted ${summary.kpis.exportContacted}`);
-  assert(summary.kpis.contactedOfCrm === 40, `contacted share ${summary.kpis.contactedOfCrm}`);
-  const contactedSlice = summary.distribution.find((item) => item.key === 'contacted');
-  const notContactedSlice = summary.distribution.find((item) => item.key === 'not_contacted');
-  assert(contactedSlice.count === 2 && contactedSlice.pct === 40, 'chart shows export contacted');
-  assert(notContactedSlice.count === 1 && notContactedSlice.pct === 20, 'chart shows export not contacted');
-  assert(summary.kpis.notContactedOfCrm === 20, `not contacted share ${summary.kpis.notContactedOfCrm}`);
-  assert(summary.kpis.notContacted === 0, 'unknown is not not-contacted');
-  assert(summary.kpis.inProgress === 1, 'in progress');
-  assert(summary.kpis.contactRate === 50, `rate ${summary.kpis.contactRate}`);
-  const sara = summary.employees.find((row) => row.number === '1001');
-  const aliM = summary.employees.find((row) => row.name === 'Ali M');
-  assert(sara && sara.contactRate === 100, 'sara rate');
-  assert(aliM && aliM.key !== sara.key, 'similar names stay separate');
-  const advisors = summary.advisors;
-  const advisorLeads = advisors.reduce((sum, row) => sum + row.total, 0);
-  assert(advisorLeads === 5, `advisor leads ${advisorLeads}`);
-  assert(advisors.reduce((sum, row) => sum + row.contacted, 0) === 2, 'advisor contacted');
-  assert(advisors.reduce((sum, row) => sum + row.notContacted, 0) === 1, 'advisor not contacted');
-  assert(advisors.reduce((sum, row) => sum + row.inProgress, 0) === 1, 'advisor in progress');
-  assert(advisors.reduce((sum, row) => sum + row.unknown, 0) === 1, 'advisor unknown');
-  const saraAdvisor = advisors.find((row) => row.name === 'Sara Nasser');
-  const aliAdvisor = advisors.find((row) => row.name === 'Ali M');
-  const noraAdvisor = advisors.find((row) => row.name === 'Nora');
-  assert(saraAdvisor && saraAdvisor.total === 1 && saraAdvisor.contacted === 1 && saraAdvisor.ach === 100, 'sara achievement');
-  assert(aliAdvisor && aliAdvisor.inProgress === 1 && aliAdvisor.contacted === 0 && aliAdvisor.ach === 0, 'in progress is not contacted');
-  assert(noraAdvisor && noraAdvisor.unknown === 1 && noraAdvisor.ach === 0, 'unknown is not contacted');
-  assert(!advisors.some((row) => row.name === 'Unmatched Person' || row.name === 'Ali Saleh'), 'invalid or unmatched leads stay out');
-  const dammam = api.summarize(dataset, { employee: '', centre: 'Dammam', source: '', leadType: '', crm: '', q: '' });
-  assert(dammam.advisors.length === 1 && dammam.advisors[0].name === 'Nora' && dammam.advisors[0].total === 1, 'centre filter recalculates advisors');
-  const leads = api.listLeads(dataset, { employee: '', centre: '', source: '', leadType: '', crm: '', contact: 'unmatched', q: '', sort: 'transactionNo', dir: 'asc', page: 1, pageSize: 25 });
-  assert(leads.total === 1 && leads.rows[0].transactionNo === '800', 'unmatched filter');
-  assert(!leads.rows[0].telephone, 'list hides telephone');
+  assert(dataset.period === '2026-10', `period from created dates ${dataset.period}`);
+  assert(dataset.records.length === 6, `deduped leads ${dataset.records.length}`);
+  assert(dataset.records.find((row) => row.leadNumber === '00123').bucket === 'contacted', 'first duplicate row wins');
+  assert(dataset.reconciliation.duplicates === 1, 'duplicate counted');
 
-  const badBook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(badBook, XLSX.utils.aoa_to_sheet([['Name'], ['x']]), 'Notes');
-  XLSX.utils.book_append_sheet(badBook, XLSX.utils.aoa_to_sheet([['Other'], ['y']]), 'Extra');
-  const badBuf = XLSX.write(badBook, { type: 'buffer', bookType: 'xlsx' });
-  const bad = api.parseTable(badBuf, 'bad.xlsx', 'contact', XLSX);
-  assert(bad.errors.some((line) => /Export worksheet/.test(line)), 'unexpected sheet blocks');
-  const noTxn = api.parseTable(Buffer.from('Prospect,Status\nA,Open\n', 'utf8'), 'crm.csv', 'crm', XLSX);
-  assert(noTxn.errors.some((line) => /Column C/.test(line)), 'missing column C blocks');
+  const summary = api.summarize(dataset, {});
+  const k = summary.kpis;
+  assert(k.total === 6, `total ${k.total}`);
+  assert(k.contacted === 2 && k.notContacted === 1 && k.inProgress === 1 && k.unknown === 2, `buckets ${JSON.stringify(k)}`);
+  assert(k.contactRate === 33.3, `rate ${k.contactRate}`);
+  assert(summary.days.join(',') === '2026-10-01,2026-10-02,2026-10-03', `days ${summary.days}`);
+  assert(summary.sources[0] === 'Web', 'sources sorted by volume');
+  assert(summary.team.advisors === 3, `advisors ${summary.team.advisors}`);
+  const sara = summary.employees.find((row) => row.name.startsWith('Sara'));
+  assert(sara && sara.total === 2 && sara.contacted === 2 && sara.contactRate === 100 && sara.rank === 1, 'sara merged across spacing and ranked first');
+  assert(sara.daily.length === summary.days.length && sara.daily[0][0] === 1 && sara.daily[2][0] === 1, 'per-advisor daily arrays');
+  assert(sara.sources.length === summary.sources.length, 'per-advisor source arrays');
+  const nora = summary.employees.find((row) => row.name === 'Nora');
+  assert(nora.unknown === 2 && nora.notContacted === 0, 'unknown is not counted as not contacted');
+  const ali = summary.employees.find((row) => row.name === 'Ali M');
+  assert(ali.rank === 2 && nora.rank === 3, 'tie on 0% broken by volume, then name');
 
-  const shiftedContact = workbook('Daily', [
-    // A..G: Lead Number not in C; employee locked to E; status locked to G (blank → Initial Contact)
-    ['Pad', 'Lead Number', 'Initial Contact', 'Showroom', 'Advisor', 'Created Date', 'Status'],
-    ['', '9001', 'Yes', 'Jeddah', 'Sara Nasser', '01.10.2026', ''],
-    ['', '9002', 'No', 'Riyadh', 'Ali M', '02.10.2026', ''],
-    ['', '9003', '', 'Dammam', 'Nora', '03.10.2026', ''],
-    ['', '9004', 'In Progress', 'Jeddah', 'Hadi', '04.10.2026', ''],
+  const leads = api.listLeads(dataset, { advisor: 'name:nora', contact: 'unknown', sort: 'leadNumber', dir: 'asc', page: 1, pageSize: 25 });
+  assert(leads.total === 2 && leads.rows[0].leadNumber === '400', 'leads filtered by advisor and status');
+
+  const contactBuf = workbook('Contacts', [
+    ['Lead Number', 'Contact Status', 'Prospect'],
+    ['400', 'Contacted', 'Prospect D'],
+    ['401', '', 'Prospect E'],
   ]);
-  const shiftedCrm = Buffer.from([
-    'Prospect,Lead Number,CRM Status,Employee Responsible,Centre',
-    'A,9001,Open,Sara Nasser,Jeddah',
-    'B,9002,Open,Ali M,Riyadh',
-    'C,9003,Open,Nora,Dammam',
-    'D,9004,Open,Hadi,Jeddah',
-  ].join('\n'), 'utf8');
-  const shiftedParsed = api.parseTable(shiftedContact, 'daily.xlsx', 'contact', XLSX);
-  assert(!shiftedParsed.errors.length, shiftedParsed.errors.join('; '));
-  assert(shiftedParsed.sheetName === 'Daily', 'worksheet with Lead Number is used');
-  assert(shiftedParsed.columns.leadNumber === 1, 'lead number header is used when column C is not the id');
-  assert(shiftedParsed.columns.status === 6, 'shifted status is locked to column G');
-  assert(shiftedParsed.columns.employeeName === 4, 'shifted employee is locked to column E');
-  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9001' && row.bucket === 'contacted' && row.employeeName === 'Sara Nasser'), 'yes initial contact counts as contacted');
-  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9002' && row.bucket === 'not_contacted' && row.employeeName === 'Ali M'), 'no initial contact counts as not contacted');
-  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9003' && row.bucket === 'missing'), 'blank initial contact stays missing');
-  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9004' && row.bucket === 'in_progress'), 'in progress stays separate');
-  const shiftedCrmParsed = api.parseTable(shiftedCrm, 'crm.csv', 'crm', XLSX);
-  assert(!shiftedCrmParsed.errors.length, shiftedCrmParsed.errors.join('; '));
-  assert(shiftedCrmParsed.columns.transactionNo === 1, 'crm lead number is the match key');
-  const shiftedData = api.buildDataset(shiftedParsed, shiftedCrmParsed);
-  const shiftedSummary = api.summarize(shiftedData, { employee: '', centre: '', source: '', leadType: '', crm: '', q: '' });
-  assert(shiftedSummary.kpis.totalCrm === 4, `shifted crm ${shiftedSummary.kpis.totalCrm}`);
-  const saraShift = shiftedSummary.advisors.find((row) => row.name === 'Sara Nasser');
-  const aliShift = shiftedSummary.advisors.find((row) => row.name === 'Ali M');
-  const noraShift = shiftedSummary.advisors.find((row) => row.name === 'Nora');
-  const hadiShift = shiftedSummary.advisors.find((row) => row.name === 'Hadi');
-  assert(saraShift && saraShift.contacted === 1 && saraShift.inProgress === 0 && saraShift.ach === 100, 'shifted sara achievement');
-  assert(aliShift && aliShift.notContacted === 1 && aliShift.contacted === 0 && aliShift.ach === 0, 'no is not contacted');
-  assert(noraShift && noraShift.unknown === 1 && noraShift.contacted === 0, 'blank initial contact is unknown');
-  assert(hadiShift && hadiShift.inProgress === 1 && hadiShift.contacted === 0 && hadiShift.ach === 0, 'in progress is not contacted');
-  assert(shiftedSummary.advisors.reduce((sum, row) => sum + row.total, 0) === shiftedSummary.employees.reduce((sum, row) => sum + row.matched, 0), 'advisors and employees use the same matched leads');
+  const overlay = api.parseLeadSheet(contactBuf, 'contacts.xlsx', 'contact', XLSX);
+  assert(!overlay.errors.length, overlay.errors.join('; '));
+  const merged = api.buildExportDataset(parsed, overlay);
+  const mergedSummary = api.summarize(merged, {});
+  assert(mergedSummary.kpis.contacted === 3 && mergedSummary.kpis.unknown === 1, 'contact file overrides Initial Contact');
+  assert(merged.records.find((row) => row.leadNumber === '400').prospect === 'Prospect D', 'contact file adds detail');
 
-  const multi = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(multi, XLSX.utils.aoa_to_sheet([['Name'], ['x']]), 'Notes');
-  XLSX.utils.book_append_sheet(multi, XLSX.utils.aoa_to_sheet([
-    ['Lead Number', 'Employee Responsible', 'Initial Contact'],
-    ['42', 'Sara Nasser', 'Yes'],
-  ]), 'Tracking');
-  const multiParsed = api.parseTable(XLSX.write(multi, { type: 'buffer', bookType: 'xlsx' }), 'multi.xlsx', 'contact', XLSX);
-  assert(!multiParsed.errors.length, multiParsed.errors.join('; '));
-  assert(multiParsed.sheetName === 'Tracking', 'sheet with Lead Number is selected');
-  assert(multiParsed.rows.some((row) => row.leadNumber === '42' && row.bucket === 'contacted'), 'lead from the named sheet');
+  const noStatus = api.parseLeadSheet(workbook('Export', [['Lead Number', 'Employee Responsible'], ['1', 'A']]), 'x.xlsx', 'export', XLSX);
+  assert(api.buildExportDataset(noStatus, null).errors.length === 1, 'export without Initial Contact and no contact file is blocked');
+  const noEmployee = api.parseLeadSheet(workbook('Export', [['Lead Number', 'Initial Contact'], ['1', 'Contacted']]), 'x.xlsx', 'export', XLSX);
+  assert(noEmployee.errors.length === 1, 'missing Employee Responsible blocks');
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-test-'));
   const routes = [];
@@ -183,7 +99,8 @@ async function main() {
     get(routePath, handler) { routes.push({ method: 'GET', routePath, handler }); },
     post(routePath, handler) { routes.push({ method: 'POST', routePath, handler }); },
   };
-  api.attachContactPerformance(app, { dir, password: '1234', XLSX, broadcast() {} });
+  let broadcasts = 0;
+  api.attachContactPerformance(app, { dir, password: '1234', XLSX, broadcast() { broadcasts += 1; } });
 
   function matchRoute(method, urlPath) {
     const clean = urlPath.split('?')[0];
@@ -206,8 +123,7 @@ async function main() {
     const route = matchRoute(method, urlPath);
     if (!route) throw new Error(`No route ${method} ${urlPath}`);
     const query = {};
-    const qs = urlPath.split('?')[1] || '';
-    new URLSearchParams(qs).forEach((value, key) => { query[key] = value; });
+    new URLSearchParams(urlPath.split('?')[1] || '').forEach((value, key) => { query[key] = value; });
     const req = {
       body: body || {},
       query,
@@ -225,65 +141,47 @@ async function main() {
     return { status, data };
   }
 
-  const missing = await call('POST', '/api/contact-performance/preview', { period: '2026-10' }, false);
-  assert(missing.status === 400, 'preview without files is rejected');
+  const missing = await call('POST', '/api/contact-performance/preview', { period: '2026-10' });
+  assert(missing.status === 400, 'preview without the CRM export is rejected');
+  const contactOnly = await call('POST', '/api/contact-performance/preview', { contactFile: { name: 'c.xlsx', base64: contactBuf.toString('base64') } });
+  assert(contactOnly.status === 400, 'contact file alone is rejected');
   const blocked = await call('POST', '/api/contact-performance/preview', {
-    period: '2026-10',
-    contactFile: { name: 'bad.xlsx', base64: badBuf.toString('base64') },
-    crmFile: { name: 'crm.txt', base64: crmCsv().toString('base64') },
-  }, true);
+    crmFile: { name: 'bad.xlsx', base64: workbook('Notes', [['Name'], ['x']]).toString('base64') },
+  });
   assert(blocked.status === 422, 'invalid file does not publish');
   const metaBefore = await call('GET', '/api/contact-performance/meta');
   assert(!metaBefore.data.activeId, 'failed validation left no active dataset');
 
-  const contactBuf = contactFile();
-  const crmBuf = crmCsv();
+  const octBuf = exportFile('10');
   const preview = await call('POST', '/api/contact-performance/preview', {
-    period: '2026-10',
-    publishedBy: 'Admin',
-    contactFile: { name: 'contacts.xlsx', base64: contactBuf.toString('base64') },
-    crmFile: { name: 'crm.txt', base64: crmBuf.toString('base64') },
-  }, true);
+    period: '2026-01',
+    crmFile: { name: 'data_oct.xlsx', base64: octBuf.toString('base64') },
+  });
   assert(preview.status === 200 && preview.data.draftId, preview.data.error || 'preview failed');
+  assert(preview.data.period === '2026-10', 'period comes from created dates, not the request');
   const stillEmpty = await call('GET', '/api/contact-performance/summary');
   assert(stillEmpty.data.empty, 'preview is not live');
-  const published = await call('POST', '/api/contact-performance/publish', { draftId: preview.data.draftId }, true);
-  assert(published.status === 200, 'publish');
+  const published = await call('POST', '/api/contact-performance/publish', { draftId: preview.data.draftId });
+  assert(published.status === 200 && broadcasts === 1, 'publish broadcasts');
   const live = await call('GET', '/api/contact-performance/summary');
-  assert(live.data.kpis.matched === 4, 'dashboard reads published data');
-  assert(live.data.employees.every((row) => row.ach == null), 'no invented ACH');
-  assert(live.data.counts && live.data.counts.crmUnique === 5 && live.data.counts.matched === 4, 'summary carries push record counts');
-  assert(Array.isArray(live.data.warnings), 'summary carries import warnings');
+  assert(live.data.kpis.total === 6 && live.data.team.advisors === 3, 'dashboard reads the published export');
+  assert(live.data.fileName === 'data_oct.xlsx' && live.data.period === '2026-10', 'summary carries file and period');
+  assert(Array.isArray(live.data.employees[0].daily) && Array.isArray(live.data.days), 'summary carries daily arrays');
 
-  assert(api.contentHash(Buffer.from('a'), Buffer.from('b')) === api.contentHash(Buffer.from('a'), Buffer.from('b')), 'content hash is stable');
-  assert(api.contentHash(Buffer.from('a'), Buffer.from('b')) !== api.contentHash(Buffer.from('a'), Buffer.from('c')), 'content hash changes with the CRM file');
+  const repeat = await call('POST', '/api/contact-performance/preview', { crmFile: { name: 'data_oct.xlsx', base64: octBuf.toString('base64') } });
+  assert(repeat.status === 200 && repeat.data.duplicate === true, 'repeat push of the same file is a duplicate');
 
-  const repeat = await call('POST', '/api/contact-performance/preview', {
-    period: '2026-10',
-    contactFile: { name: 'contacts.xlsx', base64: contactBuf.toString('base64') },
-    crmFile: { name: 'crm.txt', base64: crmBuf.toString('base64') },
-  }, true);
-  assert(repeat.status === 200 && repeat.data.duplicate === true, 'repeat push of the same files is a duplicate');
-  const metaAfterRepeat = await call('GET', '/api/contact-performance/meta');
-  assert(metaAfterRepeat.data.counts && metaAfterRepeat.data.counts.matched === 4, 'meta carries push record counts');
-
-  const second = await call('POST', '/api/contact-performance/preview', {
-    period: '2026-11',
-    contactFile: { name: 'contacts.xlsx', base64: contactFile().toString('base64') },
-    crmFile: { name: 'crm.txt', base64: crmCsv().toString('base64') },
-  }, true);
-  const publishedNov = await call('POST', '/api/contact-performance/publish', { draftId: second.data.draftId }, true);
-  assert(publishedNov.status === 200, 'second period');
+  const nov = await call('POST', '/api/contact-performance/preview', { crmFile: { name: 'data_nov.xlsx', base64: exportFile('11').toString('base64') } });
+  assert(nov.data.period === '2026-11', 'second period');
+  await call('POST', '/api/contact-performance/publish', { draftId: nov.data.draftId });
+  const meta = await call('GET', '/api/contact-performance/meta');
+  assert(meta.data.period === '2026-11' && meta.data.periods.length === 2, 'new push becomes active, history kept');
   const history = await call('GET', '/api/contact-performance/history', null, true);
-  assert(history.data.publications.length === 2, 'history keeps both periods');
   const october = history.data.publications.find((item) => item.period === '2026-10');
+  const old = await call('GET', `/api/contact-performance/summary?publication=${encodeURIComponent(october.id)}`);
+  assert(old.data.period === '2026-10' && !old.data.active, 'historical snapshot still loads');
   const rolled = await call('POST', '/api/contact-performance/rollback', { publicationId: october.id }, true);
   assert(rolled.status === 200, 'rollback');
-  const after = await call('GET', '/api/contact-performance/meta');
-  assert(after.data.activeId === october.id, 'october is active again');
-  const nov = history.data.publications.find((item) => item.period === '2026-11');
-  const old = await call('GET', `/api/contact-performance/summary?publication=${encodeURIComponent(nov.id)}`);
-  assert(old.data.period === '2026-11', 'historical snapshot still loads');
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('contact-performance tests passed');

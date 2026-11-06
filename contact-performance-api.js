@@ -3,15 +3,18 @@
 /**
  * Contact Performance — data flow (single source of truth: Admin Push).
  *
- * 1. Admin page (report-sheet/admin.html) collects two files in the
- *    "CRM export and contact file" card (ContactPerformance.mountAdmin):
- *    the contact file and the CRM export. Nothing is live yet.
+ * 1. Admin page (report-sheet/admin.html) collects the CRM export (sheet
+ *    "Export") and, optionally, a separate contact file in the
+ *    "CRM export and contact file" card (ContactPerformance.mountAdmin).
+ *    Nothing is live yet.
  * 2. The existing Push to live button (pushToLive) calls
- *    ContactPerformance.publishDraft(), which sends both files as base64 JSON:
- *      POST /api/contact-performance/preview  { period, publishedBy, contactFile, crmFile }
- *    The server parses and validates both workbooks and stores a draft
- *    (dataset JSON + source files under <dir>/datasets and <dir>/sources).
- *    Invalid files return 422 and never touch the published dataset.
+ *    ContactPerformance.publishDraft(), which sends the files as base64 JSON:
+ *      POST /api/contact-performance/preview  { period, publishedBy, crmFile, contactFile? }
+ *    Columns are mapped by header name. Contact status comes from the
+ *    export's "Initial Contact" column; a contact file, when given, overrides
+ *    it per Lead Number. The reporting period is the month of the Created
+ *    Dates in the export. Invalid files return 422 and never touch the
+ *    published dataset.
  *      POST /api/contact-performance/publish { draftId }
  *    The draft becomes the active publication for its period. Publications
  *    are kept as historical snapshots (store.json: publications, byPeriod,
@@ -35,34 +38,30 @@ const crypto = require('crypto');
 
 const MAX_BYTES = 30 * 1024 * 1024;
 const MAX_ROWS = 100000;
-const MATCH_COL = 2;
-/** Contact-tracking file: employee name is always column E (index 4). */
-const EMPLOYEE_NAME_COL = 4;
-/** Contact-tracking file: Contacted / Not Contacted status is always column G (index 6). */
-const EXPORT_STATUS_COL = 6;
 const CONTACTED = new Set(['contacted', 'contact done', 'reached', 'successfully contacted', 'contact successful', 'contact complete', 'already contacted']);
 const NOT_CONTACTED = new Set(['not contacted', 'not contact', 'no contact', 'uncontacted', 'not yet contacted', 'not yet contact', 'awaiting contact']);
 const IN_PROGRESS = new Set(['in progress', 'inprogress', 'pending', 'follow up', 'followup', 'attempting', 'callback', 'call back', 'scheduled', 'working', 'open']);
+const LEAD_KINDS = new Set(['export', 'matched', 'contact_only']);
+const NO_SOURCE = 'Not set';
 
-const CONTACT_FIELDS = {
+const EMPLOYEE_ALIASES = ['employee responsible', 'responsible employee', 'employee name', 'sales advisor', 'advisor', 'advisor name', 'sales consultant'];
+const EXPORT_FIELDS = {
   leadNumber: ['lead number', 'lead no', 'lead #', 'lead id'],
-  initialContact: ['initial contact', 'first contact', 'initial contact status', 'first contact status'],
-  employeeName: ['employee responsible', 'responsible employee', 'employee name', 'advisor', 'advisor name', 'sales advisor', 'salesman', 'sales consultant', 'employee', 'agent', 'agent name', 'user', 'user name'],
+  employeeName: EMPLOYEE_ALIASES,
+  initialContact: ['initial contact', 'initial contact status', 'first contact', 'first contact status'],
   createdDate: ['created date', 'date created', 'create date', 'created on'],
-  status: ['status', 'contact status', 'lead status', 'crm contact status', 'export status', 'contact result', 'result'],
   source: ['source', 'lead source'],
-  centre: ['centre name', 'center name', 'centre', 'center', 'branch', 'showroom', 'showroom name'],
+  status: ['status', 'crm status', 'lead status'],
   leadType: ['lead type'],
+  centre: ['centre name', 'center name', 'centre', 'center', 'branch', 'showroom', 'showroom name'],
 };
-const CRM_FIELDS = {
-  transactionNo: ['transaction no', 'transaction no.', 'transaction number', 'transaction #', 'txn no', 'txn number', 'lead number', 'lead no', 'lead #', 'lead id'],
+const CONTACT_FILE_FIELDS = {
+  leadNumber: ['lead number', 'lead no', 'lead #', 'lead id', 'transaction no', 'transaction number', 'transaction #'],
+  contactStatus: ['initial contact', 'initial contact status', 'contact status', 'first contact', 'first contact status', 'contact result'],
+  employeeName: EMPLOYEE_ALIASES,
   prospect: ['prospect', 'prospect name', 'customer', 'customer name'],
   model: ['model', 'vehicle model'],
-  status: ['crm status', 'status'],
-  employeeName: ['employee responsible', 'responsible employee', 'employee name', 'advisor', 'advisor name', 'sales advisor', 'salesman', 'sales consultant', 'employee'],
-  telephone: ['telephone', 'telephone no', 'telephone no.', 'phone', 'phone no', 'mobile', 'mobile no', 'mobile number'],
-  employeeNumber: ['employee number', 'employee no', 'employee no.', 'emp no', 'employee id'],
-  centre: ['centre', 'center', 'centre name', 'center name', 'branch', 'showroom', 'showroom name'],
+  telephone: ['telephone', 'telephone no', 'phone', 'phone no', 'mobile', 'mobile no', 'mobile number'],
 };
 
 function normHeader(value) {
@@ -102,43 +101,42 @@ function normalizeId(value, cell) {
   return cleanId(value);
 }
 
+/** Export "Initial Contact": only these three values count; anything else is unknown. */
+function classifyInitialContact(raw) {
+  const compact = String(raw == null ? '' : raw).toLowerCase().replace(/[\s_-]+/g, ' ').trim();
+  if (compact === 'contacted') return 'contacted';
+  if (compact === 'not contacted') return 'not_contacted';
+  if (compact === 'in progress' || compact === 'inprogress') return 'in_progress';
+  return 'unknown';
+}
+
+/** Separate contact file: broader wording is accepted. */
 function classifyContactStatus(raw) {
   const compact = normHeader(raw).replace(/[_-]+/g, ' ');
   if (!compact) return 'missing';
+  if (/^(no|n|false|0)$/.test(compact)) return 'not_contacted';
+  if (/^(yes|y|true|1)$/.test(compact)) return 'contacted';
   if (NOT_CONTACTED.has(compact) || /not[\s-]+contact/.test(compact) || compact.includes('no contact') || compact.includes('not reached') || compact.includes('uncontact')) return 'not_contacted';
   if (CONTACTED.has(compact) || compact.includes('contacted') || compact === 'contact' || (compact.includes('reached') && !compact.includes('not'))) return 'contacted';
   if (IN_PROGRESS.has(compact)) return 'in_progress';
   return 'unknown';
 }
 
-function classifyInitialContact(raw) {
-  const compact = normHeader(raw).replace(/[_-]+/g, ' ');
-  if (!compact) return 'missing';
-  if (/^(no|n|false|0)$/.test(compact)) return 'not_contacted';
-  if (/^(yes|y|true|1)$/.test(compact)) return 'contacted';
-  return classifyContactStatus(raw);
-}
-
-function headerMatches(label, aliases) {
-  const norm = normHeader(label);
-  return !!norm && aliases.some((alias) => normHeader(alias) === norm);
-}
-
-function chooseTrackedColumn(labels, namedCol, aliases, lockedIndex) {
-  if (lockedIndex >= 0 && headerMatches(labels[lockedIndex], aliases)) return lockedIndex;
-  if (namedCol >= 0) return namedCol;
-  return -1;
+function pad2(value) {
+  return String(value).padStart(2, '0');
 }
 
 function fmtDate(date) {
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  return `${dd}.${mm}.${date.getFullYear()}`;
+  return `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+
+function isoDate(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
 function parseDateText(text) {
   const value = String(text || '').trim();
-  let match = value.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  let match = value.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
   if (match) {
     const day = Number(match[1]);
     const month = Number(match[2]);
@@ -158,30 +156,6 @@ function parseDateText(text) {
   return null;
 }
 
-function dateFromCell(cell, XLSX) {
-  if (!cell || cell.v == null || cell.v === '') return { display: '', sort: 0, invalid: false };
-  if (cell.v instanceof Date) {
-    if (Number.isNaN(cell.v.getTime())) return { display: clip(cell.w, 40), sort: 0, invalid: true };
-    return { display: fmtDate(cell.v), sort: cell.v.getTime(), invalid: false };
-  }
-  if (typeof cell.v === 'number' && Number.isFinite(cell.v)) {
-    const formatted = typeof cell.w === 'string' ? cell.w.trim() : '';
-    const fmt = String(cell.z || '');
-    const looksDate = (/[ydm]/i.test(fmt) && !/^[#0.]+$/.test(fmt)) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(formatted);
-    if (looksDate && XLSX && XLSX.SSF && typeof XLSX.SSF.parse_date_code === 'function') {
-      const parsed = XLSX.SSF.parse_date_code(cell.v);
-      if (parsed && parsed.y > 1900 && parsed.y < 2100) {
-        const date = new Date(parsed.y, parsed.m - 1, parsed.d);
-        return { display: fmtDate(date), sort: date.getTime(), invalid: false };
-      }
-    }
-  }
-  const text = cellText(cell);
-  const parsed = parseDateText(text);
-  if (parsed) return { display: fmtDate(parsed), sort: parsed.getTime(), invalid: false };
-  return { display: clip(text, 40), sort: 0, invalid: !!text };
-}
-
 function cellText(cell) {
   if (!cell || cell.v == null || cell.v === '') return '';
   if (cell.v instanceof Date && !Number.isNaN(cell.v.getTime())) return fmtDate(cell.v);
@@ -189,10 +163,39 @@ function cellText(cell) {
   return String(cell.v).trim();
 }
 
+function dateFromCell(cell, XLSX) {
+  const none = { display: '', sort: 0, iso: '', invalid: false };
+  if (!cell || cell.v == null || cell.v === '') return none;
+  if (cell.v instanceof Date) {
+    if (Number.isNaN(cell.v.getTime())) return { ...none, display: clip(cell.w, 40), invalid: true };
+    const shown = parseDateText(typeof cell.w === 'string' ? cell.w.trim() : '');
+    if (shown) return { display: fmtDate(shown), sort: shown.getTime(), iso: isoDate(shown), invalid: false };
+    const local = new Date(cell.v.getFullYear(), cell.v.getMonth(), cell.v.getDate());
+    return { display: fmtDate(local), sort: local.getTime(), iso: isoDate(local), invalid: false };
+  }
+  if (typeof cell.v === 'number' && Number.isFinite(cell.v) && XLSX && XLSX.SSF && typeof XLSX.SSF.parse_date_code === 'function') {
+    const formatted = typeof cell.w === 'string' ? cell.w.trim() : '';
+    const parsedText = parseDateText(formatted);
+    if (parsedText) return { display: fmtDate(parsedText), sort: parsedText.getTime(), iso: isoDate(parsedText), invalid: false };
+    const fmt = String(cell.z || '');
+    if (/[ydm]/i.test(fmt) && !/^[#0.]+$/.test(fmt)) {
+      const parsed = XLSX.SSF.parse_date_code(cell.v);
+      if (parsed && parsed.y > 1900 && parsed.y < 2100) {
+        const date = new Date(parsed.y, parsed.m - 1, parsed.d);
+        return { display: fmtDate(date), sort: date.getTime(), iso: isoDate(date), invalid: false };
+      }
+    }
+  }
+  const text = cellText(cell);
+  const parsed = parseDateText(text);
+  if (parsed) return { display: fmtDate(parsed), sort: parsed.getTime(), iso: isoDate(parsed), invalid: false };
+  return { ...none, display: clip(text, 40), invalid: !!text };
+}
+
 function findColumn(headers, aliases) {
-  const norms = headers.map(normHeader);
+  const norms = headers.map((label) => normHeader(label).replace(/\s+/g, ''));
   for (const alias of aliases) {
-    const wanted = normHeader(alias);
+    const wanted = normHeader(alias).replace(/\s+/g, '');
     const index = norms.findIndex((header) => header === wanted);
     if (index >= 0) return index;
   }
@@ -318,42 +321,6 @@ function readWorkbook(buffer, filename, XLSX) {
   }
 }
 
-function sheetHasHeader(ws, XLSX, aliases) {
-  if (!ws || !XLSX) return false;
-  try {
-    return !!locateHeader(sheetMatrix(ws, XLSX), aliases);
-  } catch (err) {
-    return false;
-  }
-}
-
-function pickSheet(wb, role, XLSX) {
-  const names = (wb && wb.SheetNames) || [];
-  if (!names.length) return { error: 'The file has no worksheet.' };
-  if (role === 'contact') {
-    const exact = names.find((name) => normHeader(name) === 'export');
-    if (exact) return { name: exact };
-    const found = names.find((name) => sheetHasHeader(wb.Sheets[name], XLSX, CONTACT_FIELDS.leadNumber));
-    if (found) {
-      return {
-        name: found,
-        warning: names.length === 1
-          ? `Worksheet "${found}" was used. The expected worksheet name is Export.`
-          : `Worksheet "${found}" was used because it contains Lead Number. The expected worksheet name is Export.`,
-      };
-    }
-    if (names.length === 1) {
-      return { name: names[0], warning: `Worksheet "${names[0]}" was used. The expected worksheet name is Export.` };
-    }
-    return { error: `Expected an Export worksheet with a Lead Number header. Found: ${names.join(', ')}.` };
-  }
-  const found = names.find((name) => sheetHasHeader(wb.Sheets[name], XLSX, CRM_FIELDS.transactionNo));
-  if (found && found !== names[0]) {
-    return { name: found, warning: `Worksheet "${found}" was used because it contains the lead identifier.` };
-  }
-  return { name: names[0] };
-}
-
 function headerLabels(row) {
   return row.map((cell) => cellText(cell));
 }
@@ -367,182 +334,119 @@ function locateHeader(matrix, requiredAliases) {
   return null;
 }
 
-function parseTable(buffer, filename, role, XLSX) {
+function pickSheet(wb, XLSX, idAliases) {
+  const names = (wb && wb.SheetNames) || [];
+  if (!names.length) return { error: 'The file has no worksheet.' };
+  const hasHeader = (name) => {
+    try { return !!locateHeader(sheetMatrix(wb.Sheets[name], XLSX), idAliases); } catch (err) { return false; }
+  };
+  const exact = names.find((name) => normHeader(name) === 'export');
+  if (exact && hasHeader(exact)) return { name: exact };
+  const found = names.find(hasHeader);
+  if (found) return { name: found, warning: `Worksheet "${found}" was used. The expected worksheet name is Export.` };
+  return { error: `No worksheet has a Lead Number header. Found: ${names.join(', ')}.` };
+}
+
+function isFooterRow(line) {
+  const first = line.find((cell) => cell && cell.v != null && String(cell.v).trim() !== '');
+  return !!first && /^applied filters/i.test(cellText(first));
+}
+
+/**
+ * Reads the CRM export ("Export" sheet) or the optional contact file.
+ * Every column is located by its header name; position is never assumed.
+ */
+function parseLeadSheet(buffer, filename, role, XLSX) {
+  const fields = role === 'export' ? EXPORT_FIELDS : CONTACT_FILE_FIELDS;
+  const label = role === 'export' ? 'CRM export' : 'contact file';
   const opened = readWorkbook(buffer, filename, XLSX);
-  if (opened.error) return { errors: [opened.error], warnings: [], rows: [] };
-  const picked = pickSheet(opened.wb, role, XLSX);
-  if (picked.error) return { errors: [picked.error], warnings: [], rows: [] };
-  const warnings = picked.warning ? [picked.warning] : [];
-  if (opened.encoding && opened.encoding !== 'workbook') {
-    const delimiter = opened.delimiter === '\t' ? 'tab' : opened.delimiter;
-    warnings.push(`Read as ${opened.encoding}${delimiter ? `, delimiter ${delimiter}` : ''}.`);
-  }
-  const ws = opened.wb.Sheets[picked.name];
-  const matrix = sheetMatrix(ws, XLSX);
-  const fields = role === 'contact' ? CONTACT_FIELDS : CRM_FIELDS;
-  const idKey = role === 'contact' ? 'leadNumber' : 'transactionNo';
-  const aliases = Object.keys(fields).reduce((list, key) => list.concat(fields[key]), []);
-  const located = locateHeader(matrix, aliases);
-  if (!located) {
-    return { errors: ['No header row was found, so column C could not be matched.'], warnings, rows: [], sheetName: picked.name };
-  }
+  if (opened.error) return { errors: [`${label}: ${opened.error}`], warnings: [], rows: [] };
+  const picked = pickSheet(opened.wb, XLSX, fields.leadNumber);
+  if (picked.error) return { errors: [`${label}: ${picked.error}`], warnings: [], rows: [] };
+  const warnings = picked.warning ? [`${label}: ${picked.warning}`] : [];
+  const matrix = sheetMatrix(opened.wb.Sheets[picked.name], XLSX);
+  const located = locateHeader(matrix, fields.leadNumber);
   const columns = {};
   Object.keys(fields).forEach((key) => {
-    columns[key] = findColumn(located.labels, fields[key]);
+    columns[key] = located ? findColumn(located.labels, fields[key]) : -1;
   });
-  const namedCol = columns[idKey];
-  columns[idKey] = chooseTrackedColumn(located.labels, namedCol, fields[idKey], MATCH_COL);
-  const columnCHeader = located.labels[MATCH_COL] || '';
-  if (columns[idKey] === MATCH_COL && namedCol >= 0 && namedCol !== MATCH_COL) {
-    warnings.push(`The named identifier is not in column C. Matching uses column C${columnCHeader ? ` ("${columnCHeader}")` : ''}.`);
-  } else if (columns[idKey] >= 0 && columns[idKey] !== MATCH_COL) {
-    const header = located.labels[columns[idKey]] || 'identifier';
-    warnings.push(`Matching uses "${header}" from the header row.`);
-  } else if (columns[idKey] < 0) {
-    warnings.push('No identifier header was found.');
-  }
-  if (role === 'contact') {
-    const namedStatus = columns.status;
-    const namedEmployee = columns.employeeName;
-    const hasColG = located.labels.length > EXPORT_STATUS_COL;
-    const hasColE = located.labels.length > EMPLOYEE_NAME_COL;
-    // Always lock Contacted / Not Contacted to column G when the sheet has that column.
-    columns.status = hasColG ? EXPORT_STATUS_COL : namedStatus;
-    // Always lock employee name to column E when the sheet has that column.
-    columns.employeeName = hasColE ? EMPLOYEE_NAME_COL : namedEmployee;
-    const statusHeader = String(located.labels[EXPORT_STATUS_COL] || '').trim();
-    const employeeHeader = String(located.labels[EMPLOYEE_NAME_COL] || '').trim();
-    if (columns.status === EXPORT_STATUS_COL) {
-      warnings.push(`Contact status (Contacted / Not Contacted) is read from column G${statusHeader ? ` ("${statusHeader}")` : ''}.`);
-      if (namedStatus >= 0 && namedStatus !== EXPORT_STATUS_COL) {
-        warnings.push(`Ignored other status column "${located.labels[namedStatus] || 'status'}".`);
-      }
-    } else if (columns.status >= 0) {
-      warnings.push(`Contact status is read from "${located.labels[columns.status] || 'status'}" (file has no column G).`);
-    } else {
-      warnings.push('Contact status column was not found. Initial Contact is used when it is filled in.');
-    }
-    if (columns.employeeName === EMPLOYEE_NAME_COL) {
-      warnings.push(`Employee name is read from column E${employeeHeader ? ` ("${employeeHeader}")` : ''}.`);
-      if (namedEmployee >= 0 && namedEmployee !== EMPLOYEE_NAME_COL) {
-        warnings.push(`Ignored other employee column "${located.labels[namedEmployee] || 'employee'}".`);
-      }
-    } else if (columns.employeeName < 0) {
-      warnings.push('Column not found: Employee Responsible (column E). Matched leads use the CRM employee when that column is present.');
-    }
-  }
-  ['initialContact', 'createdDate', 'source', 'centre', 'leadType'].forEach((key) => {
-    if (role === 'contact' && columns[key] < 0) warnings.push(`Column not found: ${CONTACT_FIELDS[key][0]}.`);
-  });
-  if (role === 'crm') {
-    ['prospect', 'model', 'status', 'employeeName', 'telephone', 'employeeNumber', 'centre'].forEach((key) => {
-      if (columns[key] < 0) warnings.push(`Column not found: ${CRM_FIELDS[key][0]}.`);
+  const errors = [];
+  if (role === 'export') {
+    if (columns.employeeName < 0) errors.push('CRM export: the "Employee Responsible" column was not found.');
+    ['initialContact', 'createdDate', 'source', 'status', 'leadType', 'centre'].forEach((key) => {
+      if (columns[key] < 0) warnings.push(`CRM export: column not found: ${EXPORT_FIELDS[key][0]}.`);
     });
+  } else if (columns.contactStatus < 0) {
+    errors.push('Contact file: no contact status column (Initial Contact or Contact Status) was found.');
   }
+  if (errors.length) return { errors, warnings, rows: [], sheetName: picked.name, columns };
+
+  const text = (line, key, max) => (columns[key] >= 0 ? clip(cellText(line[columns[key]]), max) : '');
   const rows = [];
+  const skipped = { footer: 0, noLead: 0, noEmployee: 0 };
   let invalidDates = 0;
   for (let i = located.index + 1; i < matrix.length; i += 1) {
-    if (rows.length >= MAX_ROWS) {
-      return { errors: [`The file has more than ${MAX_ROWS.toLocaleString('en-GB')} data rows. Split the export before publishing.`], warnings, rows: [], sheetName: picked.name };
-    }
     const line = matrix[i];
-    const idCell = line[role === 'contact' ? columns.leadNumber : columns.transactionNo] || null;
+    if (isFooterRow(line)) {
+      skipped.footer += 1;
+      continue;
+    }
+    if (rows.length >= MAX_ROWS) {
+      return { errors: [`${label}: more than ${MAX_ROWS.toLocaleString('en-GB')} data rows. Split the export before publishing.`], warnings, rows: [], sheetName: picked.name, columns };
+    }
+    const idCell = line[columns.leadNumber] || null;
     const key = normalizeId(idCell && idCell.v, idCell);
-    if (role === 'contact') {
+    if (!key) {
+      skipped.noLead += 1;
+      continue;
+    }
+    if (role === 'export') {
+      const employeeName = text(line, 'employeeName', 160);
+      if (!employeeName) {
+        skipped.noEmployee += 1;
+        continue;
+      }
       const created = dateFromCell(columns.createdDate >= 0 ? line[columns.createdDate] : null, XLSX);
       if (created.invalid) invalidDates += 1;
-      const statusRaw = columns.status >= 0 ? clip(cellText(line[columns.status]), 120) : '';
-      const initialContact = columns.initialContact >= 0 ? clip(cellText(line[columns.initialContact]), 120) : '';
-      let bucket = classifyContactStatus(statusRaw);
-      if (bucket === 'missing' && initialContact) {
-        const fromInitial = classifyInitialContact(initialContact);
-        if (fromInitial !== 'missing') bucket = fromInitial;
-      }
+      const initialContact = text(line, 'initialContact', 120);
       rows.push({
         key,
-        leadNumber: key,
+        employeeName,
         initialContact,
-        employeeName: columns.employeeName >= 0 ? clip(cellText(line[columns.employeeName]), 160) : '',
+        bucket: classifyInitialContact(initialContact),
         createdDisplay: created.display,
         createdSort: created.sort,
-        statusRaw,
-        bucket,
-        source: columns.source >= 0 ? clip(cellText(line[columns.source]), 160) : '',
-        centre: columns.centre >= 0 ? clip(cellText(line[columns.centre]), 160) : '',
-        leadType: columns.leadType >= 0 ? clip(cellText(line[columns.leadType]), 160) : '',
+        createdIso: created.iso,
+        source: text(line, 'source', 160),
+        crmStatus: text(line, 'status', 160),
+        leadType: text(line, 'leadType', 160),
+        centre: text(line, 'centre', 160),
       });
     } else {
-      const fieldsOut = {};
-      located.labels.forEach((labelText, index) => {
-        if (!labelText || Object.values(columns).includes(index)) return;
-        if (Object.keys(fieldsOut).length >= 12) return;
-        const value = clip(cellText(line[index]), 300);
-        if (value) fieldsOut[clip(labelText, 80)] = value;
-      });
+      const statusRaw = text(line, 'contactStatus', 120);
       rows.push({
         key,
-        transactionNo: key,
-        prospect: columns.prospect >= 0 ? clip(cellText(line[columns.prospect]), 180) : '',
-        model: columns.model >= 0 ? clip(cellText(line[columns.model]), 120) : '',
-        statusRaw: columns.status >= 0 ? clip(cellText(line[columns.status]), 160) : '',
-        employeeName: columns.employeeName >= 0 ? clip(cellText(line[columns.employeeName]), 160) : '',
-        employeeNumber: columns.employeeNumber >= 0 ? normalizeId(line[columns.employeeNumber] && line[columns.employeeNumber].v, line[columns.employeeNumber]) : '',
-        telephone: columns.telephone >= 0 ? clip(cellText(line[columns.telephone]), 40) : '',
-        centre: columns.centre >= 0 ? clip(cellText(line[columns.centre]), 160) : '',
-        fields: fieldsOut,
+        statusRaw,
+        bucket: classifyContactStatus(statusRaw),
+        employeeName: text(line, 'employeeName', 160),
+        prospect: text(line, 'prospect', 180),
+        model: text(line, 'model', 120),
+        telephone: text(line, 'telephone', 40),
       });
     }
   }
-  if (invalidDates) warnings.push(`${invalidDates} created date${invalidDates === 1 ? '' : 's'} could not be read and were kept as text.`);
-  const withKey = rows.filter((row) => row.key).length;
-  if (!withKey) {
-    const idHeader = columns[idKey] >= 0 ? String(located.labels[columns[idKey]] || '').trim() : '';
-    const headers = located.labels.map((label) => String(label || '').trim()).filter(Boolean).slice(0, 24);
-    const where = idHeader ? `"${idHeader}"` : 'Column C';
+  if (invalidDates) warnings.push(`${label}: ${invalidDates} created date${invalidDates === 1 ? '' : 's'} could not be read.`);
+  if (!rows.length) {
+    const headers = located.labels.map((value) => String(value || '').trim()).filter(Boolean).slice(0, 24);
     return {
-      errors: [`${where} in the ${role === 'contact' ? 'contact-tracking file' : 'CRM export'} has no values to match. Publication has been blocked. Headers found: ${headers.join(', ') || 'none'}.`],
+      errors: [`${label}: no rows with a Lead Number${role === 'export' ? ' and an Employee Responsible' : ''} were found. Headers found: ${headers.join(', ') || 'none'}.`],
       warnings,
       rows: [],
       sheetName: picked.name,
       columns,
     };
   }
-  return {
-    errors: [],
-    warnings,
-    rows,
-    sheetName: picked.name,
-    columns,
-    encoding: opened.encoding || '',
-    delimiter: opened.delimiter || '',
-  };
-}
-
-function groupRows(rows) {
-  const groups = new Map();
-  rows.forEach((row) => {
-    if (!groups.has(row.key)) groups.set(row.key, []);
-    groups.get(row.key).push(row);
-  });
-  return groups;
-}
-
-function resolveGroup(group, signature) {
-  if (group.length === 1) return { row: group[0], extra: 0, unresolved: false };
-  const sigs = new Set(group.map(signature));
-  if (sigs.size === 1) {
-    const sorted = group.slice().sort((a, b) => (b.createdSort || 0) - (a.createdSort || 0));
-    return { row: sorted[0], extra: group.length - 1, unresolved: false };
-  }
-  return { row: null, extra: group.length, unresolved: true };
-}
-
-function employeeKeyFor(number, name) {
-  const num = cleanId(number);
-  if (num) return `num:${num}`;
-  const person = normName(name);
-  if (person) return `name:${person}`;
-  return '';
+  return { errors: [], warnings, rows, skipped, sheetName: picked.name, columns };
 }
 
 function displayName(values) {
@@ -567,230 +471,141 @@ function recId(kind, key, index) {
   return Buffer.from(`${kind}:${key}:${index}`).toString('base64url');
 }
 
-function buildDataset(contactParsed, crmParsed) {
-  const errors = [...(contactParsed.errors || []), ...(crmParsed.errors || [])];
-  const warnings = [...(contactParsed.warnings || []), ...(crmParsed.warnings || [])];
-  if (errors.length) {
-    return { errors, warnings, records: [], reconciliation: null };
-  }
-  const contactGroups = groupRows((contactParsed.rows || []).filter((row) => row.key));
-  const crmGroups = groupRows((crmParsed.rows || []).filter((row) => row.key));
-  const contactMissing = (contactParsed.rows || []).filter((row) => !row.key).length;
-  const crmMissing = (crmParsed.rows || []).filter((row) => !row.key).length;
-  const contactResolved = new Map();
-  const crmResolved = new Map();
-  let contactDuplicateKeys = 0;
-  let crmDuplicateKeys = 0;
-  let contactDuplicateRows = 0;
-  let crmDuplicateRows = 0;
-  let contactUnresolved = 0;
-  let crmUnresolved = 0;
-  const duplicateSamples = [];
+function advisorKey(name) {
+  const person = normName(name);
+  return person ? `name:${person}` : 'name:unassigned';
+}
 
-  contactGroups.forEach((group, key) => {
-    const resolved = resolveGroup(group, (row) => [row.bucket, normName(row.employeeName), row.centre, row.statusRaw].join('|'));
-    if (group.length > 1) {
-      contactDuplicateKeys += 1;
-      contactDuplicateRows += group.length - 1;
-    }
-    if (resolved.unresolved) {
-      contactUnresolved += 1;
-      if (duplicateSamples.length < 30) duplicateSamples.push({ source: 'Contact tracking', key });
-      return;
-    }
-    contactResolved.set(key, resolved.row);
-  });
-  crmGroups.forEach((group, key) => {
-    const resolved = resolveGroup(group, (row) => [normHeader(row.statusRaw), cleanId(row.employeeNumber), normName(row.employeeName), row.centre].join('|'));
-    if (group.length > 1) {
-      crmDuplicateKeys += 1;
-      crmDuplicateRows += group.length - 1;
-    }
-    if (resolved.unresolved) {
-      crmUnresolved += 1;
-      if (duplicateSamples.length < 30) duplicateSamples.push({ source: 'CRM', key });
-      return;
-    }
-    crmResolved.set(key, resolved.row);
-  });
-  if (contactUnresolved || crmUnresolved) {
-    warnings.push(`${contactUnresolved + crmUnresolved} duplicate key${contactUnresolved + crmUnresolved === 1 ? '' : 's'} could not be resolved and ${contactUnresolved + crmUnresolved === 1 ? 'was' : 'were'} left out of the match. Review them before treating the totals as complete.`);
+/**
+ * Builds the published dataset from the CRM export, deduplicated on Lead
+ * Number (first row wins). A contact file, when given, replaces the contact
+ * status of the leads it recognises.
+ */
+function buildExportDataset(exportParsed, contactParsed) {
+  const errors = [...(exportParsed.errors || []), ...((contactParsed && contactParsed.errors) || [])];
+  const warnings = [...(exportParsed.warnings || []), ...((contactParsed && contactParsed.warnings) || [])];
+  if (errors.length) return { errors, warnings, records: [], reconciliation: null };
+  if (!contactParsed && exportParsed.columns.initialContact < 0) {
+    return {
+      errors: ['CRM export: the "Initial Contact" column was not found, so contact status cannot be read. Add that column or push a contact file with it.'],
+      warnings,
+      records: [],
+      reconciliation: null,
+    };
   }
-  if (contactMissing || crmMissing) {
-    warnings.push(`${contactMissing + crmMissing} row${contactMissing + crmMissing === 1 ? '' : 's'} with a blank identifier ${contactMissing + crmMissing === 1 ? 'was' : 'were'} kept in reconciliation and not matched.`);
+  const overlay = new Map();
+  if (contactParsed) {
+    contactParsed.rows.forEach((row) => {
+      if (!overlay.has(row.key)) overlay.set(row.key, row);
+    });
   }
-
+  const seen = new Set();
   const records = [];
   const unknownStatuses = new Map();
-  const employeeIssues = [];
-  let employeeIssueCount = 0;
-  let matched = 0;
-  let crmOnly = 0;
-  let contactOnly = 0;
-  let unknownStatus = 0;
-
-  crmResolved.forEach((crm, key) => {
-    const contact = contactResolved.get(key) || null;
-    const contactConflict = contactGroups.has(key) && !contact;
-    // Prefer contact-file column E for the person name when present; CRM fills gaps.
-    const employeeName = (contact && contact.employeeName) || crm.employeeName || '';
-    const employeeNumber = crm.employeeNumber || '';
-    const employeeKey = employeeKeyFor(employeeNumber, employeeName);
-    if (contactConflict) {
-      records.push({
-        id: recId('duplicate', key, 0),
-        matchKind: 'duplicate',
-        leadNumber: key,
-        transactionNo: crm.transactionNo,
-        prospect: crm.prospect,
-        model: crm.model,
-        employeeName,
-        employeeNumber,
-        employeeKey,
-        centre: crm.centre || '',
-        leadSource: '',
-        leadType: '',
-        initialContact: '',
-        contactStatusRaw: 'Duplicate key',
-        bucket: 'unknown',
-        crmStatus: crm.statusRaw || '',
-        createdDisplay: '',
-        createdSort: 0,
-        telephone: crm.telephone || '',
-        fields: { Note: 'This column C value matches more than one contact row and those rows do not agree, so it was not matched.' },
-      });
+  let duplicates = 0;
+  let overlayMatched = 0;
+  const totals = { contacted: 0, notContacted: 0, inProgress: 0, unknown: 0 };
+  const months = new Map();
+  exportParsed.rows.forEach((row) => {
+    if (seen.has(row.key)) {
+      duplicates += 1;
       return;
     }
-    if (contact) {
-      matched += 1;
-      if (contact.bucket === 'unknown' || contact.bucket === 'missing') {
-        unknownStatus += 1;
-        const label = contact.statusRaw || '(blank)';
-        unknownStatuses.set(label, (unknownStatuses.get(label) || 0) + 1);
+    seen.add(row.key);
+    const extra = overlay.get(row.key) || null;
+    let bucket = row.bucket;
+    let statusRaw = row.initialContact;
+    if (extra) {
+      overlayMatched += 1;
+      if (extra.bucket !== 'missing' && extra.bucket !== 'unknown') {
+        bucket = extra.bucket;
+        statusRaw = extra.statusRaw;
       }
-      if (contact.employeeName && crm.employeeName && normName(contact.employeeName) !== normName(crm.employeeName)) {
-        employeeIssueCount += 1;
-        if (employeeIssues.length < 20) employeeIssues.push({ key, contactName: contact.employeeName, crmName: crm.employeeName });
-      }
-      records.push({
-        id: recId('matched', key, 0),
-        matchKind: 'matched',
-        leadNumber: contact.leadNumber,
-        transactionNo: crm.transactionNo,
-        prospect: crm.prospect,
-        model: crm.model,
-        employeeName,
-        employeeNumber,
-        employeeKey,
-        advisorName: contact.employeeName || employeeName,
-        centre: crm.centre || contact.centre || '',
-        leadSource: contact.source || '',
-        leadType: contact.leadType || '',
-        initialContact: contact.initialContact || '',
-        contactStatusRaw: contact.statusRaw || '',
-        bucket: contact.bucket,
-        crmStatus: crm.statusRaw || '',
-        createdDisplay: contact.createdDisplay || '',
-        createdSort: contact.createdSort || 0,
-        telephone: crm.telephone || '',
-        fields: crm.fields || {},
-      });
-    } else {
-      crmOnly += 1;
-      records.push({
-        id: recId('crm', key, 0),
-        matchKind: 'crm_only',
-        leadNumber: '',
-        transactionNo: crm.transactionNo,
-        prospect: crm.prospect,
-        model: crm.model,
-        employeeName,
-        employeeNumber,
-        employeeKey,
-        centre: crm.centre || '',
-        leadSource: '',
-        leadType: '',
-        initialContact: '',
-        contactStatusRaw: '',
-        bucket: 'unmatched',
-        crmStatus: crm.statusRaw || '',
-        createdDisplay: '',
-        createdSort: 0,
-        telephone: crm.telephone || '',
-        fields: crm.fields || {},
-      });
     }
-  });
-  contactResolved.forEach((contact, key) => {
-    if (crmResolved.has(key)) return;
-    contactOnly += 1;
-    const employeeKey = employeeKeyFor('', contact.employeeName);
+    if (bucket === 'contacted') totals.contacted += 1;
+    else if (bucket === 'not_contacted') totals.notContacted += 1;
+    else if (bucket === 'in_progress') totals.inProgress += 1;
+    else {
+      totals.unknown += 1;
+      const label = statusRaw || '(blank)';
+      unknownStatuses.set(label, (unknownStatuses.get(label) || 0) + 1);
+    }
+    if (row.createdIso) {
+      const month = row.createdIso.slice(0, 7);
+      months.set(month, (months.get(month) || 0) + 1);
+    }
     records.push({
-      id: recId('contact', key, 0),
-      matchKind: 'contact_only',
-      leadNumber: contact.leadNumber,
+      id: recId('lead', row.key, 0),
+      matchKind: 'export',
+      leadNumber: row.key,
       transactionNo: '',
-      prospect: '',
-      model: '',
-      employeeName: contact.employeeName || '',
+      prospect: extra ? extra.prospect : '',
+      model: extra ? extra.model : '',
+      employeeName: row.employeeName,
       employeeNumber: '',
-      employeeKey,
-      advisorName: contact.employeeName || '',
-      centre: contact.centre || '',
-      leadSource: contact.source || '',
-      leadType: contact.leadType || '',
-      initialContact: contact.initialContact || '',
-      contactStatusRaw: contact.statusRaw || '',
-      bucket: contact.bucket,
-      crmStatus: '',
-      createdDisplay: contact.createdDisplay || '',
-      createdSort: contact.createdSort || 0,
-      telephone: '',
+      employeeKey: advisorKey(row.employeeName),
+      advisorName: row.employeeName,
+      centre: row.centre,
+      leadSource: row.source,
+      leadType: row.leadType,
+      initialContact: row.initialContact,
+      contactStatusRaw: statusRaw,
+      bucket,
+      crmStatus: row.crmStatus,
+      createdDisplay: row.createdDisplay,
+      createdSort: row.createdSort,
+      createdIso: row.createdIso,
+      telephone: extra ? extra.telephone : '',
       fields: {},
     });
   });
-
+  if (duplicates) warnings.push(`${duplicates} repeated Lead Number row${duplicates === 1 ? ' was' : 's were'} ignored (first row kept).`);
+  if (totals.unknown) warnings.push(`${totals.unknown} lead${totals.unknown === 1 ? ' has' : 's have'} an unrecognised contact status and ${totals.unknown === 1 ? 'is' : 'are'} counted as unknown, not as not contacted.`);
+  const skipped = exportParsed.skipped || { footer: 0, noLead: 0, noEmployee: 0 };
+  if (skipped.noEmployee) warnings.push(`${skipped.noEmployee} row${skipped.noEmployee === 1 ? '' : 's'} without an Employee Responsible ${skipped.noEmployee === 1 ? 'was' : 'were'} skipped.`);
+  let period = '';
+  let best = -1;
+  months.forEach((count, month) => {
+    if (count > best || (count === best && month > period)) {
+      period = month;
+      best = count;
+    }
+  });
+  if (months.size > 1) warnings.push(`Created Dates span ${months.size} months; the reporting period is ${period}, the month with the most leads.`);
+  const advisors = new Set(records.map((record) => record.employeeKey)).size;
   const reconciliation = {
-    crmUnique: crmResolved.size,
-    contactUnique: contactResolved.size,
-    matched,
-    crmOnly,
-    contactOnly,
-    crmDuplicateKeys,
-    contactDuplicateKeys,
-    crmDuplicateRows,
-    contactDuplicateRows,
-    crmMissingId: crmMissing,
-    contactMissingId: contactMissing,
-    crmUnresolved,
-    contactUnresolved,
-    unknownStatus,
+    rows: exportParsed.rows.length,
+    leads: records.length,
+    advisors,
+    ...totals,
+    duplicates,
+    skippedNoLead: skipped.noLead,
+    skippedNoEmployee: skipped.noEmployee,
+    footerRows: skipped.footer,
+    contactFileRows: contactParsed ? contactParsed.rows.length : 0,
+    overlayMatched,
     unknownStatuses: Array.from(unknownStatuses.entries()).slice(0, 20).map(([status, count]) => ({ status, count })),
-    employeeIssueCount,
-    employeeIssues,
-    duplicateSamples,
-    equation: `${matched} matched + ${crmOnly} unmatched = ${matched + crmOnly} unique CRM leads`,
+    equation: `${records.length} leads = ${totals.contacted} contacted + ${totals.notContacted} not contacted + ${totals.inProgress} in progress + ${totals.unknown} unknown`,
   };
   const columns = {
-    centre: (contactParsed.columns && contactParsed.columns.centre >= 0) || (crmParsed.columns && crmParsed.columns.centre >= 0),
-    source: !!(contactParsed.columns && contactParsed.columns.source >= 0),
-    leadType: !!(contactParsed.columns && contactParsed.columns.leadType >= 0),
-    crmStatus: !!(crmParsed.columns && crmParsed.columns.status >= 0),
-    employeeNumber: !!(crmParsed.columns && crmParsed.columns.employeeNumber >= 0),
-    initialContact: !!(contactParsed.columns && contactParsed.columns.initialContact >= 0),
-    model: !!(crmParsed.columns && crmParsed.columns.model >= 0),
-    prospect: !!(crmParsed.columns && crmParsed.columns.prospect >= 0),
+    centre: exportParsed.columns.centre >= 0,
+    source: exportParsed.columns.source >= 0,
+    leadType: exportParsed.columns.leadType >= 0,
+    crmStatus: exportParsed.columns.status >= 0,
+    initialContact: exportParsed.columns.initialContact >= 0,
+    createdDate: exportParsed.columns.createdDate >= 0,
+    prospect: !!(contactParsed && contactParsed.columns.prospect >= 0),
+    model: !!(contactParsed && contactParsed.columns.model >= 0),
   };
   return {
-    errors,
+    errors: [],
     warnings,
     records,
     reconciliation,
     columns,
-    contactSheet: contactParsed.sheetName || '',
-    crmSheet: crmParsed.sheetName || '',
-    contactRows: (contactParsed.rows || []).length,
-    crmRows: (crmParsed.rows || []).length,
+    period,
+    exportSheet: exportParsed.sheetName || '',
+    contactSheet: contactParsed ? contactParsed.sheetName || '' : '',
   };
 }
 
@@ -798,19 +613,41 @@ function bucketLabel(bucket) {
   if (bucket === 'contacted') return 'Contacted';
   if (bucket === 'not_contacted') return 'Not Contacted';
   if (bucket === 'in_progress') return 'In Progress';
-  if (bucket === 'missing') return 'Unknown/Missing Status';
-  if (bucket === 'unknown') return 'Unknown/Missing Status';
   if (bucket === 'unmatched') return 'Unmatched — No Contact Record';
-  return 'Unknown/Missing Status';
+  return 'Unknown';
+}
+
+function bucketOf(record) {
+  const bucket = record.bucket;
+  return bucket === 'contacted' || bucket === 'not_contacted' || bucket === 'in_progress' ? bucket : 'unknown';
+}
+
+function isLeadRecord(record) {
+  return LEAD_KINDS.has(record.matchKind) && !!cleanId(record.leadNumber);
+}
+
+function advisorOf(record) {
+  return clip(record.advisorName || record.employeeName, 160);
+}
+
+function sourceOf(record) {
+  return clip(record.leadSource, 160) || NO_SOURCE;
+}
+
+function dayOf(record) {
+  if (record.createdIso) return record.createdIso;
+  if (record.createdSort) return isoDate(new Date(record.createdSort));
+  const parsed = parseDateText(record.createdDisplay);
+  return parsed ? isoDate(parsed) : '';
 }
 
 function passesScope(record, query) {
-  if (query.employee && record.employeeKey !== query.employee) return false;
+  if (query.advisor && advisorKey(advisorOf(record)) !== query.advisor) return false;
   if (query.centre && record.centre !== query.centre) return false;
-  if (query.source && record.leadSource !== query.source) return false;
+  if (query.source && sourceOf(record) !== query.source) return false;
   if (query.leadType && record.leadType !== query.leadType) return false;
   if (query.q) {
-    const hay = `${record.leadNumber} ${record.transactionNo} ${record.prospect} ${record.telephone}`.toLowerCase();
+    const hay = `${record.leadNumber} ${record.transactionNo} ${record.prospect} ${record.telephone} ${advisorOf(record)}`.toLowerCase();
     if (!hay.includes(query.q)) return false;
   }
   return true;
@@ -822,192 +659,132 @@ function passesCrm(record, query) {
 }
 
 function passesContact(record, contact) {
-  if (!contact) return record.matchKind === 'matched' || record.matchKind === 'crm_only';
-  if (contact === 'contacted') return record.matchKind === 'matched' && record.bucket === 'contacted';
-  if (contact === 'not_contacted') return record.matchKind === 'matched' && record.bucket === 'not_contacted';
-  if (contact === 'in_progress') return record.matchKind === 'matched' && record.bucket === 'in_progress';
-  if (contact === 'unknown') return record.matchKind === 'matched' && (record.bucket === 'unknown' || record.bucket === 'missing');
-  if (contact === 'matched') return record.matchKind === 'matched';
+  const lead = isLeadRecord(record);
+  if (!contact) return lead || record.matchKind === 'crm_only';
+  if (contact === 'contacted' || contact === 'not_contacted' || contact === 'in_progress') return lead && record.bucket === contact;
+  if (contact === 'unknown') return lead && bucketOf(record) === 'unknown';
   if (contact === 'unmatched') return record.matchKind === 'crm_only';
-  if (contact === 'contact_only') return record.matchKind === 'contact_only';
-  if (contact === 'duplicate') return record.matchKind === 'duplicate';
-  if (contact === 'missing_id') return record.matchKind === 'missing_id';
   return true;
 }
 
-function rate(contacted, matched) {
-  if (!matched) return null;
-  return Math.round((contacted / matched) * 1000) / 10;
-}
-
-function advisorShare(part, total) {
+function rate(contacted, total) {
   if (!total) return null;
-  return Math.round((part / total) * 1000) / 10;
-}
-
-function advisorAchievement(records, query) {
-  const seen = new Set();
-  const groups = new Map();
-  (records || []).forEach((record) => {
-    if (!passesScope(record, query) || !passesCrm(record, query)) return;
-    if (record.matchKind !== 'matched' && record.matchKind !== 'contact_only') return;
-    const lead = cleanId(record.leadNumber);
-    if (!lead) return;
-    if (seen.has(lead)) return;
-    const bucket = record.bucket === 'missing' ? 'unknown' : record.bucket;
-    if (bucket !== 'contacted' && bucket !== 'not_contacted' && bucket !== 'in_progress' && bucket !== 'unknown') return;
-    seen.add(lead);
-    const rawName = clip(record.advisorName || record.employeeName, 160);
-    const person = normName(rawName);
-    const key = person ? `name:${person}` : 'name:unassigned';
-    if (!groups.has(key)) {
-      groups.set(key, { key, names: [], contacted: 0, notContacted: 0, inProgress: 0, unknown: 0 });
-    }
-    const row = groups.get(key);
-    if (rawName) row.names.push(rawName);
-    if (bucket === 'contacted') row.contacted += 1;
-    else if (bucket === 'not_contacted') row.notContacted += 1;
-    else if (bucket === 'in_progress') row.inProgress += 1;
-    else row.unknown += 1;
-  });
-  return Array.from(groups.values()).map((row) => {
-    const total = row.contacted + row.notContacted + row.inProgress + row.unknown;
-    return {
-      key: row.key,
-      name: displayName(row.names) || 'Unassigned',
-      contacted: row.contacted,
-      notContacted: row.notContacted,
-      inProgress: row.inProgress,
-      unknown: row.unknown,
-      total,
-      ach: advisorShare(row.contacted, total),
-      notContactedPct: advisorShare(row.notContacted, total),
-      inProgressPct: advisorShare(row.inProgress, total),
-    };
-  }).sort((a, b) => (b.ach == null ? -1 : b.ach) - (a.ach == null ? -1 : a.ach) || b.total - a.total || a.name.localeCompare(b.name));
-}
-
-function summarize(dataset, query) {
-  const records = dataset.records || [];
-  const optionQuery = { ...query, employee: '' };
-  const optionScoped = records.filter((record) => passesScope(record, optionQuery) && passesCrm(record, query));
-  const scoped = records.filter((record) => passesScope(record, query));
-  const crmScoped = scoped.filter((record) => passesCrm(record, query));
-  const universe = crmScoped.filter((record) => record.matchKind === 'matched' || record.matchKind === 'crm_only');
-  const matchedRows = universe.filter((record) => record.matchKind === 'matched');
-  const contacted = matchedRows.filter((record) => record.bucket === 'contacted').length;
-  const exportContacted = (dataset.records || []).filter((record) => (record.matchKind === 'matched' || record.matchKind === 'contact_only') && record.bucket === 'contacted').length;
-  const exportNotContacted = (dataset.records || []).filter((record) => (record.matchKind === 'matched' || record.matchKind === 'contact_only') && record.bucket === 'not_contacted').length;
-  const notContacted = matchedRows.filter((record) => record.bucket === 'not_contacted').length;
-  const inProgress = matchedRows.filter((record) => record.bucket === 'in_progress').length;
-  const unknown = matchedRows.filter((record) => record.bucket === 'unknown' || record.bucket === 'missing').length;
-  const unmatched = universe.filter((record) => record.matchKind === 'crm_only').length;
-  const distribution = [
-    { key: 'contacted', label: 'Contacted', count: exportContacted, crmPct: true },
-    { key: 'not_contacted', label: 'Not Contacted', count: exportNotContacted, crmPct: true },
-    { key: 'in_progress', label: 'In Progress', count: inProgress },
-    { key: 'unknown', label: 'Unknown/Missing Status', count: unknown },
-    { key: 'unmatched', label: 'Unmatched — No Contact Record', count: unmatched },
-  ];
-  const distTotal = distribution.reduce((sum, item) => sum + item.count, 0);
-  distribution.forEach((item) => {
-    if (item.crmPct) item.pct = rate(item.count, universe.length) || 0;
-    else item.pct = distTotal ? Math.round((item.count / distTotal) * 1000) / 10 : 0;
-    delete item.crmPct;
-  });
-  const crmCounts = new Map();
-  scoped.filter((record) => record.matchKind === 'matched' || record.matchKind === 'crm_only').forEach((record) => {
-    const label = record.crmStatus || '(blank)';
-    crmCounts.set(label, (crmCounts.get(label) || 0) + 1);
-  });
-  const crmBars = Array.from(crmCounts.entries())
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-
-  const byEmployee = new Map();
-  universe.forEach((record) => {
-    const key = record.employeeKey || 'name:unassigned';
-    if (!byEmployee.has(key)) {
-      byEmployee.set(key, {
-        key,
-        names: [],
-        number: record.employeeNumber || '',
-        matched: 0,
-        contacted: 0,
-        notContacted: 0,
-        inProgress: 0,
-      });
-    }
-    const row = byEmployee.get(key);
-    if (record.employeeName) row.names.push(record.employeeName);
-    if (record.employeeNumber) row.number = record.employeeNumber;
-    if (record.matchKind !== 'matched') return;
-    row.matched += 1;
-    if (record.bucket === 'contacted') row.contacted += 1;
-    else if (record.bucket === 'not_contacted') row.notContacted += 1;
-    else if (record.bucket === 'in_progress') row.inProgress += 1;
-  });
-  const employees = Array.from(byEmployee.values()).map((row) => ({
-    key: row.key,
-    name: displayName(row.names) || 'Unassigned',
-    number: row.number || '',
-    matched: row.matched,
-    contacted: row.contacted,
-    notContacted: row.notContacted,
-    inProgress: row.inProgress,
-    contactRate: rate(row.contacted, row.matched),
-    ach: null,
-  }));
-  employees.sort((a, b) => (b.contactRate == null ? -1 : b.contactRate) - (a.contactRate == null ? -1 : a.contactRate) || b.matched - a.matched || b.contacted - a.contacted || a.name.localeCompare(b.name));
-  employees.forEach((row, index) => { row.rank = index + 1; });
-
-  const optionUniverse = optionScoped.filter((record) => record.matchKind === 'matched' || record.matchKind === 'crm_only');
-  const optionMatched = optionUniverse.filter((record) => record.matchKind === 'matched');
-  const optionEmployees = new Map();
-  optionUniverse.forEach((record) => {
-    const key = record.employeeKey || 'name:unassigned';
-    if (!optionEmployees.has(key)) optionEmployees.set(key, { key, names: [], number: record.employeeNumber || '' });
-    if (record.employeeName) optionEmployees.get(key).names.push(record.employeeName);
-    if (record.employeeNumber) optionEmployees.get(key).number = record.employeeNumber;
-  });
-  const options = {
-    employees: Array.from(optionEmployees.values())
-      .map((row) => {
-        const name = displayName(row.names) || 'Unassigned';
-        return { key: row.key, label: row.number ? `${name} · ${row.number}` : name };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label)),
-    centres: uniqueValues(optionUniverse.map((row) => row.centre)),
-    sources: uniqueValues(optionMatched.map((row) => row.leadSource)),
-    leadTypes: uniqueValues(optionMatched.map((row) => row.leadType)),
-    crmStatuses: uniqueValues(optionUniverse.map((row) => row.crmStatus)),
-  };
-  return {
-    kpis: {
-      totalCrm: universe.length,
-      matched: matchedRows.length,
-      contacted,
-      notContacted,
-      inProgress,
-      unknown,
-      contactRate: rate(contacted, matchedRows.length),
-      exportContacted,
-      contactedOfCrm: rate(exportContacted, universe.length),
-      exportNotContacted,
-      notContactedOfCrm: rate(exportNotContacted, universe.length),
-    },
-    distribution,
-    crmBars,
-    employees,
-    advisors: advisorAchievement(records, query),
-    options,
-    columns: dataset.columns || {},
-    reconciliation: dataset.reconciliation || null,
-  };
+  return Math.round((contacted / total) * 1000) / 10;
 }
 
 function uniqueValues(values) {
   return Array.from(new Set(values.map((value) => clip(value, 160)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Everything the dashboard draws, from one publication. Per-advisor daily
+ * and source arrays ([contacted, notContacted, inProgress] aligned with
+ * days[] and sources[]) let the page refocus without another request.
+ */
+function summarize(dataset, query) {
+  const q = query || {};
+  const scope = { ...q, advisor: '' };
+  const seen = new Set();
+  const leads = [];
+  (dataset.records || []).forEach((record) => {
+    if (!isLeadRecord(record)) return;
+    const lead = cleanId(record.leadNumber);
+    if (seen.has(lead)) return;
+    seen.add(lead);
+    if (passesScope(record, scope) && passesCrm(record, q)) leads.push(record);
+  });
+
+  const daySet = new Set();
+  const sourceCounts = new Map();
+  leads.forEach((record) => {
+    const day = dayOf(record);
+    if (day) daySet.add(day);
+    const source = sourceOf(record);
+    sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
+  });
+  const days = Array.from(daySet).sort();
+  const sources = Array.from(sourceCounts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([source]) => source);
+  const dayIndex = new Map(days.map((day, index) => [day, index]));
+  const sourceIndex = new Map(sources.map((source, index) => [source, index]));
+
+  const totals = { total: 0, contacted: 0, notContacted: 0, inProgress: 0, unknown: 0 };
+  const groups = new Map();
+  leads.forEach((record) => {
+    const name = advisorOf(record) || 'Unassigned';
+    const key = advisorKey(name);
+    let row = groups.get(key);
+    if (!row) {
+      row = {
+        key,
+        names: [],
+        total: 0,
+        contacted: 0,
+        notContacted: 0,
+        inProgress: 0,
+        unknown: 0,
+        daily: days.map(() => [0, 0, 0]),
+        sources: sources.map(() => [0, 0, 0]),
+      };
+      groups.set(key, row);
+    }
+    row.names.push(name);
+    row.total += 1;
+    totals.total += 1;
+    const bucket = bucketOf(record);
+    const slot = bucket === 'contacted' ? 0 : bucket === 'not_contacted' ? 1 : bucket === 'in_progress' ? 2 : -1;
+    if (slot === 0) { row.contacted += 1; totals.contacted += 1; }
+    else if (slot === 1) { row.notContacted += 1; totals.notContacted += 1; }
+    else if (slot === 2) { row.inProgress += 1; totals.inProgress += 1; }
+    else { row.unknown += 1; totals.unknown += 1; }
+    if (slot < 0) return;
+    const day = dayIndex.get(dayOf(record));
+    if (day != null) row.daily[day][slot] += 1;
+    row.sources[sourceIndex.get(sourceOf(record))][slot] += 1;
+  });
+
+  const employees = Array.from(groups.values()).map((row) => ({
+    key: row.key,
+    name: displayName(row.names) || 'Unassigned',
+    total: row.total,
+    contacted: row.contacted,
+    notContacted: row.notContacted,
+    inProgress: row.inProgress,
+    unknown: row.unknown,
+    contactRate: rate(row.contacted, row.total),
+    daily: row.daily,
+    sources: row.sources,
+  }));
+  const ratio = (row) => (row.total ? row.contacted / row.total : -1);
+  employees.sort((a, b) => ratio(b) - ratio(a) || b.total - a.total || a.name.localeCompare(b.name));
+  employees.forEach((row, index) => { row.rank = index + 1; });
+  const rates = employees.filter((row) => row.total).map((row) => row.contacted / row.total);
+  const kpis = { ...totals, contactRate: rate(totals.contacted, totals.total) };
+  const team = {
+    ...kpis,
+    advisors: employees.length,
+    avgRate: rates.length ? Math.round((rates.reduce((sum, value) => sum + value, 0) / rates.length) * 1000) / 10 : null,
+  };
+
+  const allLeads = (dataset.records || []).filter(isLeadRecord);
+  const options = {
+    advisors: employees.map((row) => ({ key: row.key, label: row.name })).sort((a, b) => a.label.localeCompare(b.label)),
+    centres: uniqueValues(allLeads.map((row) => row.centre)),
+    sources: uniqueValues(allLeads.map(sourceOf)),
+    leadTypes: uniqueValues(allLeads.map((row) => row.leadType)),
+    crmStatuses: uniqueValues(allLeads.map((row) => row.crmStatus)),
+  };
+  return {
+    kpis,
+    team,
+    employees,
+    days,
+    sources,
+    options,
+    columns: dataset.columns || {},
+    reconciliation: dataset.reconciliation || null,
+  };
 }
 
 function listLeads(dataset, query) {
@@ -1038,7 +815,7 @@ function publicLead(record) {
     transactionNo: record.transactionNo,
     prospect: record.prospect,
     model: record.model,
-    employeeName: record.employeeName,
+    employeeName: advisorOf(record) || record.employeeName,
     employeeNumber: record.employeeNumber,
     centre: record.centre,
     leadSource: record.leadSource,
@@ -1046,7 +823,7 @@ function publicLead(record) {
     initialContact: record.initialContact,
     contactStatus: bucketLabel(record.bucket),
     contactStatusRaw: record.contactStatusRaw,
-    bucket: record.bucket,
+    bucket: record.bucket === 'missing' ? 'unknown' : record.bucket,
     crmStatus: record.crmStatus,
     createdDate: record.createdDisplay,
   };
@@ -1065,7 +842,7 @@ function emptyStore() {
 }
 
 function unpublishedMessage() {
-  return 'No contact file and CRM export are stored. On Admin, drop both files under CRM & Contact, then click Push to live.';
+  return 'Nothing is published yet. On the Admin page, drop the CRM export (sheet "Export") under Contact Performance, then click Push to live.';
 }
 
 function readDiagnostics(parsed) {
@@ -1073,16 +850,16 @@ function readDiagnostics(parsed) {
   return {
     sheet: parsed && parsed.sheetName ? parsed.sheetName : '',
     rows: rows.length,
-    withId: rows.filter((row) => row.key).length,
     columns: parsed && parsed.columns ? parsed.columns : {},
+    skipped: parsed && parsed.skipped ? parsed.skipped : null,
     errors: parsed && parsed.errors ? parsed.errors.length : 0,
   };
 }
 
-function logContactRead(action, contactParsed, crmParsed) {
+function logContactRead(action, exportParsed, contactParsed) {
   console.log(`[contact-performance] ${action} ${JSON.stringify({
-    contact: readDiagnostics(contactParsed),
-    crm: readDiagnostics(crmParsed),
+    export: readDiagnostics(exportParsed),
+    contact: contactParsed ? readDiagnostics(contactParsed) : null,
   })}`);
 }
 
@@ -1204,36 +981,35 @@ function attachContactPerformance(app, options) {
     const store = readStore();
     const id = String(req.query.publication || store.byPeriod[req.query.period] || store.activeId || '');
     const dataset = loadDataset(id);
+    res.setHeader('Cache-Control', 'no-store');
     if (!dataset) {
       console.log(`[contact-performance] summary empty ${JSON.stringify({ activeId: store.activeId || '', requested: id || '', publications: store.publications.length })}`);
       return res.json({
         empty: true,
         kpis: null,
-        distribution: [],
-        crmBars: [],
+        team: null,
         employees: [],
-        advisors: [],
+        days: [],
+        sources: [],
         options: {},
         reconciliation: null,
         diagnostic: {
           published: false,
           publications: store.publications.length,
-          contactFile: false,
-          crmFile: false,
           message: unpublishedMessage(),
         },
       });
     }
     const summary = summarize(dataset, readQuery(req));
     const pub = store.publications.find((item) => item.id === id) || null;
-    res.setHeader('Cache-Control', 'no-store');
     res.json({
       empty: false,
       publicationId: id,
       period: pub ? pub.period : '',
       publishedAt: pub ? pub.at : 0,
-      contactFile: pub ? pub.contactFile : '',
-      crmFile: pub ? pub.crmFile : '',
+      fileName: pub ? (pub.crmFile || pub.contactFile || '') : '',
+      contactFile: pub ? pub.contactFile || '' : '',
+      crmFile: pub ? pub.crmFile || '' : '',
       counts: pub ? (pub.counts || null) : null,
       warnings: pub ? (pub.warnings || []) : [],
       active: id === store.activeId,
@@ -1263,18 +1039,20 @@ function attachContactPerformance(app, options) {
 
   app.post('/api/contact-performance/preview', (req, res) => {
     const body = req.body || {};
-    const period = String(body.period || '');
-    if (!/^\d{4}-\d{2}$/.test(period)) return res.status(400).json({ error: 'Choose a reporting period as YYYY-MM.' });
-    const contactFile = decodeFile(body.contactFile);
+    const fallbackPeriod = /^\d{4}-\d{2}$/.test(String(body.period || '')) ? String(body.period) : '';
+    if (!body.crmFile || !body.crmFile.base64) {
+      return res.status(400).json({ error: 'Add the CRM export (sheet "Export") first. The contact file is optional.' });
+    }
     const crmFile = decodeFile(body.crmFile);
-    if (contactFile.error) return res.status(400).json({ error: contactFile.error });
     if (crmFile.error) return res.status(400).json({ error: crmFile.error });
+    const contactFile = body.contactFile && body.contactFile.base64 ? decodeFile(body.contactFile) : null;
+    if (contactFile && contactFile.error) return res.status(400).json({ error: contactFile.error });
     const store = readStore();
-    audit(store, 'upload_started', `Validation started for ${period}.`);
-    const contactParsed = parseTable(contactFile.buf, contactFile.name, 'contact', XLSX);
-    const crmParsed = parseTable(crmFile.buf, crmFile.name, 'crm', XLSX);
-    logContactRead('preview', contactParsed, crmParsed);
-    const dataset = buildDataset(contactParsed, crmParsed);
+    audit(store, 'upload_started', `Validation started for ${crmFile.name}.`);
+    const exportParsed = parseLeadSheet(crmFile.buf, crmFile.name, 'export', XLSX);
+    const contactParsed = contactFile ? parseLeadSheet(contactFile.buf, contactFile.name, 'contact', XLSX) : null;
+    logContactRead('preview', exportParsed, contactParsed);
+    const dataset = buildExportDataset(exportParsed, contactParsed);
     if (dataset.errors.length) {
       audit(store, 'publication_failed', dataset.errors[0].slice(0, 180));
       writeStore(store);
@@ -1282,13 +1060,17 @@ function attachContactPerformance(app, options) {
         error: 'Publication has been blocked.',
         errors: dataset.errors,
         warnings: dataset.warnings,
-        diagnostics: { contact: readDiagnostics(contactParsed), crm: readDiagnostics(crmParsed) },
+        diagnostics: { export: readDiagnostics(exportParsed), contact: contactParsed ? readDiagnostics(contactParsed) : null },
       });
     }
-    const hash = contentHash(contactFile.buf, crmFile.buf);
+    const now = new Date();
+    const period = dataset.period || fallbackPeriod || `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    if (!dataset.period) dataset.warnings.push(`No Created Dates could be read; the reporting period is ${period}.`);
+    const hash = contentHash(contactFile ? contactFile.buf : null, crmFile.buf);
+    const counts = publicCounts(dataset);
     const existing = store.publications.find((item) => item.period === period && item.hash === hash);
     if (existing) {
-      audit(store, 'publication_duplicate', `Same files already live for ${period}. No new snapshot created.`, existing.id);
+      audit(store, 'publication_duplicate', `Same file already live for ${period}. No new snapshot created.`, existing.id);
       writeStore(store);
       return res.json({
         ok: true,
@@ -1297,11 +1079,9 @@ function attachContactPerformance(app, options) {
         period,
         contactFile: existing.contactFile,
         crmFile: existing.crmFile,
-        contactRows: dataset.contactRows,
-        crmRows: dataset.crmRows,
         warnings: dataset.warnings,
         reconciliation: dataset.reconciliation,
-        counts: publicCounts(dataset),
+        counts,
       });
     }
     const id = `cp_${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
@@ -1313,41 +1093,36 @@ function attachContactPerformance(app, options) {
       hash,
       at: Date.now(),
       by: clip(body.publishedBy || 'Administrator', 80) || 'Administrator',
-      contactFile: contactFile.name,
+      contactFile: contactFile ? contactFile.name : '',
       crmFile: crmFile.name,
       status: 'draft',
-      counts: publicCounts(dataset),
+      counts,
       warnings: dataset.warnings.slice(0, 40),
       contactSheet: dataset.contactSheet,
-      crmSheet: dataset.crmSheet,
+      crmSheet: dataset.exportSheet,
     };
     fs.mkdirSync(path.join(sourceDir, id), { recursive: true });
-    fs.writeFileSync(path.join(sourceDir, id, 'contact' + path.extname(contactFile.name).slice(0, 6)), contactFile.buf);
+    if (contactFile) fs.writeFileSync(path.join(sourceDir, id, 'contact' + path.extname(contactFile.name).slice(0, 6)), contactFile.buf);
     fs.writeFileSync(path.join(sourceDir, id, 'crm' + path.extname(crmFile.name).slice(0, 6)), crmFile.buf);
+    const stored = { records: dataset.records, reconciliation: dataset.reconciliation, columns: dataset.columns };
     const tmp = path.join(dataDir, `${id}.json.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify({
-      records: dataset.records,
-      reconciliation: dataset.reconciliation,
-      columns: dataset.columns,
-    }));
+    fs.writeFileSync(tmp, JSON.stringify(stored));
     fs.renameSync(tmp, path.join(dataDir, `${id}.json`));
-    cache.set(id, { records: dataset.records, reconciliation: dataset.reconciliation, columns: dataset.columns });
+    cache.set(id, stored);
     store.drafts = [draft];
-    audit(store, 'validation_completed', `Validation passed for ${period}. ${dataset.reconciliation.matched} matched.`, id);
+    audit(store, 'validation_completed', `Validation passed for ${period}. ${dataset.reconciliation.leads} leads.`, id);
     writeStore(store);
     res.json({
       ok: true,
       draftId: id,
       period,
-      contactFile: contactFile.name,
+      contactFile: draft.contactFile,
       crmFile: crmFile.name,
       contactSheet: dataset.contactSheet,
-      crmSheet: dataset.crmSheet,
-      contactRows: dataset.contactRows,
-      crmRows: dataset.crmRows,
+      crmSheet: dataset.exportSheet,
       warnings: dataset.warnings,
       reconciliation: dataset.reconciliation,
-      counts: draft.counts,
+      counts,
     });
   });
 
@@ -1364,7 +1139,7 @@ function attachContactPerformance(app, options) {
       removePublicationFiles(draft.id);
       cache.delete(draft.id);
       store.drafts = store.drafts.filter((item) => item.id !== draft.id);
-      audit(store, 'publication_duplicate', `Same files already live for ${draft.period}. No new snapshot created.`, existing.id);
+      audit(store, 'publication_duplicate', `Same file already live for ${draft.period}. No new snapshot created.`, existing.id);
       writeStore(store);
       return res.json({ ok: true, duplicate: true, id: existing.id, at: existing.at, period: existing.period });
     }
@@ -1470,20 +1245,22 @@ function attachContactPerformance(app, options) {
   function publicCounts(dataset) {
     const rec = dataset.reconciliation || {};
     return {
-      crmUnique: rec.crmUnique || 0,
-      contactUnique: rec.contactUnique || 0,
-      matched: rec.matched || 0,
-      crmOnly: rec.crmOnly || 0,
-      contactOnly: rec.contactOnly || 0,
-      duplicates: (rec.crmUnresolved || 0) + (rec.contactUnresolved || 0),
-      missingIds: (rec.crmMissingId || 0) + (rec.contactMissingId || 0),
+      leads: rec.leads || 0,
+      advisors: rec.advisors || 0,
+      contacted: rec.contacted || 0,
+      notContacted: rec.notContacted || 0,
+      inProgress: rec.inProgress || 0,
+      unknown: rec.unknown || 0,
+      duplicates: rec.duplicates || 0,
+      skipped: (rec.skippedNoLead || 0) + (rec.skippedNoEmployee || 0),
+      contactFileRows: rec.contactFileRows || 0,
     };
   }
 
   function readQuery(req) {
     const q = req.query || {};
     return {
-      employee: clip(q.employee, 180),
+      advisor: clip(q.advisor, 180),
       centre: clip(q.centre, 160),
       source: clip(q.source, 160),
       leadType: clip(q.leadType, 160),
@@ -1503,10 +1280,9 @@ module.exports = {
   contentHash,
   classifyContactStatus,
   classifyInitialContact,
-  chooseTrackedColumn,
   normalizeId,
-  parseTable,
-  buildDataset,
+  parseLeadSheet,
+  buildExportDataset,
   summarize,
   listLeads,
   passwordOk,

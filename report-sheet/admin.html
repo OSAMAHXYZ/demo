@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
-  <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261106cp2" />
   <link rel="stylesheet" href="bo-notifications.css?v=20261105ytd1" />
   <script src="auth.js?v=20261105zt1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
@@ -286,7 +286,7 @@
           <h2>CRM export and contact file</h2>
           <span class="admin-section-tag">Contact Performance</span>
         </div>
-        <p class="admin-lead">Drop the contact file and the CRM export here, then click <b>Push to live</b>. Contact file: match key in <b>column C</b>, employee name in <b>column E</b>, Contacted / Not Contacted status in <b>column G</b>.</p>
+        <p class="admin-lead">Drop the <b>CRM export</b> (sheet <b>Export</b>) here, then click <b>Push to live</b>; it is enough on its own. Columns are read by header name: Lead Number, Employee Responsible, Initial Contact, Created Date, Source, Status, Lead Type, Centre Name. A separate <b>contact file</b> is optional and overrides Initial Contact per Lead Number.</p>
         <div id="contact-admin-host"></div>
       </div>
 
@@ -2580,7 +2580,7 @@
   });
 })();
 </script>
-<script src="contact-performance.js?v=20261017cp7"></script>
+<script src="contact-performance.js?v=20261106cp2"></script>
 <script>
   if (window.ContactPerformance) {
     window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));
