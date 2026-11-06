@@ -42,6 +42,88 @@
     function esc(value) {
         return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     }
+
+    /* ---------- v2 design helpers (shared with reserved-orders-admin.js) ---------- */
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Slide a pill indicator (.ind / .rail-ind) under the active button of a group.
+    function slideIndicator(ind, on) {
+        if (!ind || !on) return;
+        ind.style.left = on.offsetLeft + 'px'; ind.style.top = on.offsetTop + 'px';
+        ind.style.width = on.offsetWidth + 'px'; ind.style.height = on.offsetHeight + 'px';
+    }
+    // Count a number up from 0 (KPI tiles).
+    function countUp(el) {
+        const to = Number(el.dataset.to) || 0;
+        if (reduceMotion) { el.textContent = to; return; }
+        const t0 = performance.now();
+        const step = (t) => { const k = Math.min(1, (t - t0) / 650); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+        requestAnimationFrame(step);
+    }
+    // Grow bars from 0 to data-w percent on the next frame.
+    function growBars(root) {
+        requestAnimationFrame(() => requestAnimationFrame(() => (root || document).querySelectorAll('[data-w]').forEach((el) => { el.style.width = el.dataset.w + '%'; })));
+    }
+    // Replay the section entrance animation.
+    function replayView(section) {
+        if (!section) return;
+        section.classList.remove('view'); void section.offsetWidth; section.classList.add('view');
+    }
+    // Toast: title, body, dot class (d-ok, d-warn, d-bad).
+    function toast(title, body, dot) {
+        let box = document.getElementById('toasts');
+        if (!box) { box = document.createElement('div'); box.id = 'toasts'; box.className = 'toasts'; box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
+        const t = document.createElement('div'); t.className = 'toast';
+        t.innerHTML = `<span class="dot ${dot || 'd-ok'}"></span><div><b></b><span></span></div>`;
+        t.querySelector('b').textContent = title; t.querySelector('div span').textContent = body || '';
+        box.appendChild(t);
+        setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 240); }, 3200);
+        return t;
+    }
+    // Expiry display: countdown text, tone, bar % of the last 72 hours.
+    function expInfo(deadlineDate) {
+        if (!deadlineDate) return null;
+        const left = deadlineDate.getTime() - Date.now();
+        let text; let tone;
+        if (left <= 0) { text = `Expired ${Math.floor(-left / 3600000)}h ago`; tone = 't-bad'; }
+        else {
+            const tot = Math.floor(left / 1000); const d = Math.floor(tot / 86400); const r = tot % 86400;
+            const p = (n) => String(n).padStart(2, '0');
+            text = `${d ? d + 'd ' : ''}${p(Math.floor(r / 3600))}:${p(Math.floor((r % 3600) / 60))}:${p(r % 60)}`;
+            tone = left < 86400000 ? 't-warn' : 't-ok';
+        }
+        return { text, tone, pct: Math.max(0, Math.min(100, (left / (72 * 3600000)) * 100)) };
+    }
+    const COLOR_HEX = { '040': '#f3f3f0', '218': '#1c1d20', '1G3': '#6c7076', '070': '#ece8de', '3T3': '#8b1c25', '8X8': '#2b3d66', '4V8': '#86684a', '20': '#202022', '10': '#d6c6a6', 'FB20': '#5a3a28' };
+    function swatch(code) { const c = String(code || '').trim().toUpperCase(); return `<i style="background:${COLOR_HEX[c] || '#9aa0aa'}" title="${esc(c)}"></i>`; }
+    function initials(name) { const w = String(name || '').trim().split(/\s+/).filter(Boolean); if (!w.length) return '–'; return (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); }
+    function timeAgo(date) { if (!date) return ''; const m = Math.round((Date.now() - date.getTime()) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.round(m / 60); return h < 48 ? h + ' h ago' : Math.round(h / 24) + ' d ago'; }
+    function statusPillHtml(value) {
+        const s = String(value || '').trim();
+        const cls = s === 'Payment' ? 'p-Payment' : s === 'In progress' ? 'p-In' : s === 'Cancelled' ? 'p-Cancelled' : (s ? 'p-In' : 'p-none');
+        return `<span class="pill ${cls}"><span class="dot"></span>${esc(s || 'Not updated')}</span>`;
+    }
+    const ICONS = {
+        orders: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/>',
+        messages: '<path d="M4 5h16v11H8l-4 4z"/>',
+        errors: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+        overview: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+        sheet: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 4v16M15 4v16"/>',
+        push: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+        marketing: '<path d="M3 11l15-6v14L3 13z"/><path d="M7 13v5h3"/>',
+        builder: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+        link: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
+        people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a5 5 0 014 6"/>',
+        archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/>',
+        audit: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+        sold: '<path d="M5 12l5 5 9-10"/>',
+        search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+        close: '<path d="M6 6l12 12M18 6L6 18"/>',
+        chevron: '<path d="M9 6l6 6-6 6"/>',
+        lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+        bell: '<path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20h4"/>'
+    };
+    function icon(name, cls) { return `<svg${cls ? ` class="${cls}"` : ''} viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`; }
     function parseLocal(value) {
         const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
         if (!m) return null;
