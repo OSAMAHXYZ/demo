@@ -15,9 +15,9 @@
   <link rel="stylesheet" href="bo-notifications.css?v=20261105ytd1" />
   <script src="auth.js?v=20261107cf1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261006ch1"></script>
+  <script src="data-store.js?v=20261107mod1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
-  <script src="allocation-plan-data.js"></script>
+  <script src="allocation-plan-data.js?v=20261107mod1"></script>
   <style>
     .gec-ctl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
     .gec-ctl-col { border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -153,6 +153,50 @@
     }
     body.live-app.admin-page.toyota-theme .allocation-plan-table tbody tr.is-leaf:hover > td:not(.alloc-seg) {
       background: #fff7ed !important;
+    }
+    .alloc-edit-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 14px 6px;
+    }
+    .alloc-edit-bar select,
+    .alloc-edit-bar input {
+      height: 36px;
+      border-radius: 10px;
+      padding: 0 10px;
+      border: 1px solid rgba(148,163,184,.24);
+      background: #0c111b;
+      color: #eef2f8;
+    }
+    .alloc-edit-bar input[type="text"] { min-width: 160px; flex: 1; }
+    .alloc-sfx { white-space: nowrap; }
+    .alloc-sfx input { vertical-align: middle; }
+    .alloc-x {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin-left: 4px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #7f8899;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      vertical-align: middle;
+    }
+    .alloc-x:hover { background: rgba(255,45,66,.16); color: #ff2d42; }
+    .alloc-product-head { display: inline-flex; align-items: center; gap: 4px; }
+    .alloc-add-sfx {
+      height: 28px !important;
+      padding: 0 8px !important;
+      font-size: 12px !important;
+      margin-left: 8px;
+      vertical-align: middle;
     }
   </style>
   <!-- ===== Admin dark design + BO next step (v2) ===== -->
@@ -774,6 +818,33 @@
     html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-label{
       color:#7f8899 !important;
     }
+    html body.live-app.admin-page.toyota-theme .alloc-edit-bar :is(input,select){
+      background:#0c111b !important;
+      color:#eef2f8 !important;
+      border:1px solid rgba(148,163,184,.24) !important;
+    }
+    html body.live-app.admin-page.toyota-theme .alloc-x{color:#7f8899 !important}
+    html body.live-app.admin-page.toyota-theme .alloc-x:hover{
+      background:rgba(255,45,66,.16) !important;
+      color:#ff2d42 !important;
+    }
+    html body.live-app.admin-page.toyota-theme .alloc-add-sfx{
+      background:#151b29 !important;
+      color:#eef2f8 !important;
+      border-color:rgba(148,163,184,.24) !important;
+    }
+    html body.live-app.admin-page.toyota-theme .allocation-plan-table td,
+    html body.live-app.admin-page.toyota-theme .allocation-plan-table td.alloc-product{
+      color:#eef2f8 !important;
+    }
+    html body.live-app.admin-page.toyota-theme .allocation-plan-table tr.is-product-total > td{
+      background:rgba(122,162,255,.10) !important;
+      color:#c7d6ff !important;
+    }
+    html body.live-app.admin-page.toyota-theme .allocation-plan-table tr.is-seg-total > td{
+      background:rgba(148,163,184,.12) !important;
+      color:#eef2f8 !important;
+    }
   </style>
 </head>
 <body class="live-app admin-page toyota-theme">
@@ -1006,13 +1077,23 @@
     <section class="admin-panel" id="panel-allocation" hidden>
       <div class="xl-toolbar admin-toolbar">
         <button type="button" class="btn-primary" id="push-btn-3">Push to live</button>
-        <span class="hint">Edit SFX and E-Sales · product &amp; segment totals calculate automatically · Push to live submits both</span>
+        <span class="hint">Add or remove models · edit SFX and E-Sales · totals calculate automatically · Push to live submits the plan</span>
       </div>
 
       <div class="card admin-section-card admin-allocation-card">
         <div class="pbi-viz-head">
           <h2>ESAL · Allocation Plan</h2>
           <span class="admin-section-tag">Seg · Product · SFX · E-Sales</span>
+        </div>
+        <div class="alloc-edit-bar" id="alloc-edit-bar">
+          <select id="alloc-add-seg" aria-label="Segment">
+            <option value="PC">PC</option>
+            <option value="CV">CV</option>
+            <option value="SUV">SUV</option>
+          </select>
+          <input id="alloc-add-name" type="text" maxlength="40" placeholder="Model name, e.g. CAMRY" aria-label="Model name" />
+          <input id="alloc-add-sfx" type="text" maxlength="40" placeholder="First SFX (optional)" aria-label="First SFX" />
+          <button type="button" class="btn" id="alloc-add-btn">Add model</button>
         </div>
         <div class="allocation-plan-wrap" id="allocation-plan-wrap">
           <p class="foot" style="margin:0;padding:12px 0">Loading allocation plan…</p>
@@ -1306,7 +1387,8 @@
   const ALLOCATION_PLAN_PUSH_KEY = Store.ALLOCATION_PLAN_PUSH_KEY;
   const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 
-  const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
+  let allocationCatalog = loadAllocationCatalog();
+  let ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows(allocationCatalog);
   let allocationValues = loadAllocationValues();
   let allocationSuffixes = loadAllocationSuffixes();
 
@@ -1464,6 +1546,133 @@
     return map;
   }
 
+  function loadAllocationCatalog() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+      if (parsed && Array.isArray(parsed.catalog)) {
+        return window.AllocationPlanData.normalizeCatalog(parsed.catalog);
+      }
+    } catch { /* template */ }
+    return window.AllocationPlanData.cloneSegments();
+  }
+
+  function rebuildAllocationFromCatalog() {
+    allocationCatalog = window.AllocationPlanData.normalizeCatalog(allocationCatalog);
+    ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows(allocationCatalog);
+    const nextVals = {};
+    const nextSfx = {};
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind !== "leaf") return;
+      nextVals[r.id] = allocationValues && allocationValues[r.id] != null
+        ? Math.max(0, Number(allocationValues[r.id]) || 0)
+        : Math.max(0, Number(r.defaultVal) || 0);
+      nextSfx[r.id] = (allocationSuffixes && allocationSuffixes[r.id]) || r.sfx;
+    });
+    allocationValues = nextVals;
+    allocationSuffixes = nextSfx;
+  }
+
+  function snapshotAllocationForm() {
+    if (document.querySelector("[data-alloc-id], [data-alloc-sfx]")) {
+      allocationValues = collectAllocationFromForm();
+      document.querySelectorAll("[data-alloc-sfx]").forEach((el) => {
+        const id = el.getAttribute("data-alloc-sfx");
+        const typed = String(el.value || "").trim().slice(0, 40);
+        if (id && typed) allocationSuffixes[id] = typed;
+      });
+    }
+  }
+
+  function persistAllocationPlan(at) {
+    localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({
+      values: allocationValues,
+      suffixes: collectAllocationSuffixes(),
+      catalog: allocationCatalog,
+      at: at || Date.now(),
+    }));
+  }
+
+  function addAllocationModel() {
+    snapshotAllocationForm();
+    const seg = String($("#alloc-add-seg") && $("#alloc-add-seg").value || "PC").toUpperCase();
+    const name = String($("#alloc-add-name") && $("#alloc-add-name").value || "").trim().slice(0, 40);
+    const firstSfx = String($("#alloc-add-sfx") && $("#alloc-add-sfx").value || "").trim().slice(0, 40) || "AA";
+    if (!name) {
+      setStatus("Type a model name first", "err");
+      const nameEl = $("#alloc-add-name");
+      if (nameEl) nameEl.focus();
+      return;
+    }
+    const dest = allocationCatalog.find((s) => s.seg === seg);
+    if (!dest) return;
+    const nameKey = window.AllocationPlanData.slug(name);
+    if (dest.products.some((p) => window.AllocationPlanData.slug(p.name) === nameKey)) {
+      setStatus(`${name} is already in ${seg}`, "err");
+      return;
+    }
+    dest.products.push({ name, items: [{ sfx: firstSfx, defaultVal: 0 }] });
+    rebuildAllocationFromCatalog();
+    persistAllocationPlan();
+    renderAllocationPanel();
+    if ($("#alloc-add-name")) $("#alloc-add-name").value = "";
+    if ($("#alloc-add-sfx")) $("#alloc-add-sfx").value = "";
+    setStatus(`${name} added — click Push to live`, "busy");
+  }
+
+  function addAllocationSfx(groupKey) {
+    snapshotAllocationForm();
+    for (const seg of allocationCatalog) {
+      for (const prod of seg.products) {
+        const gk = `${window.AllocationPlanData.slug(seg.seg)}-${window.AllocationPlanData.slug(prod.name)}`;
+        if (gk !== groupKey) continue;
+        let n = prod.items.length + 1;
+        let label = `SFX ${n}`;
+        while (prod.items.some((it) => window.AllocationPlanData.slug(it.sfx) === window.AllocationPlanData.slug(label))) {
+          n += 1;
+          label = `SFX ${n}`;
+        }
+        prod.items.push({ sfx: label, defaultVal: 0 });
+        rebuildAllocationFromCatalog();
+        persistAllocationPlan();
+        renderAllocationPanel();
+        setStatus(`SFX added to ${prod.name} — click Push to live`, "busy");
+        return;
+      }
+    }
+  }
+
+  function removeAllocationSfx(id) {
+    snapshotAllocationForm();
+    const row = ALLOCATION_ROWS.find((r) => r.id === id);
+    if (!row || row.kind !== "leaf") return;
+    const seg = allocationCatalog.find((s) => s.seg === row.seg);
+    const prod = seg && seg.products.find((p) => `${window.AllocationPlanData.slug(seg.seg)}-${window.AllocationPlanData.slug(p.name)}` === row.groupKey);
+    if (!prod) return;
+    if (prod.items.length <= 1) {
+      removeAllocationModel(row.groupKey);
+      return;
+    }
+    prod.items = prod.items.filter((it) => `${row.groupKey}-${window.AllocationPlanData.slug(it.sfx)}` !== id);
+    rebuildAllocationFromCatalog();
+    persistAllocationPlan();
+    renderAllocationPanel();
+    setStatus("SFX removed — click Push to live", "busy");
+  }
+
+  function removeAllocationModel(groupKey) {
+    snapshotAllocationForm();
+    const row = ALLOCATION_ROWS.find((r) => r.groupKey === groupKey && r.kind === "leaf");
+    const label = row ? row.product : "this model";
+    if (!confirm(`Remove ${label} and its suffixes from the allocation plan?`)) return;
+    allocationCatalog.forEach((seg) => {
+      seg.products = seg.products.filter((p) => `${window.AllocationPlanData.slug(seg.seg)}-${window.AllocationPlanData.slug(p.name)}` !== groupKey);
+    });
+    rebuildAllocationFromCatalog();
+    persistAllocationPlan();
+    renderAllocationPanel();
+    setStatus(`${label} removed — click Push to live`, "busy");
+  }
+
   function collectAllocationSuffixes() {
     const next = {};
     document.querySelectorAll("[data-alloc-sfx]").forEach((el) => {
@@ -1545,6 +1754,17 @@
         continue;
       }
 
+      if (row.kind === "seg-total") {
+        html += `<tr class="alloc-row is-total is-seg-total alloc-band-${String(row.seg || "").toLowerCase()}">
+          <td class="alloc-seg"><span>${escapeHtml(row.seg)}</span></td>
+          <td class="alloc-product alloc-total-label">${escapeHtml(row.product)}</td>
+          <td class="alloc-sfx"></td>
+          <td class="alloc-esales alloc-total-val" data-alloc-total="${escapeHtml(row.id)}">${formatNumber(allocationDisplayValue(row))}</td>
+        </tr>`;
+        i += 1;
+        continue;
+      }
+
       if (row.segKey && row.kind === "leaf") {
         const segKey = row.segKey;
         const blockEnd = ALLOCATION_ROWS.findIndex((r, idx) => idx > i && r.kind === "seg-total" && r.segKey === segKey);
@@ -1563,17 +1783,20 @@
           ].filter(Boolean).join(" ");
           const segTd = bi === 0 ? `<td class="alloc-seg" rowspan="${rowspan}"><span>${escapeHtml(r.seg)}</span></td>` : "";
           let productTd = "";
-          if (!isLeaf) {
+          if (r.kind === "product-total") {
+            productTd = `<td class="alloc-product alloc-total-label">${escapeHtml(r.product)} <button type="button" class="btn small alloc-add-sfx" data-alloc-add-sfx="${escapeHtml(r.groupKey)}">Add SFX</button></td>`;
+            currentProduct = "";
+          } else if (!isLeaf) {
             productTd = `<td class="alloc-product alloc-total-label">${escapeHtml(r.product)}</td>`;
             currentProduct = "";
           } else if (r.product !== currentProduct) {
-            productTd = `<td class="alloc-product">${escapeHtml(r.product)}</td>`;
+            productTd = `<td class="alloc-product"><span class="alloc-product-head">${escapeHtml(r.product)} <button type="button" class="alloc-x" data-alloc-del-model="${escapeHtml(r.groupKey)}" title="Remove ${escapeHtml(r.product)}" aria-label="Remove ${escapeHtml(r.product)}">×</button></span></td>`;
             currentProduct = r.product;
           } else {
             productTd = `<td class="alloc-product alloc-cont"></td>`;
           }
           const sfxTd = isLeaf
-            ? `<td class="alloc-sfx"><input type="text" maxlength="40" data-alloc-sfx="${escapeHtml(r.id)}" value="${escapeHtml(allocationSuffixes[r.id] || r.sfx)}" aria-label="Suffix for ${escapeHtml(r.product)}" /></td>`
+            ? `<td class="alloc-sfx"><input type="text" maxlength="40" data-alloc-sfx="${escapeHtml(r.id)}" value="${escapeHtml(allocationSuffixes[r.id] || r.sfx)}" aria-label="Suffix for ${escapeHtml(r.product)}" /><button type="button" class="alloc-x" data-alloc-del-sfx="${escapeHtml(r.id)}" title="Remove this SFX" aria-label="Remove SFX">×</button></td>`
             : `<td class="alloc-sfx"></td>`;
           const esalesTd = isLeaf
             ? `<td class="alloc-esales"><input type="number" min="0" step="1" data-alloc-id="${escapeHtml(r.id)}" value="${Number(allocationValues[r.id]) || 0}" /></td>`
@@ -2274,6 +2497,8 @@
     try {
       await Store.syncFromServer();
       employeeTargets = loadEmployeeTargets();
+      allocationCatalog = loadAllocationCatalog();
+      rebuildAllocationFromCatalog();
       allocationValues = loadAllocationValues();
       allocationSuffixes = loadAllocationSuffixes();
       if (!gecDirty()) {
@@ -2452,7 +2677,12 @@
       ALLOCATION_ROWS.forEach((r) => {
         if (r.kind === "leaf") allocationSuffixes[r.id] = submittedSuffixes[r.id] || r.sfx;
       });
-      localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values: allocationValues, suffixes: submittedSuffixes, at: targetStamp.at }));
+      localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({
+        values: allocationValues,
+        suffixes: submittedSuffixes,
+        catalog: allocationCatalog,
+        at: targetStamp.at,
+      }));
       localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at: targetStamp.at }));
 
       const filesBySlot = {};
@@ -2474,6 +2704,7 @@
           channelTargets,
           allocationValues,
           allocationSuffixes: submittedSuffixes,
+          allocationCatalog,
           gecSlaMinutes,
           gecControl: pushedGec,
           filesBySlot,
@@ -2921,6 +3152,27 @@
       updateAllocationTotalsDom();
     }
     setStatus("Allocation updated — click Push to live", "busy");
+  });
+  $("#allocation-plan-wrap").addEventListener("click", (e) => {
+    const delModel = e.target.closest("[data-alloc-del-model]");
+    const delSfx = e.target.closest("[data-alloc-del-sfx]");
+    const addSfx = e.target.closest("[data-alloc-add-sfx]");
+    if (delModel) {
+      removeAllocationModel(delModel.getAttribute("data-alloc-del-model"));
+      return;
+    }
+    if (delSfx) {
+      removeAllocationSfx(delSfx.getAttribute("data-alloc-del-sfx"));
+      return;
+    }
+    if (addSfx) addAllocationSfx(addSfx.getAttribute("data-alloc-add-sfx"));
+  });
+  $("#alloc-add-btn").addEventListener("click", addAllocationModel);
+  $("#alloc-add-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addAllocationModel(); }
+  });
+  $("#alloc-add-sfx").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addAllocationModel(); }
   });
   $("#target-grid").addEventListener("change", (e) => {
     const vac = e.target.closest("[data-emp-vacation]");
@@ -3709,28 +3961,4 @@
     let ok = 0; const failed = [];
     for (let k = 0; k < list.length; k++) {
       const { p, rid } = list[k];
-      document.getElementById("bon-send").textContent = `Sending ${k + 1}/${list.length}…`;
-      try {
-        const { res, data } = await api("/notifications", { password: "", title, message: p.message || draft.message, recordIds: [rid] });
-        if (!res.ok) throw new Error(data.error || "failed");
-        ok++;
-      } catch (e) { failed.push(p.salesmanName || p.name || "?"); }
-      fill.style.width = Math.round(((k + 1) / list.length) * 100) + "%";
-    }
-    state.busy = false; paintFoot();
-    if (failed.length) toast(`${ok} sent · ${failed.length} failed`, failed.join(", "), true);
-    else toast(`${ok} message${ok === 1 ? "" : "s"} sent`, "Employees see them now on the Messages page in Reserved Orders");
-    if (ok) done(`Message sent to ${ok} employee${ok === 1 ? "" : "s"} · not added to Order Errors`);
-  }
-
-  function done(line) {
-    close();
-    const box = document.getElementById("bon-result");
-    box.textContent = "✓ " + line;
-    box.classList.add("show");
-    if (typeof window.loadNotifications === "function") { try { window.loadNotifications(); } catch (e) { /* ignore */ } }
-  }
-})();
-</script>
-</body>
-</html>
+      document.getElementById("bon-send").textContent = `Sending 

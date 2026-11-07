@@ -17,11 +17,11 @@
   </script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="auth.js?v=20261105zt1"></script>
-  <script src="data-store.js?v=20261018ytd1"></script>
+  <script src="data-store.js?v=20261107mod1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
   <script src="sales-control.js?v=20261018acc1"></script>
-  <script src="allocation-plan-data.js?v=20260921sfx2"></script>
+  <script src="allocation-plan-data.js?v=20261107mod1"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
@@ -3423,6 +3423,18 @@ body.live-app #panel-salesreport .sr-emp-sum {
   const ALLOCATION_PLAN_KEY = Store.ALLOCATION_PLAN_KEY;
   const ALLOCATION_PLAN_PUSH_KEY = Store.ALLOCATION_PLAN_PUSH_KEY;
   const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
+  function applyAllocationCatalogFromStore() {
+    let catalog = null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+      if (parsed && Array.isArray(parsed.catalog)) catalog = parsed.catalog;
+    } catch { /* template */ }
+    const next = window.AllocationPlanData.buildAllocationPlanRows(catalog);
+    ALLOCATION_ROWS.length = 0;
+    next.forEach((row) => ALLOCATION_ROWS.push(row));
+    window.ALLOCATION_ROWS = ALLOCATION_ROWS;
+  }
+  applyAllocationCatalogFromStore();
   const EMPLOYEE_ROSTER = window.EmployeeRoster.EMPLOYEES;
   const DEFAULT_EMPLOYEE_NAMES = EMPLOYEE_ROSTER.map((e) => e.name);
   const EMPLOYEE_CODE_TO_NAME = new Map(
@@ -4041,6 +4053,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     accessoriesSettled = loadAccessoriesSettled();
     workingDays = loadWorkingDays();
     channelTargets = Store.readChannelTargets();
+    applyAllocationCatalogFromStore();
     allocationValues = loadAllocationValues();
     applyAllocationSuffixes();
   }

@@ -126,6 +126,7 @@
       ? meta.allocationValues
       : {};
     let suffixes = {};
+    let catalog = Array.isArray(meta.allocationCatalog) ? meta.allocationCatalog : null;
     if (meta.allocationSuffixes && typeof meta.allocationSuffixes === "object") {
       Object.keys(meta.allocationSuffixes).forEach((id) => {
         const name = String(meta.allocationSuffixes[id] == null ? "" : meta.allocationSuffixes[id]).trim().slice(0, 40);
@@ -137,7 +138,13 @@
         if (prev && prev.suffixes && typeof prev.suffixes === "object") suffixes = prev.suffixes;
       } catch { /* keep empty */ }
     }
-    localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values, suffixes, at }));
+    if (!catalog) {
+      try {
+        const prev = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+        if (prev && Array.isArray(prev.catalog)) catalog = prev.catalog;
+      } catch { /* keep empty */ }
+    }
+    localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values, suffixes, catalog, at }));
     localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at }));
     localStorage.setItem(GEC_SLA_KEY, JSON.stringify({ minutes: normGecSla(meta.gecSlaMinutes), at }));
     applyGecControlFromMeta(meta);
@@ -361,6 +368,7 @@
     channelTargets,
     allocationValues,
     allocationSuffixes,
+    allocationCatalog,
     gecSlaMinutes,
     gecControl,
     filesBySlot,
@@ -384,6 +392,7 @@
         channelTargets: normalizeChannelTargets(channelTargets),
         allocationValues: allocationValues || {},
         allocationSuffixes: allocationSuffixes || {},
+        allocationCatalog: Array.isArray(allocationCatalog) ? allocationCatalog : undefined,
         gecSlaMinutes: normGecSla(gecSlaMinutes),
         gecControl: gecControl !== undefined ? gecControl : readGecControl(),
         files,

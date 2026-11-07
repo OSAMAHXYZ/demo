@@ -55,6 +55,8 @@
     },
   ];
 
+  const SEG_ORDER = ["PC", "CV", "SUV"];
+
   function slug(s) {
     return String(s || "")
       .toLowerCase()
@@ -62,10 +64,58 @@
       .replace(/^-|-$/g, "");
   }
 
+  function cloneSegments(src) {
+    return (src || SEGMENTS).map((segment) => ({
+      seg: segment.seg,
+      products: (segment.products || []).map((prod) => ({
+        name: prod.name,
+        items: (prod.items || []).map((item) => ({
+          sfx: item.sfx,
+          defaultVal: item.defaultVal == null ? 0 : item.defaultVal,
+        })),
+      })),
+    }));
+  }
+
+  function normalizeCatalog(input) {
+    if (!Array.isArray(input)) return cloneSegments(SEGMENTS);
+    const buckets = { PC: [], CV: [], SUV: [] };
+    input.forEach((segment) => {
+      const key = String(segment && segment.seg ? segment.seg : "").toUpperCase();
+      if (!buckets[key]) return;
+      const seen = new Set();
+      (Array.isArray(segment.products) ? segment.products : []).slice(0, 40).forEach((prod) => {
+        const name = String(prod && prod.name ? prod.name : "").trim().slice(0, 40);
+        if (!name) return;
+        const nameKey = slug(name);
+        if (!nameKey || seen.has(nameKey)) return;
+        seen.add(nameKey);
+        const sfxSeen = new Set();
+        const items = [];
+        (Array.isArray(prod.items) ? prod.items : []).slice(0, 40).forEach((item) => {
+          const sfxName = String(item && item.sfx ? item.sfx : "").trim().slice(0, 40);
+          const sfxKey = slug(sfxName);
+          if (!sfxName || !sfxKey || sfxSeen.has(sfxKey)) return;
+          sfxSeen.add(sfxKey);
+          items.push({
+            sfx: sfxName,
+            defaultVal: Math.max(0, Number(item.defaultVal) || 0),
+          });
+        });
+        buckets[key].push({
+          name,
+          items: items.length ? items : [{ sfx: "AA", defaultVal: 0 }],
+        });
+      });
+    });
+    return SEG_ORDER.map((seg) => ({ seg, products: buckets[seg] }));
+  }
+
   /** Flat row list: leaf rows + total rows */
-  function buildAllocationPlanRows() {
+  function buildAllocationPlanRows(catalog) {
+    const segments = arguments.length ? normalizeCatalog(catalog) : cloneSegments(SEGMENTS);
     const rows = [];
-    SEGMENTS.forEach((segment) => {
+    segments.forEach((segment) => {
       const segKey = slug(segment.seg);
       segment.products.forEach((prod) => {
         const groupKey = `${segKey}-${slug(prod.name)}`;
@@ -113,6 +163,9 @@
 
   global.AllocationPlanData = {
     SEGMENTS,
+    slug,
+    cloneSegments,
+    normalizeCatalog,
     buildAllocationPlanRows,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -351,6 +351,45 @@ function sanitizeAllocationSuffixes(input) {
   return out;
 }
 
+function sanitizeAllocationCatalog(input) {
+  if (!Array.isArray(input)) return null;
+  const buckets = { PC: [], CV: [], SUV: [] };
+  input.forEach((segment) => {
+    const key = String(segment && segment.seg ? segment.seg : '').toUpperCase();
+    if (!buckets[key]) return;
+    const seen = new Set();
+    const products = Array.isArray(segment.products) ? segment.products : [];
+    products.slice(0, 40).forEach((prod) => {
+      const name = String(prod && prod.name ? prod.name : '').trim().slice(0, 40);
+      if (!name) return;
+      const nameKey = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (!nameKey || seen.has(nameKey)) return;
+      seen.add(nameKey);
+      const sfxSeen = new Set();
+      const items = [];
+      (Array.isArray(prod.items) ? prod.items : []).slice(0, 40).forEach((item) => {
+        const sfx = String(item && item.sfx ? item.sfx : '').trim().slice(0, 40);
+        const sfxKey = sfx.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        if (!sfx || !sfxKey || sfxSeen.has(sfxKey)) return;
+        sfxSeen.add(sfxKey);
+        items.push({
+          sfx,
+          defaultVal: Math.max(0, Math.round(Number(item.defaultVal) || 0)),
+        });
+      });
+      buckets[key].push({
+        name,
+        items: items.length ? items : [{ sfx: 'AA', defaultVal: 0 }],
+      });
+    });
+  });
+  return [
+    { seg: 'PC', products: buckets.PC },
+    { seg: 'CV', products: buckets.CV },
+    { seg: 'SUV', products: buckets.SUV },
+  ];
+}
+
 function positiveOr(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -419,6 +458,7 @@ function defaultReportSheetMeta() {
     channelTargets: sanitizeChannelTargets(null),
     allocationValues: {},
     allocationSuffixes: {},
+    allocationCatalog: null,
     gecSlaMinutes: 5,
     gecControl: null,
     gecControlAt: 0,
@@ -4796,6 +4836,7 @@ app.get('/api/report-sheet/meta', (_req, res) => {
       ? meta.allocationValues
       : {},
     allocationSuffixes: sanitizeAllocationSuffixes(meta.allocationSuffixes),
+    allocationCatalog: sanitizeAllocationCatalog(meta.allocationCatalog),
     gecSlaMinutes: positiveOr(meta.gecSlaMinutes, 5),
     gecControl: sanitizeGecControl(meta.gecControl),
     gecControlAt: Number(meta.gecControlAt) || 0,
@@ -5585,6 +5626,9 @@ app.post('/api/report-sheet/push', async (req, res) => {
       allocationSuffixes: body.allocationSuffixes && typeof body.allocationSuffixes === 'object'
         ? sanitizeAllocationSuffixes(body.allocationSuffixes)
         : sanitizeAllocationSuffixes(prevMeta.allocationSuffixes),
+      allocationCatalog: body.allocationCatalog != null
+        ? sanitizeAllocationCatalog(body.allocationCatalog)
+        : sanitizeAllocationCatalog(prevMeta.allocationCatalog),
       gecSlaMinutes: positiveOr(body.gecSlaMinutes, 5),
       gecControl: pushedControl || prevControl,
       gecControlAt: controlChanged ? at : (Number(prevMeta.gecControlAt) || 0),
