@@ -158,167 +158,146 @@
   <!-- ===== Admin dark design + BO next step (v2) ===== -->
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <style id="admin-dark-v2">
-    body.live-app.admin-page.toyota-theme{
-      --bg:#070a10 !important; --surface:#111622 !important; --surface-2:#151b29 !important;
-      --sunk:#0c111b !important; --raise:#192132 !important;
-      --line:rgba(148,163,184,.13) !important; --line-2:rgba(148,163,184,.24) !important;
-      --ink:#eef2f8 !important; --ink-2:#b3bccb !important; --muted:#7f8899 !important;
-      --accent:#ff2d42 !important; --accent-2:#d40a1c !important; --you:#7aa2ff !important;
-      --ok:#3ddc97 !important; --warn:#f5b84b !important; --bad:#ff6b8b !important;
-      --ops-bg:#070a10 !important; --ops-fg:#eef2f8 !important; --ops-ink:#eef2f8 !important;
-      --ops-muted:#7f8899 !important; --ops-card:#111622 !important; --ops-secondary:#151b29 !important;
-      --ops-input:#0c111b !important; --ops-border:rgba(148,163,184,.13) !important;
-      --eu-bg:#070a10 !important; --eu-bg-2:#070a10 !important; --eu-ink:#eef2f8 !important;
-      --eu-ink-soft:#b3bccb !important; --eu-muted:#7f8899 !important;
-      --eu-line:rgba(148,163,184,.13) !important; --eu-surface:#111622 !important; --eu-surface-2:#151b29 !important;
-      --cx-bg:#070a10 !important; --cx-fg:#eef2f8 !important; --cx-card:#111622 !important;
+    body.admin-page{
+      --bg:#070a10; --surface:#111622; --surface-2:#151b29; --sunk:#0c111b; --raise:#192132;
+      --line:rgba(148,163,184,.13); --line-2:rgba(148,163,184,.24);
+      --ink:#eef2f8; --ink-2:#b3bccb; --muted:#7f8899;
+      --accent:#ff2d42; --accent-2:#d40a1c; --you:#7aa2ff;
+      --ok:#3ddc97; --warn:#f5b84b; --bad:#ff6b8b;
       color-scheme:dark;
       background:
         radial-gradient(900px 520px at 85% -10%, rgba(255,45,66,.10), transparent 60%),
         radial-gradient(700px 500px at 0% 100%, rgba(122,162,255,.07), transparent 60%),
         var(--bg) !important;
       background-attachment:fixed !important;
-      color:#eef2f8 !important;
+      color:var(--ink) !important;
     }
-    body.live-app.admin-page.toyota-theme .app-frame, body.live-app.admin-page.toyota-theme .app-main, body.live-app.admin-page.toyota-theme .app-content, body.live-app.admin-page.toyota-theme .shell{background:transparent !important;color:var(--ink)}
+    body.admin-page .app-frame, body.admin-page .app-main, body.admin-page .app-content, body.admin-page .shell{background:transparent !important;color:var(--ink)}
 
     /* ---- sidebar ---- */
-    body.live-app.admin-page.toyota-theme .app-sidebar{background:linear-gradient(180deg,#0d1220,#090d16) !important;border-right:1px solid var(--line) !important;box-shadow:none !important}
-    body.live-app.admin-page.toyota-theme .sidebar-section-label{color:var(--muted) !important;letter-spacing:.14em}
-    body.live-app.admin-page.toyota-theme .side-nav-item{color:var(--ink-2) !important;background:transparent !important;border-radius:12px !important;position:relative;transition:background .2s ease,color .2s ease,transform .2s ease}
-    body.live-app.admin-page.toyota-theme .side-nav-item:hover{background:rgba(148,163,184,.08) !important;color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .side-nav-item .side-nav-label{color:inherit !important}
-    body.live-app.admin-page.toyota-theme .side-nav-item.active{background:linear-gradient(90deg,rgba(255,45,66,.20),rgba(255,45,66,.04)) !important;color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,45,66,.25) !important}
-    body.live-app.admin-page.toyota-theme .side-nav-item.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--accent);box-shadow:0 0 12px var(--accent)}
-    body.live-app.admin-page.toyota-theme .sidebar-user-card{background:var(--surface-2) !important;border:1px solid var(--line) !important;color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .sidebar-user-meta span{color:var(--muted) !important}
+    body.admin-page .app-sidebar{background:linear-gradient(180deg,#0d1220,#090d16) !important;border-right:1px solid var(--line) !important;box-shadow:none !important}
+    body.admin-page .sidebar-section-label{color:var(--muted) !important;letter-spacing:.14em}
+    body.admin-page .side-nav-item{color:var(--ink-2) !important;background:transparent !important;border-radius:12px !important;position:relative;transition:background .2s ease,color .2s ease,transform .2s ease}
+    body.admin-page .side-nav-item:hover{background:rgba(148,163,184,.08) !important;color:var(--ink) !important}
+    body.admin-page .side-nav-item .side-nav-label{color:inherit !important}
+    body.admin-page .side-nav-item.active{background:linear-gradient(90deg,rgba(255,45,66,.20),rgba(255,45,66,.04)) !important;color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,45,66,.25) !important}
+    body.admin-page .side-nav-item.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+    body.admin-page .sidebar-user-card{background:var(--surface-2) !important;border:1px solid var(--line) !important;color:var(--ink) !important}
+    body.admin-page .sidebar-user-meta span{color:var(--muted) !important}
 
     /* ---- top bar ---- */
-    body.live-app.admin-page.toyota-theme .app-topbar{background:rgba(9,13,22,.78) !important;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line) !important;box-shadow:none !important}
-    body.live-app.admin-page.toyota-theme .app-topbar-eyebrow{color:var(--muted) !important;letter-spacing:.18em}
-    body.live-app.admin-page.toyota-theme .app-page-title{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important;letter-spacing:-.01em}
-    body.live-app.admin-page.toyota-theme .status{background:rgba(148,163,184,.10) !important;color:var(--ink-2) !important;border:1px solid var(--line-2) !important;border-radius:999px !important;font-weight:600}
-    body.live-app.admin-page.toyota-theme .status.ok{background:rgba(61,220,151,.10) !important;color:var(--ok) !important;border-color:rgba(61,220,151,.3) !important}
-    body.live-app.admin-page.toyota-theme .status.warn, body.live-app.admin-page.toyota-theme .status.err{background:rgba(245,184,75,.10) !important;color:var(--warn) !important;border-color:rgba(245,184,75,.3) !important}
+    body.admin-page .app-topbar{background:rgba(9,13,22,.78) !important;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line) !important;box-shadow:none !important}
+    body.admin-page .app-topbar-eyebrow{color:var(--muted) !important;letter-spacing:.18em}
+    body.admin-page .app-page-title{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important;letter-spacing:-.01em}
+    body.admin-page .status{background:rgba(148,163,184,.10) !important;color:var(--ink-2) !important;border:1px solid var(--line-2) !important;border-radius:999px !important;font-weight:600}
+    body.admin-page .status.ok{background:rgba(61,220,151,.10) !important;color:var(--ok) !important;border-color:rgba(61,220,151,.3) !important}
+    body.admin-page .status.warn, body.admin-page .status.err{background:rgba(245,184,75,.10) !important;color:var(--warn) !important;border-color:rgba(245,184,75,.3) !important}
 
     /* ---- buttons ---- */
-    body.live-app.admin-page.toyota-theme .btn, body.live-app.admin-page.toyota-theme button.btn, body.live-app.admin-page.toyota-theme a.btn{background:var(--surface-2) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:11px !important;box-shadow:none !important;transition:background .18s ease,border-color .18s ease,transform .18s ease}
-    body.live-app.admin-page.toyota-theme .btn:hover:not(:disabled){background:var(--raise) !important;border-color:rgba(148,163,184,.4) !important;transform:translateY(-1px)}
-    body.live-app.admin-page.toyota-theme .btn:disabled{opacity:.45 !important}
-    body.live-app.admin-page.toyota-theme .btn-primary{background:linear-gradient(180deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:1px solid rgba(255,90,105,.6) !important;border-radius:11px !important;box-shadow:0 8px 24px -8px rgba(255,45,66,.65),inset 0 1px 0 rgba(255,255,255,.18) !important;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
-    body.live-app.admin-page.toyota-theme .btn-primary:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.07);box-shadow:0 12px 30px -8px rgba(255,45,66,.8),inset 0 1px 0 rgba(255,255,255,.18) !important}
-    body.live-app.admin-page.toyota-theme .btn-primary:disabled{opacity:.5 !important;box-shadow:none !important}
+    body.admin-page .btn, body.admin-page button.btn, body.admin-page a.btn{background:var(--surface-2) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:11px !important;box-shadow:none !important;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+    body.admin-page .btn:hover:not(:disabled){background:var(--raise) !important;border-color:rgba(148,163,184,.4) !important;transform:translateY(-1px)}
+    body.admin-page .btn:disabled{opacity:.45 !important}
+    body.admin-page .btn-primary{background:linear-gradient(180deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:1px solid rgba(255,90,105,.6) !important;border-radius:11px !important;box-shadow:0 8px 24px -8px rgba(255,45,66,.65),inset 0 1px 0 rgba(255,255,255,.18) !important;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+    body.admin-page .btn-primary:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.07);box-shadow:0 12px 30px -8px rgba(255,45,66,.8),inset 0 1px 0 rgba(255,255,255,.18) !important}
+    body.admin-page .btn-primary:disabled{opacity:.5 !important;box-shadow:none !important}
 
     /* ---- KPI tiles ---- */
-    body.live-app.admin-page.toyota-theme .pbi-kpi{background:linear-gradient(180deg,var(--surface-2),var(--surface)) !important;border:1px solid var(--line) !important;border-radius:16px !important;box-shadow:0 10px 30px -18px rgba(0,0,0,.8) !important;position:relative;overflow:hidden;color:var(--ink) !important;animation:adm-rise .5s cubic-bezier(.2,.7,.2,1) both}
-    body.live-app.admin-page.toyota-theme .pbi-kpi::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--accent),transparent 70%)}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(2)::before{background:linear-gradient(90deg,var(--warn),transparent 70%)}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(3)::before,body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(4)::before{background:linear-gradient(90deg,var(--you),transparent 70%)}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(n+5)::before{background:linear-gradient(90deg,var(--ok),transparent 70%)}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(2){animation-delay:.04s} body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(3){animation-delay:.08s}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(4){animation-delay:.12s} body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(5){animation-delay:.16s}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(6){animation-delay:.2s} body.live-app.admin-page.toyota-theme .pbi-kpi:nth-child(7){animation-delay:.24s}
-    body.live-app.admin-page.toyota-theme .pbi-kpi .lab{color:var(--muted) !important;letter-spacing:.12em}
-    body.live-app.admin-page.toyota-theme .pbi-kpi .val{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important}
+    body.admin-page .pbi-kpi{background:linear-gradient(180deg,var(--surface-2),var(--surface)) !important;border:1px solid var(--line) !important;border-radius:16px !important;box-shadow:0 10px 30px -18px rgba(0,0,0,.8) !important;position:relative;overflow:hidden;color:var(--ink) !important;animation:adm-rise .5s cubic-bezier(.2,.7,.2,1) both}
+    body.admin-page .pbi-kpi::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--accent),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(2)::before{background:linear-gradient(90deg,var(--warn),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(3)::before,body.admin-page .pbi-kpi:nth-child(4)::before{background:linear-gradient(90deg,var(--you),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(n+5)::before{background:linear-gradient(90deg,var(--ok),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(2){animation-delay:.04s} body.admin-page .pbi-kpi:nth-child(3){animation-delay:.08s}
+    body.admin-page .pbi-kpi:nth-child(4){animation-delay:.12s} body.admin-page .pbi-kpi:nth-child(5){animation-delay:.16s}
+    body.admin-page .pbi-kpi:nth-child(6){animation-delay:.2s} body.admin-page .pbi-kpi:nth-child(7){animation-delay:.24s}
+    body.admin-page .pbi-kpi .lab{color:var(--muted) !important;letter-spacing:.12em}
+    body.admin-page .pbi-kpi .val{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important}
 
     /* ---- cards ---- */
-    body.live-app.admin-page.toyota-theme .card, body.live-app.admin-page.toyota-theme .admin-section-card, body.live-app.admin-page.toyota-theme .pbi-slicer{background:linear-gradient(180deg,rgba(21,27,41,.92),rgba(17,22,34,.92)) !important;border:1px solid var(--line) !important;border-radius:18px !important;box-shadow:0 18px 50px -30px rgba(0,0,0,.9) !important;color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .admin-panel:not([hidden]){animation:adm-rise .35s cubic-bezier(.2,.7,.2,1) both}
-    body.live-app.admin-page.toyota-theme .pbi-viz-head h2, body.live-app.admin-page.toyota-theme .card h2{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important;letter-spacing:-.01em}
-    body.live-app.admin-page.toyota-theme .card h3, body.live-app.admin-page.toyota-theme .card h4{color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .admin-section-tag{background:rgba(148,163,184,.08) !important;color:var(--ink-2) !important;border:1px solid var(--line-2) !important;border-radius:999px !important}
-    body.live-app.admin-page.toyota-theme .admin-lead, body.live-app.admin-page.toyota-theme .hint, body.live-app.admin-page.toyota-theme .foot, body.live-app.admin-page.toyota-theme .pbi-slicer-hint, body.live-app.admin-page.toyota-theme .muted{color:var(--muted) !important}
-    body.live-app.admin-page.toyota-theme .admin-lead b, body.live-app.admin-page.toyota-theme .hint b{color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .xl-toolbar, body.live-app.admin-page.toyota-theme .admin-toolbar{background:transparent !important;border-color:var(--line) !important}
-    body.live-app.admin-page.toyota-theme .banner{border-radius:12px !important}
-    body.live-app.admin-page.toyota-theme .banner.err{background:rgba(255,107,139,.10) !important;color:var(--bad) !important;border:1px solid rgba(255,107,139,.3) !important}
-    body.live-app.admin-page.toyota-theme .banner.load{background:rgba(122,162,255,.08) !important;color:var(--you) !important;border:1px solid rgba(122,162,255,.25) !important}
-    body.live-app.admin-page.toyota-theme .page-foot{color:var(--muted) !important}
-    body.live-app.admin-page.toyota-theme .page-foot a{color:var(--you) !important}
+    body.admin-page .card, body.admin-page .admin-section-card, body.admin-page .pbi-slicer{background:linear-gradient(180deg,rgba(21,27,41,.92),rgba(17,22,34,.92)) !important;border:1px solid var(--line) !important;border-radius:18px !important;box-shadow:0 18px 50px -30px rgba(0,0,0,.9) !important;color:var(--ink) !important}
+    body.admin-page .admin-panel:not([hidden]){animation:adm-rise .35s cubic-bezier(.2,.7,.2,1) both}
+    body.admin-page .pbi-viz-head h2, body.admin-page .card h2{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important;letter-spacing:-.01em}
+    body.admin-page .card h3, body.admin-page .card h4{color:var(--ink) !important}
+    body.admin-page .admin-section-tag{background:rgba(148,163,184,.08) !important;color:var(--ink-2) !important;border:1px solid var(--line-2) !important;border-radius:999px !important}
+    body.admin-page .admin-lead, body.admin-page .hint, body.admin-page .foot, body.admin-page .pbi-slicer-hint, body.admin-page .muted{color:var(--muted) !important}
+    body.admin-page .admin-lead b, body.admin-page .hint b{color:var(--ink) !important}
+    body.admin-page .xl-toolbar, body.admin-page .admin-toolbar{background:transparent !important;border-color:var(--line) !important}
+    body.admin-page .banner{border-radius:12px !important}
+    body.admin-page .banner.err{background:rgba(255,107,139,.10) !important;color:var(--bad) !important;border:1px solid rgba(255,107,139,.3) !important}
+    body.admin-page .banner.load{background:rgba(122,162,255,.08) !important;color:var(--you) !important;border:1px solid rgba(122,162,255,.25) !important}
+    body.admin-page .page-foot{color:var(--muted) !important}
+    body.admin-page .page-foot a{color:var(--you) !important}
 
     /* everything inside cards: no white boxes, readable text */
-    :where(body.live-app.admin-page.toyota-theme .card) :where(div,section,article,aside,fieldset,details,summary,li,ul,ol,p,label,header,footer,form,dl,dt,dd,span):where(:not([style*="background"])){background-color:transparent !important;border-color:var(--line-2) !important}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(p,li,label,legend,span,dt,dd,small,td,div,summary,h3,h4,h5,h6){color:inherit !important}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(b,strong,h3,h4,h5,legend){color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .card{--muted:#7f8899}
+    :where(body.admin-page .card) :where(div,section,article,aside,fieldset,details,summary,li,ul,ol,p,label,header,footer,form,dl,dt,dd,span):where(:not(.bon-dock,.bon-dock *)):where(:not([style*="background"])){background-color:transparent !important;border-color:var(--line-2) !important}
+    :where(body.admin-page .card) :where(p,li,label,legend,span,dt,dd,small,td,div,summary,h3,h4,h5,h6):where(:not(.bon-dock,.bon-dock *)){color:inherit !important}
+    :where(body.admin-page .card) :where(b,strong,h3,h4,h5,legend):where(:not(.bon-dock,.bon-dock *)){color:var(--ink) !important}
+    body.admin-page .card{--muted:#7f8899}
 
     /* ---- form controls ---- */
-    body.live-app.admin-page.toyota-theme .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea){background-color:var(--sunk) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:10px !important;box-shadow:none !important;transition:border-color .18s ease,box-shadow .18s ease}
-    body.live-app.admin-page.toyota-theme .app-main :is(input,select,textarea)::placeholder{color:#5d6678 !important}
-    body.live-app.admin-page.toyota-theme .app-main :is(input,select,textarea):focus{outline:none !important;border-color:rgba(122,162,255,.7) !important;box-shadow:0 0 0 3px rgba(122,162,255,.18) !important}
-    body.live-app.admin-page.toyota-theme .app-main select option{background:#111622;color:var(--ink)}
-    body.live-app.admin-page.toyota-theme .app-main input[type=checkbox], body.live-app.admin-page.toyota-theme .app-main input[type=radio]{accent-color:var(--accent)}
-    body.live-app.admin-page.toyota-theme .app-main input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.85)}
-    body.live-app.admin-page.toyota-theme .app-main :is(button:not(.btn):not(.btn-primary):not(.side-nav-item):not([class*="bon-"])){background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:10px}
-    body.live-app.admin-page.toyota-theme .app-main :is(button:not(.btn):not(.btn-primary):not(.side-nav-item):not([class*="bon-"])):hover{background:var(--raise)}
+    body.admin-page .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea){background-color:var(--sunk) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:10px !important;box-shadow:none !important;transition:border-color .18s ease,box-shadow .18s ease}
+    body.admin-page .app-main :is(input,select,textarea)::placeholder{color:#5d6678 !important}
+    body.admin-page .app-main :is(input,select,textarea):focus{outline:none !important;border-color:rgba(122,162,255,.7) !important;box-shadow:0 0 0 3px rgba(122,162,255,.18) !important}
+    body.admin-page .app-main select option{background:#111622;color:var(--ink)}
+    body.admin-page .app-main input[type=checkbox], body.admin-page .app-main input[type=radio]{accent-color:var(--accent)}
+    body.admin-page .app-main input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.85)}
+    body.admin-page .app-main :is(button:not(.btn):not(.btn-primary):not(.side-nav-item):not([class*="bon-"])){background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:10px}
+    body.admin-page .app-main :is(button:not(.btn):not(.btn-primary):not(.side-nav-item):not([class*="bon-"])):hover{background:var(--raise)}
 
     /* ---- tables ---- */
-    body.live-app.admin-page.toyota-theme .app-main table{background:transparent !important;color:var(--ink-2) !important;border-color:var(--line) !important}
-    body.live-app.admin-page.toyota-theme .app-main table th{background:var(--surface-2) !important;color:var(--muted) !important;border-color:var(--line) !important;letter-spacing:.06em}
-    body.live-app.admin-page.toyota-theme .app-main table td{border-color:var(--line) !important;color:var(--ink-2)}
-    body.live-app.admin-page.toyota-theme .app-main table tbody tr:hover > td{background:rgba(148,163,184,.05)}
+    body.admin-page .app-main table{background:transparent !important;color:var(--ink-2) !important;border-color:var(--line) !important}
+    body.admin-page .app-main table th{background:var(--surface-2) !important;color:var(--muted) !important;border-color:var(--line) !important;letter-spacing:.06em}
+    body.admin-page .app-main table td{border-color:var(--line) !important;color:var(--ink-2)}
+    body.admin-page .app-main table tbody tr:hover > td{background:rgba(148,163,184,.05)}
 
     /* ---- upload slots ---- */
-    body.live-app.admin-page.toyota-theme .slot{background:var(--sunk) !important;border:1px dashed var(--line-2) !important;border-radius:16px !important;color:var(--ink) !important;transition:border-color .2s ease,transform .2s ease,background .2s ease}
-    body.live-app.admin-page.toyota-theme .slot:hover{border-color:rgba(255,45,66,.55) !important;transform:translateY(-2px);background:#0f1522 !important}
-    body.live-app.admin-page.toyota-theme .slot.loaded, body.live-app.admin-page.toyota-theme .slot.is-loaded{border-style:solid !important;border-color:rgba(61,220,151,.45) !important;background:linear-gradient(180deg,rgba(61,220,151,.07),var(--sunk)) !important}
-    body.live-app.admin-page.toyota-theme .slot h3{color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .slot .meta, body.live-app.admin-page.toyota-theme .slot .ar{color:var(--muted) !important}
-    body.live-app.admin-page.toyota-theme .slot .n{background:rgba(255,45,66,.14) !important;color:#ff8a96 !important;border:1px solid rgba(255,45,66,.3) !important}
-    body.live-app.admin-page.toyota-theme .pill{border-radius:999px !important}
-    body.live-app.admin-page.toyota-theme .pill.slot-draft{background:rgba(245,184,75,.12) !important;color:var(--warn) !important;border:1px solid rgba(245,184,75,.35) !important}
-    body.live-app.admin-page.toyota-theme .pill.slot-required{background:rgba(255,45,66,.12) !important;color:#ff8a96 !important;border:1px solid rgba(255,45,66,.35) !important}
+    body.admin-page .slot{background:var(--sunk) !important;border:1px dashed var(--line-2) !important;border-radius:16px !important;color:var(--ink) !important;transition:border-color .2s ease,transform .2s ease,background .2s ease}
+    body.admin-page .slot:hover{border-color:rgba(255,45,66,.55) !important;transform:translateY(-2px);background:#0f1522 !important}
+    body.admin-page .slot.loaded, body.admin-page .slot.is-loaded{border-style:solid !important;border-color:rgba(61,220,151,.45) !important;background:linear-gradient(180deg,rgba(61,220,151,.07),var(--sunk)) !important}
+    body.admin-page .slot h3{color:var(--ink) !important}
+    body.admin-page .slot .meta, body.admin-page .slot .ar{color:var(--muted) !important}
+    body.admin-page .slot .n{background:rgba(255,45,66,.14) !important;color:#ff8a96 !important;border:1px solid rgba(255,45,66,.3) !important}
+    body.admin-page .pill{border-radius:999px !important}
+    body.admin-page .pill.slot-draft{background:rgba(245,184,75,.12) !important;color:var(--warn) !important;border:1px solid rgba(245,184,75,.35) !important}
+    body.admin-page .pill.slot-required{background:rgba(255,45,66,.12) !important;color:#ff8a96 !important;border:1px solid rgba(255,45,66,.35) !important}
 
     /* ---- GEC, allocation, dialog ---- */
-    body.live-app.admin-page.toyota-theme .gec-ctl-col{border-color:var(--line-2) !important;background:var(--sunk) !important}
-    body.live-app.admin-page.toyota-theme .gec-ctl-list li{background:rgba(148,163,184,.07) !important;color:var(--ink-2)}
-    body.live-app.admin-page.toyota-theme .gec-found-table .stage.s-visitor{background:rgba(167,139,250,.14);color:#c4b5fd}
-    body.live-app.admin-page.toyota-theme .gec-found-table .stage.s-lead{background:rgba(122,162,255,.14);color:var(--you)}
-    body.live-app.admin-page.toyota-theme .gec-found-table .stage.s-converted{background:rgba(61,220,151,.12);color:var(--ok)}
-    body.live-app.admin-page.toyota-theme .gec-found-table .stage.s-unlisted{background:rgba(245,184,75,.12);color:var(--warn)}
-    body.live-app.admin-page.toyota-theme #allocation-plan-wrap{background:var(--sunk) !important;border:1px solid var(--line-2) !important;border-radius:14px}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table{background:transparent !important;color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table .alloc-head-title th{background:#05080d !important;color:#fff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table .alloc-head-cols th{background:var(--surface-2) !important;color:var(--ink-2) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table td{color:var(--ink-2) !important;background:transparent !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.alloc-band-pc > td{background:rgba(29,78,216,.06) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.alloc-band-cv > td{background:rgba(180,83,9,.06) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.alloc-band-suv > td{background:rgba(4,120,87,.06) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.alloc-band-pc > td.alloc-seg{background:#1d3fa8 !important;color:#fff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.alloc-band-cv > td.alloc-seg{background:#8a4208 !important;color:#fff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.alloc-band-suv > td.alloc-seg{background:#06604a !important;color:#fff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table td.alloc-product{color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table .alloc-sfx input, body.live-app.admin-page.toyota-theme .allocation-plan-table .alloc-esales input{background:var(--bg) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table .alloc-esales input{border-color:rgba(122,162,255,.5) !important;color:#c7d6ff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.is-product-total > td{background:rgba(122,162,255,.10) !important;color:#c7d6ff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.is-seg-total > td{background:rgba(148,163,184,.12) !important;color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tr.is-grand-total > td{background:#05080d !important;color:#fff !important}
-    body.live-app.admin-page.toyota-theme .allocation-plan-table tbody tr.is-leaf:hover > td:not(.alloc-seg){background:rgba(255,45,66,.06) !important}
-    body.live-app.admin-page.toyota-theme .eom-dialog{background:var(--surface) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important}
-    body.live-app.admin-page.toyota-theme .eom-dialog::backdrop{background:rgba(3,5,10,.7);backdrop-filter:blur(3px)}
-    body.live-app.admin-page.toyota-theme .eom-dialog input{background:var(--sunk) !important;color:var(--ink) !important;border-color:var(--line-2) !important}
-    body.live-app.admin-page.toyota-theme .eom-dialog .eom-err{color:var(--bad) !important}
+    body.admin-page .gec-ctl-col{border-color:var(--line-2) !important;background:var(--sunk) !important}
+    body.admin-page .gec-ctl-list li{background:rgba(148,163,184,.07) !important;color:var(--ink-2)}
+    body.admin-page .gec-found-table .stage.s-visitor{background:rgba(167,139,250,.14);color:#c4b5fd}
+    body.admin-page .gec-found-table .stage.s-lead{background:rgba(122,162,255,.14);color:var(--you)}
+    body.admin-page .gec-found-table .stage.s-converted{background:rgba(61,220,151,.12);color:var(--ok)}
+    body.admin-page .gec-found-table .stage.s-unlisted{background:rgba(245,184,75,.12);color:var(--warn)}
+    body.admin-page #allocation-plan-wrap{background:var(--sunk) !important;border:1px solid var(--line-2) !important;border-radius:14px}
+    body.admin-page .allocation-plan-table{background:transparent !important;color:var(--ink) !important}
+    body.admin-page .allocation-plan-table .alloc-head-title th{background:#05080d !important;color:#fff !important}
+    body.admin-page .allocation-plan-table .alloc-head-cols th{background:var(--surface-2) !important;color:var(--ink-2) !important}
+    body.admin-page .allocation-plan-table td{color:var(--ink-2) !important;background:transparent !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-pc > td{background:rgba(29,78,216,.06) !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-cv > td{background:rgba(180,83,9,.06) !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-suv > td{background:rgba(4,120,87,.06) !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-pc > td.alloc-seg{background:#1d3fa8 !important;color:#fff !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-cv > td.alloc-seg{background:#8a4208 !important;color:#fff !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-suv > td.alloc-seg{background:#06604a !important;color:#fff !important}
+    body.admin-page .allocation-plan-table td.alloc-product{color:var(--ink) !important}
+    body.admin-page .allocation-plan-table .alloc-sfx input, body.admin-page .allocation-plan-table .alloc-esales input{background:var(--bg) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important}
+    body.admin-page .allocation-plan-table .alloc-esales input{border-color:rgba(122,162,255,.5) !important;color:#c7d6ff !important}
+    body.admin-page .allocation-plan-table tr.is-product-total > td{background:rgba(122,162,255,.10) !important;color:#c7d6ff !important}
+    body.admin-page .allocation-plan-table tr.is-seg-total > td{background:rgba(148,163,184,.12) !important;color:var(--ink) !important}
+    body.admin-page .allocation-plan-table tr.is-grand-total > td{background:#05080d !important;color:#fff !important}
+    body.admin-page .allocation-plan-table tbody tr.is-leaf:hover > td:not(.alloc-seg){background:rgba(255,45,66,.06) !important}
+    body.admin-page .eom-dialog{background:var(--surface) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important}
+    body.admin-page .eom-dialog::backdrop{background:rgba(3,5,10,.7);backdrop-filter:blur(3px)}
+    body.admin-page .eom-dialog input{background:var(--sunk) !important;color:var(--ink) !important;border-color:var(--line-2) !important}
+    body.admin-page .eom-dialog .eom-err{color:var(--bad) !important}
 
     /* ---- BO Error Condition: builder on dark ---- */
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .card :is(div,section,article,aside,p,li,ul,label,header,form)[style*="background"]{background:transparent !important}
-    body.live-app.admin-page.toyota-theme #boe-rules-root :is(h1,h2,h3,h4){color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important}
-    body.live-app.admin-page.toyota-theme #boe-rules-root{color:var(--ink-2)}
-    body.live-app.admin-page.toyota-theme #boe-rules-root :is(div,section,article,aside)[class]{border-radius:12px}
+    body.admin-page #panel-bonotifications .card :is(div,section,article,aside,p,li,ul,label,header,form)[style*="background"]{background:transparent !important}
+    body.admin-page #boe-rules-root :is(h1,h2,h3,h4){color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important}
+    body.admin-page #boe-rules-root{color:var(--ink-2)}
+    body.admin-page #boe-rules-root :is(div,section,article,aside)[class]{border-radius:12px}
 
     /* ---- the next-step dock (after Test conditions) ---- */
-    .bon-dock{position:sticky;bottom:14px;z-index:30;margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border-radius:16px;
-      background:linear-gradient(180deg,rgba(25,33,50,.96),rgba(17,22,34,.96)) !important;border:1px solid var(--line-2) !important;
-      box-shadow:0 24px 60px -20px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.02) inset;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .3s ease,box-shadow .3s ease}
-    .bon-dock.ready{border-color:rgba(255,45,66,.45) !important;box-shadow:0 24px 60px -20px rgba(0,0,0,.9),0 0 0 4px rgba(255,45,66,.08);animation:bon-pop .45s cubic-bezier(.2,.8,.2,1)}
-    .bon-dock .bon-ico{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(148,163,184,.1);color:var(--muted);font-weight:800}
-    .bon-dock.ready .bon-ico{background:rgba(255,45,66,.15);color:#ff8a96}
-    .bon-dock .bon-txt{flex:1 1 260px;min-width:0}
-    .bon-dock .bon-txt b{display:block;color:var(--ink);font-family:"Archivo",system-ui,sans-serif;font-size:15px}
-    .bon-dock .bon-txt > span{display:block;color:var(--muted);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .bon-dock .bon-num{font-family:"JetBrains Mono",ui-monospace,monospace;color:var(--ink)}
-    .bon-dock .bon-acts{display:flex;gap:8px;flex-wrap:wrap}
-    .bon-dock .bon-pick{display:flex;gap:8px;align-items:center}
-    .bon-dock .bon-pick select{max-width:240px;height:38px;padding:0 10px}
     .bon-btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border-radius:11px;font-family:inherit;font-size:13.5px;font-weight:600;line-height:1;cursor:pointer;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);transition:transform .18s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease,opacity .18s}
     .bon-btn:hover:not(:disabled){transform:translateY(-1px);background:var(--raise);border-color:rgba(148,163,184,.4)}
     .bon-btn:disabled{opacity:.4;cursor:not-allowed}
@@ -405,130 +384,220 @@
 
 
     /* ===== polish: small details ===== */
-    body.live-app.admin-page.toyota-theme ::selection{background:rgba(255,45,66,.35);color:#fff}
-    body.live-app.admin-page.toyota-theme{scrollbar-color:#2a3346 transparent}
-    body.live-app.admin-page.toyota-theme ::-webkit-scrollbar{width:10px;height:10px}
-    body.live-app.admin-page.toyota-theme ::-webkit-scrollbar-thumb{background:#232b3c;border-radius:10px;border:2px solid transparent;background-clip:padding-box}
-    body.live-app.admin-page.toyota-theme ::-webkit-scrollbar-thumb:hover{background:#334058;background-clip:padding-box;border:2px solid transparent}
-    body.live-app.admin-page.toyota-theme ::-webkit-scrollbar-track{background:transparent}
-    body.live-app.admin-page.toyota-theme :is(button,a,select,input,textarea,summary):focus-visible{outline:2px solid rgba(122,162,255,.8) !important;outline-offset:2px}
-    body.live-app.admin-page.toyota-theme a{color:var(--you)}
-    body.live-app.admin-page.toyota-theme .page-foot a{text-decoration:none;border-bottom:1px solid rgba(122,162,255,.35)}
-    body.live-app.admin-page.toyota-theme .page-foot a:hover{border-bottom-color:var(--you)}
+    body.admin-page ::selection{background:rgba(255,45,66,.35);color:#fff}
+    body.admin-page{scrollbar-color:#2a3346 transparent}
+    body.admin-page ::-webkit-scrollbar{width:10px;height:10px}
+    body.admin-page ::-webkit-scrollbar-thumb{background:#232b3c;border-radius:10px;border:2px solid transparent;background-clip:padding-box}
+    body.admin-page ::-webkit-scrollbar-thumb:hover{background:#334058;background-clip:padding-box;border:2px solid transparent}
+    body.admin-page ::-webkit-scrollbar-track{background:transparent}
+    body.admin-page :is(button,a,select,input,textarea,summary):focus-visible{outline:2px solid rgba(122,162,255,.8) !important;outline-offset:2px}
+    body.admin-page a{color:var(--you)}
+    body.admin-page .page-foot a{text-decoration:none;border-bottom:1px solid rgba(122,162,255,.35)}
+    body.admin-page .page-foot a:hover{border-bottom-color:var(--you)}
 
     /* sidebar details */
-    body.live-app.admin-page.toyota-theme .sidebar-section-label{font-size:10.5px !important;font-weight:700 !important;text-transform:uppercase}
-    body.live-app.admin-page.toyota-theme .sidebar-mark{box-shadow:0 8px 22px -6px rgba(255,45,66,.55),inset 0 1px 0 rgba(255,255,255,.25)}
-    body.live-app.admin-page.toyota-theme .sidebar-brand{border-bottom:1px solid var(--line)}
-    body.live-app.admin-page.toyota-theme .sidebar-footer{border-top:1px solid var(--line)}
-    body.live-app.admin-page.toyota-theme .side-nav-icon{width:22px;text-align:center;opacity:.7;transition:opacity .2s,transform .2s}
-    body.live-app.admin-page.toyota-theme .side-nav-item:hover .side-nav-icon{opacity:1;transform:scale(1.08)}
-    body.live-app.admin-page.toyota-theme .side-nav-item.active .side-nav-icon{opacity:1;color:#ff8a96}
-    body.live-app.admin-page.toyota-theme .side-nav-item[disabled]{opacity:.35 !important}
+    body.admin-page .sidebar-section-label{font-size:10.5px !important;font-weight:700 !important;text-transform:uppercase}
+    body.admin-page .sidebar-mark{box-shadow:0 8px 22px -6px rgba(255,45,66,.55),inset 0 1px 0 rgba(255,255,255,.25)}
+    body.admin-page .sidebar-brand{border-bottom:1px solid var(--line)}
+    body.admin-page .sidebar-footer{border-top:1px solid var(--line)}
+    body.admin-page .side-nav-icon{width:22px;text-align:center;opacity:.7;transition:opacity .2s,transform .2s}
+    body.admin-page .side-nav-item:hover .side-nav-icon{opacity:1;transform:scale(1.08)}
+    body.admin-page .side-nav-item.active .side-nav-icon{opacity:1;color:#ff8a96}
+    body.admin-page .side-nav-item[disabled]{opacity:.35 !important}
 
     /* top bar details */
-    body.live-app.admin-page.toyota-theme .app-topbar .btn, body.live-app.admin-page.toyota-theme .app-topbar .btn-primary{height:40px;font-weight:600 !important}
-    body.live-app.admin-page.toyota-theme .status{height:28px;display:inline-flex !important;align-items:center;padding:0 11px !important;font-size:12px !important}
-    body.live-app.admin-page.toyota-theme .status:not(.ok)::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--warn);margin-right:7px;box-shadow:0 0 8px var(--warn)}
-    body.live-app.admin-page.toyota-theme .status.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:7px;box-shadow:0 0 8px var(--ok)}
+    body.admin-page .app-topbar .btn, body.admin-page .app-topbar .btn-primary{height:40px;font-weight:600 !important}
+    body.admin-page .status{height:28px;display:inline-flex !important;align-items:center;padding:0 11px !important;font-size:12px !important}
+    body.admin-page .status:not(.ok)::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--warn);margin-right:7px;box-shadow:0 0 8px var(--warn)}
+    body.admin-page .status.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:7px;box-shadow:0 0 8px var(--ok)}
 
     /* KPI details */
-    body.live-app.admin-page.toyota-theme .pbi-kpi .lab{font-size:10.5px !important;font-weight:700 !important;text-transform:uppercase}
-    body.live-app.admin-page.toyota-theme .pbi-kpi .val{font-variant-numeric:tabular-nums;line-height:1.1}
-    body.live-app.admin-page.toyota-theme .pbi-kpi{transition:transform .2s ease,border-color .2s ease}
-    body.live-app.admin-page.toyota-theme .pbi-kpi:hover{transform:translateY(-2px);border-color:var(--line-2) !important}
+    body.admin-page .pbi-kpi .lab{font-size:10.5px !important;font-weight:700 !important;text-transform:uppercase}
+    body.admin-page .pbi-kpi .val{font-variant-numeric:tabular-nums;line-height:1.1}
+    body.admin-page .pbi-kpi{transition:transform .2s ease,border-color .2s ease}
+    body.admin-page .pbi-kpi:hover{transform:translateY(-2px);border-color:var(--line-2) !important}
 
     /* card details */
-    body.live-app.admin-page.toyota-theme .pbi-viz-head{padding-bottom:12px;margin-bottom:14px;border-bottom:1px solid var(--line)}
-    body.live-app.admin-page.toyota-theme .admin-section-tag{font-size:11.5px !important;padding:5px 11px !important}
-    body.live-app.admin-page.toyota-theme .admin-lead{max-width:110ch;line-height:1.65 !important}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(small){color:var(--muted) !important;letter-spacing:.08em}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(label){color:var(--ink-2) !important}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(div,li,article):has(> small + b, > small + strong){background-color:var(--sunk) !important;border-color:var(--line) !important}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(ul){padding-left:20px}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(li)::marker{color:var(--accent)}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(hr){border:0;border-top:1px solid var(--line)}
-    :where(body.live-app.admin-page.toyota-theme .card) :where(code,kbd){font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.9em;background:rgba(148,163,184,.1);padding:1px 6px;border-radius:6px;color:#c7d6ff}
+    body.admin-page .pbi-viz-head{padding-bottom:12px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+    body.admin-page .admin-section-tag{font-size:11.5px !important;padding:5px 11px !important}
+    body.admin-page .admin-lead{max-width:110ch;line-height:1.65 !important}
+    :where(body.admin-page .card) :where(small):where(:not(.bon-dock,.bon-dock *)){color:var(--muted) !important;letter-spacing:.08em}
+    :where(body.admin-page .card) :where(label):where(:not(.bon-dock,.bon-dock *)){color:var(--ink-2) !important}
+    :where(body.admin-page .card) :where(div,li,article):where(:not(.bon-dock *)):has(> small + b, > small + strong){background-color:var(--sunk) !important;border-color:var(--line) !important}
+    :where(body.admin-page .card) :where(ul){padding-left:20px}
+    :where(body.admin-page .card) :where(li)::marker{color:var(--accent)}
+    :where(body.admin-page .card) :where(hr){border:0;border-top:1px solid var(--line)}
+    :where(body.admin-page .card) :where(code,kbd){font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.9em;background:rgba(148,163,184,.1);padding:1px 6px;border-radius:6px;color:#c7d6ff}
 
     /* ===== buttons: one dark system for the whole page ===== */
-    body.live-app.admin-page.toyota-theme :is(button,input[type=button],input[type=submit],input[type=reset],a[class*="btn"],[role="button"]):not(.btn-primary):not([class*="primary"]):not(.side-nav-item):not([class*="bon-"]):not(.gec-ctl-list button):not(.sidebar-user-card){
+    body.admin-page :is(button,input[type=button],input[type=submit],input[type=reset],a[class*="btn"],[role="button"]):not(.btn-primary):not([class*="primary"]):not(.side-nav-item):not([class*="bon-"]):not(.gec-ctl-list button):not(.sidebar-user-card){
       background:var(--surface-2) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:10px !important;box-shadow:none !important;
       font-family:inherit;font-weight:600 !important;cursor:pointer;text-shadow:none !important;transition:background .18s,border-color .18s,color .18s,transform .18s}
-    body.live-app.admin-page.toyota-theme :is(button,input[type=button],input[type=submit],input[type=reset],a[class*="btn"],[role="button"]):not(.btn-primary):not([class*="primary"]):not(.side-nav-item):not([class*="bon-"]):not(.gec-ctl-list button):not(.sidebar-user-card):hover:not(:disabled){
+    body.admin-page :is(button,input[type=button],input[type=submit],input[type=reset],a[class*="btn"],[role="button"]):not(.btn-primary):not([class*="primary"]):not(.side-nav-item):not([class*="bon-"]):not(.gec-ctl-list button):not(.sidebar-user-card):hover:not(:disabled){
       background:var(--raise) !important;border-color:rgba(148,163,184,.42) !important;transform:translateY(-1px)}
-    body.live-app.admin-page.toyota-theme :is(button,input[type=button],input[type=submit]):not(.side-nav-item):not([class*="bon-"]):active:not(:disabled){transform:translateY(0) scale(.98)}
-    body.live-app.admin-page.toyota-theme :is(button,input[type=button],input[type=submit],a[class*="btn"]):disabled{opacity:.42 !important;cursor:not-allowed !important;transform:none !important;box-shadow:none !important}
+    body.admin-page :is(button,input[type=button],input[type=submit]):not(.side-nav-item):not([class*="bon-"]):active:not(:disabled){transform:translateY(0) scale(.98)}
+    body.admin-page :is(button,input[type=button],input[type=submit],a[class*="btn"]):disabled{opacity:.42 !important;cursor:not-allowed !important;transform:none !important;box-shadow:none !important}
     /* main actions stay red */
-    body.live-app.admin-page.toyota-theme :is(button,a,input[type=submit])[class*="primary"]:not(.side-nav-item):not([class*="bon-"]){
+    body.admin-page :is(button,a,input[type=submit])[class*="primary"]:not(.side-nav-item):not([class*="bon-"]){
       background:linear-gradient(180deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:1px solid rgba(255,90,105,.6) !important;border-radius:10px !important;
       box-shadow:0 8px 22px -8px rgba(255,45,66,.65),inset 0 1px 0 rgba(255,255,255,.18) !important;font-weight:600 !important}
-    body.live-app.admin-page.toyota-theme :is(button,a,input[type=submit])[class*="primary"]:not(.side-nav-item):not([class*="bon-"]):hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
+    body.admin-page :is(button,a,input[type=submit])[class*="primary"]:not(.side-nav-item):not([class*="bon-"]):hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
     /* remove / delete: quiet until hover */
-    body.live-app.admin-page.toyota-theme :is(button,a)[data-notif-remove], body.live-app.admin-page.toyota-theme :is(button,a)[data-ytd-remove], body.live-app.admin-page.toyota-theme :is(button,a)[class*="danger"], body.live-app.admin-page.toyota-theme :is(button,a)[class*="remove"], body.live-app.admin-page.toyota-theme :is(button,a)[class*="delete"]{color:#ff9aac !important;background:rgba(255,107,139,.06) !important;border-color:rgba(255,107,139,.28) !important}
-    body.live-app.admin-page.toyota-theme :is(button,a)[data-notif-remove]:hover, body.live-app.admin-page.toyota-theme :is(button,a)[data-ytd-remove]:hover, body.live-app.admin-page.toyota-theme :is(button,a)[class*="danger"]:hover, body.live-app.admin-page.toyota-theme :is(button,a)[class*="remove"]:hover, body.live-app.admin-page.toyota-theme :is(button,a)[class*="delete"]:hover{background:rgba(255,107,139,.14) !important;border-color:rgba(255,107,139,.5) !important}
+    body.admin-page :is(button,a)[data-notif-remove], body.admin-page :is(button,a)[data-ytd-remove], body.admin-page :is(button,a)[class*="danger"], body.admin-page :is(button,a)[class*="remove"], body.admin-page :is(button,a)[class*="delete"]{color:#ff9aac !important;background:rgba(255,107,139,.06) !important;border-color:rgba(255,107,139,.28) !important}
+    body.admin-page :is(button,a)[data-notif-remove]:hover, body.admin-page :is(button,a)[data-ytd-remove]:hover, body.admin-page :is(button,a)[class*="danger"]:hover, body.admin-page :is(button,a)[class*="remove"]:hover, body.admin-page :is(button,a)[class*="delete"]:hover{background:rgba(255,107,139,.14) !important;border-color:rgba(255,107,139,.5) !important}
     /* small buttons */
-    body.live-app.admin-page.toyota-theme .btn.small, body.live-app.admin-page.toyota-theme button.small{height:32px !important;padding:0 11px !important;font-size:12.5px !important}
-    body.live-app.admin-page.toyota-theme .gec-ctl-list button{background:transparent !important;color:var(--muted) !important;border:0 !important}
-    body.live-app.admin-page.toyota-theme .gec-ctl-list button:hover{color:var(--bad) !important}
+    body.admin-page .btn.small, body.admin-page button.small{height:32px !important;padding:0 11px !important;font-size:12.5px !important}
+    body.admin-page .gec-ctl-list button{background:transparent !important;color:var(--muted) !important;border:0 !important}
+    body.admin-page .gec-ctl-list button:hover{color:var(--bad) !important}
     /* dialog buttons */
-    body.live-app.admin-page.toyota-theme .eom-dialog .btn{height:38px;padding:0 14px}
-    body.live-app.admin-page.toyota-theme .eom-dialog .btn-primary{height:38px;padding:0 16px}
+    body.admin-page .eom-dialog .btn{height:38px;padding:0 14px}
+    body.admin-page .eom-dialog .btn-primary{height:38px;padding:0 16px}
 
     /* form text uses the page font */
-    body.live-app.admin-page.toyota-theme :is(input,select,textarea,button){font-family:inherit}
-    body.live-app.admin-page.toyota-theme .app-main :is(input[type=text],input[type=number],input[type=date],input[type=month],input[type=search],input[type=password],input:not([type]),select){min-height:36px;padding-left:12px;padding-right:12px}
-    body.live-app.admin-page.toyota-theme .app-main textarea{padding:10px 12px !important;line-height:1.55}
+    body.admin-page :is(input,select,textarea,button){font-family:inherit}
+    body.admin-page .app-main :is(input[type=text],input[type=number],input[type=date],input[type=month],input[type=search],input[type=password],input:not([type]),select){min-height:36px;padding-left:12px;padding-right:12px}
+    body.admin-page .app-main textarea{padding:10px 12px !important;line-height:1.55}
 
     /* selects: dark chevron, even padding */
-    body.live-app.admin-page.toyota-theme .app-main select:not([multiple]), .bon-drawer select.bon-in, .bon-dock select{-webkit-appearance:none;appearance:none;padding-left:12px !important;padding-right:34px !important;
+    body.admin-page .app-main select:not([multiple]), .bon-drawer select.bon-in, .bon-dock select{-webkit-appearance:none;appearance:none;padding-left:12px !important;padding-right:34px !important;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237f8899' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
       background-repeat:no-repeat !important;background-position:right 12px center !important;background-size:12px 8px !important;cursor:pointer}
-    body.live-app.admin-page.toyota-theme .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea):hover:not(:focus):not(:disabled){border-color:rgba(148,163,184,.38) !important}
-    body.live-app.admin-page.toyota-theme .app-main :is(input,select,textarea):disabled{opacity:.5}
-    body.live-app.admin-page.toyota-theme .app-main input[type=checkbox], body.live-app.admin-page.toyota-theme .app-main input[type=radio]{width:16px;height:16px;vertical-align:-3px;cursor:pointer}
-    body.live-app.admin-page.toyota-theme .app-main input[type=file]{color:var(--muted)}
-    body.live-app.admin-page.toyota-theme .app-main input[type=file]::file-selector-button{background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:9px;padding:7px 12px;margin-right:10px;cursor:pointer;font:inherit;font-weight:600}
-    body.live-app.admin-page.toyota-theme .app-main fieldset{border:1px solid var(--line) !important;border-radius:12px !important;padding:10px 14px 12px !important}
-    body.live-app.admin-page.toyota-theme .app-main legend{padding:0 6px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted) !important}
-    body.live-app.admin-page.toyota-theme .notif-radio{display:inline-flex !important;align-items:center;gap:8px;margin-right:14px;color:var(--ink-2) !important}
-    body.live-app.admin-page.toyota-theme .br-picks label{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;margin:3px;border:1px solid var(--line) !important;border-radius:9px;background:var(--sunk) !important}
-    body.live-app.admin-page.toyota-theme .br-picks label:has(input:checked){border-color:rgba(255,45,66,.45) !important;background:rgba(255,45,66,.08) !important;color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .gen-chips button{font-family:"JetBrains Mono",ui-monospace,monospace !important;font-size:11.5px !important;color:#c7d6ff !important;padding:4px 9px !important;height:auto !important}
-    body.live-app.admin-page.toyota-theme .gen-preview-card{border:1px solid var(--line) !important;border-radius:12px;padding:10px 12px;margin-top:8px;background:var(--sunk) !important}
-    body.live-app.admin-page.toyota-theme .gen-preview-card pre{white-space:pre-wrap;color:var(--ink-2);font-family:inherit;margin:6px 0 0}
-    body.live-app.admin-page.toyota-theme details > summary{cursor:pointer;color:var(--ink-2);font-weight:600}
-    body.live-app.admin-page.toyota-theme details > summary::marker{color:var(--accent)}
+    body.admin-page .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea):hover:not(:focus):not(:disabled){border-color:rgba(148,163,184,.38) !important}
+    body.admin-page .app-main :is(input,select,textarea):disabled{opacity:.5}
+    body.admin-page .app-main input[type=checkbox], body.admin-page .app-main input[type=radio]{width:16px;height:16px;vertical-align:-3px;cursor:pointer}
+    body.admin-page .app-main input[type=file]{color:var(--muted)}
+    body.admin-page .app-main input[type=file]::file-selector-button{background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:9px;padding:7px 12px;margin-right:10px;cursor:pointer;font:inherit;font-weight:600}
+    body.admin-page .app-main fieldset{border:1px solid var(--line) !important;border-radius:12px !important;padding:10px 14px 12px !important}
+    body.admin-page .app-main legend{padding:0 6px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted) !important}
+    body.admin-page .notif-radio{display:inline-flex !important;align-items:center;gap:8px;margin-right:14px;color:var(--ink-2) !important}
+    body.admin-page .br-picks label{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;margin:3px;border:1px solid var(--line) !important;border-radius:9px;background:var(--sunk) !important}
+    body.admin-page .br-picks label:has(input:checked){border-color:rgba(255,45,66,.45) !important;background:rgba(255,45,66,.08) !important;color:var(--ink) !important}
+    body.admin-page .gen-chips button{font-family:"JetBrains Mono",ui-monospace,monospace !important;font-size:11.5px !important;color:#c7d6ff !important;padding:4px 9px !important;height:auto !important}
+    body.admin-page .gen-preview-card{border:1px solid var(--line) !important;border-radius:12px;padding:10px 12px;margin-top:8px;background:var(--sunk) !important}
+    body.admin-page .gen-preview-card pre{white-space:pre-wrap;color:var(--ink-2);font-family:inherit;margin:6px 0 0}
+    body.admin-page details > summary{cursor:pointer;color:var(--ink-2);font-weight:600}
+    body.admin-page details > summary::marker{color:var(--accent)}
 
     /* table details */
-    body.live-app.admin-page.toyota-theme .app-main table{border-collapse:separate !important;border-spacing:0;border:1px solid var(--line) !important;border-radius:12px;overflow:hidden}
-    body.live-app.admin-page.toyota-theme .app-main table th{font-size:11px;font-weight:700;text-transform:uppercase;text-align:left;padding:10px 12px}
-    body.live-app.admin-page.toyota-theme .app-main table td{padding:10px 12px;border-top:1px solid var(--line) !important;border-bottom:0 !important}
-    body.live-app.admin-page.toyota-theme .app-main table tbody tr:first-child td{border-top:0 !important}
-    body.live-app.admin-page.toyota-theme .app-main .allocation-plan-table{border-radius:0;overflow:visible}
+    body.admin-page .app-main table{border-collapse:separate !important;border-spacing:0;border:1px solid var(--line) !important;border-radius:12px;overflow:hidden}
+    body.admin-page .app-main table th{font-size:11px;font-weight:700;text-transform:uppercase;text-align:left;padding:10px 12px}
+    body.admin-page .app-main table td{padding:10px 12px;border-top:1px solid var(--line) !important;border-bottom:0 !important}
+    body.admin-page .app-main table tbody tr:first-child td{border-top:0 !important}
+    body.admin-page .app-main .allocation-plan-table{border-radius:0;overflow:visible}
 
     /* upload slot details */
-    body.live-app.admin-page.toyota-theme .slot{position:relative;overflow:hidden}
-    body.live-app.admin-page.toyota-theme .slot.loaded::after{content:"✓";position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;color:#06210f;background:var(--ok);box-shadow:0 0 14px rgba(61,220,151,.5)}
-    body.live-app.admin-page.toyota-theme .slot .meta b{color:var(--ink) !important}
-    body.live-app.admin-page.toyota-theme .slot .n{border-radius:10px !important;font-family:"JetBrains Mono",monospace;font-weight:700}
+    body.admin-page .slot{position:relative;overflow:hidden}
+    body.admin-page .slot.loaded::after{content:"✓";position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;color:#06210f;background:var(--ok);box-shadow:0 0 14px rgba(61,220,151,.5)}
+    body.admin-page .slot .meta b{color:var(--ink) !important}
+    body.admin-page .slot .n{border-radius:10px !important;font-family:"JetBrains Mono",monospace;font-weight:700}
 
     /* target rows */
-    body.live-app.admin-page.toyota-theme .target-row{border-bottom:1px solid var(--line) !important;transition:background .15s}
-    body.live-app.admin-page.toyota-theme .target-row:hover{background:rgba(148,163,184,.04) !important}
-    body.live-app.admin-page.toyota-theme .target-row.is-vacation{opacity:.6}
-    body.live-app.admin-page.toyota-theme .target-emp-code{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted) !important;background:rgba(148,163,184,.08) !important;border-radius:6px;padding:2px 6px}
+    body.admin-page .target-row{border-bottom:1px solid var(--line) !important;transition:background .15s}
+    body.admin-page .target-row:hover{background:rgba(148,163,184,.04) !important}
+    body.admin-page .target-row.is-vacation{opacity:.6}
+    body.admin-page .target-emp-code{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted) !important;background:rgba(148,163,184,.08) !important;border-radius:6px;padding:2px 6px}
 
-    /* dock: quiet while idle, sticky once there is a result */
-    .bon-dock{position:relative;bottom:auto}
-    .bon-dock.ready{position:sticky;bottom:14px}
-    .bon-dock:not(.ready) .bon-acts .bon-btn{filter:saturate(.4)}
+    /* hide empty boxes the builder leaves behind (they show up again when filled) */
+    body.admin-page #boe-rules-root :is(div,p,section,pre):empty{display:none !important}
+
+    /* ===== BO Error Condition · one screen ===== */
+    .shell:has(#panel-bonotifications:not([hidden])) > #admin-kpis{display:none !important}
+    body.admin-page #panel-bonotifications .card{padding:16px 18px !important;display:flex;flex-direction:column;gap:10px}
+    body.admin-page #panel-bonotifications .pbi-viz-head{margin:0 !important;padding-bottom:10px}
+    body.admin-page #panel-bonotifications .admin-lead{margin:0 !important;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;cursor:help}
+    body.admin-page #panel-bonotifications .admin-lead:hover{-webkit-line-clamp:unset}
+    body.admin-page #bo-notif-unlock-note:empty, body.admin-page #bo-notif-unlock-note{margin:0 !important;font-size:12px}
+    body.admin-page #bo-notif-unlock-note:empty{display:none}
+
+    .bon-stage{display:grid;grid-template-columns:minmax(0,1fr) clamp(270px,20vw,330px);gap:14px;align-items:stretch}
+    .bon-stage > #boe-rules-root{min-width:0}
+
+    /* builder parts found by the script (class names added at run time) */
+    .bon-fit{display:grid !important;grid-template-columns:minmax(0,4fr) minmax(0,5fr);grid-auto-rows:min-content;column-gap:10px;row-gap:10px;align-content:start}
+    .bon-fit > *{grid-column:1 / -1;min-width:0;margin-top:0 !important;margin-bottom:0 !important;order:9}
+    .bon-fit > .bon-p-file, .bon-fit > .bon-p-stats{order:0}
+    .bon-fit > .bon-p-cols-slot{order:5}
+    /* BO file details: one quiet line */
+    .bon-p-file .bon-p-boxes, .bon-p-boxes.bon-p-line{display:flex !important;flex-wrap:wrap;gap:4px 18px !important;grid-template-columns:none !important}
+    .bon-p-boxes.bon-p-line > *{display:flex !important;align-items:baseline;gap:7px;padding:0 !important;border:0 !important;background:transparent !important;min-width:0}
+    .bon-p-boxes.bon-p-line > * > :first-child{font-size:10px !important;letter-spacing:.12em;color:var(--muted) !important}
+    .bon-p-boxes.bon-p-line > * > :last-child{font-size:13px !important;font-weight:600 !important;color:var(--ink) !important;margin:0 !important;max-width:280px}
+    .bon-p-boxes.bon-p-line > * + *::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--line-2);align-self:center;margin-right:11px}
+    /* stats: five slim tiles */
+    .bon-p-boxes{gap:6px !important;margin:0 !important}
+    .bon-p-boxes:not(.bon-p-line) > *{padding:7px 10px !important;border-radius:10px !important;min-width:0}
+    .bon-p-boxes:not(.bon-p-line) > * > :first-child{font-size:9.5px !important;letter-spacing:.1em !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;display:block}
+    .bon-p-boxes:not(.bon-p-line) > * > :last-child{font-size:15px !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:2px !important}
+    .bon-p-boxes:not(.bon-p-line){display:grid !important;grid-template-columns:repeat(auto-fit,minmax(110px,1fr)) !important}
+    .bon-fit .bon-p-note, .bon-fit > p:not(.bon-p-cols-slot){display:none !important}
+    .bon-p-cols{margin:0 !important;display:grid !important;grid-template-columns:minmax(190px,232px) minmax(0,1fr) !important;column-gap:16px !important;row-gap:12px !important}
+    .bon-p-col{min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-gutter:stable}
+    .bon-p-col-rules{border-right:1px solid var(--line);padding-right:14px}
+    .bon-p-col :is(h2,h3,h4){margin-top:0 !important}
+    .bon-p-col :is(input:not([type=checkbox]):not([type=radio]),select){min-height:34px !important;height:34px}
+    .bon-p-col textarea{min-height:90px}
+    .bon-p-col :is(select,input:not([type=checkbox]):not([type=radio]),textarea){min-width:0 !important;max-width:100%}
+
+    /* fixed height so the page itself never scrolls */
+    @media (min-width:1100px) and (min-height:640px){
+      .bon-stage{height:var(--bon-h,auto)}
+      #boe-rules-root.bon-has-fit{height:100%;min-height:0;overflow:hidden}
+      #boe-rules-root.bon-has-fit .bon-p-chain{height:100%;min-height:0}
+      .bon-fit{height:100%;min-height:0;grid-template-rows:minmax(0,1fr);grid-auto-rows:min-content;overflow:hidden}
+      .bon-fit:has(> .bon-p-file, > .bon-p-stats){grid-template-rows:auto minmax(0,1fr)}
+      .bon-fit:has(> .bon-p-file):has(> .bon-p-stats){grid-template-rows:auto auto minmax(0,1fr)}
+      .bon-fit > .bon-p-cols-slot{min-height:0;align-self:stretch}
+      .bon-p-cols{height:100%;min-height:0;align-items:stretch !important}
+      .bon-p-col{max-height:100%}
+      .bon-dock{height:100%}
+    }
+
+    /* the "what next?" side panel */
+    .bon-dock{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;min-width:0;overflow:auto;
+      background:linear-gradient(180deg,rgba(25,33,50,.9),rgba(14,19,30,.9));border:1px solid var(--line-2);transition:border-color .3s,box-shadow .3s}
+    .bon-dock.ready{border-color:rgba(255,45,66,.45);box-shadow:0 0 0 4px rgba(255,45,66,.07),0 20px 50px -24px rgba(255,45,66,.45)}
+    .bon-dock .bon-side-h{display:flex;gap:10px;align-items:center}
+    .bon-dock .bon-ico{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(148,163,184,.1);color:var(--muted);font-weight:800;transition:background .3s,color .3s}
+    .bon-dock.ready .bon-ico{background:rgba(255,45,66,.16);color:#ff8a96}
+    .bon-dock small.bon-eyebrow{display:block;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    .bon-dock #bon-title{display:block;color:var(--ink);font:700 15px/1.25 "Archivo",system-ui,sans-serif;margin-top:2px}
+    .bon-dock .bon-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .bon-dock .bon-kpis > div{background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+    .bon-dock .bon-kpis b{display:block;font:800 26px/1 "Archivo",system-ui,sans-serif;color:var(--ink);font-variant-numeric:tabular-nums;transition:color .3s}
+    .bon-dock.ready .bon-kpis b{color:#fff}
+    .bon-dock .bon-kpis small{display:block;margin-top:4px;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .bon-dock #bon-sub{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5;min-height:2.9em}
+    .bon-dock .bon-choice{display:flex;flex-direction:column;gap:8px}
+    .bon-dock .bon-choice .bon-btn{height:auto;padding:11px 12px;flex-direction:row;align-items:flex-start;text-align:left;line-height:1.3;width:100%}
+    .bon-dock .bon-choice .bon-btn i{margin-top:1px}
+    .bon-dock .bon-choice .bon-btn span{display:flex;flex-direction:column;gap:3px}
+    .bon-dock .bon-choice .bon-btn em{font-style:normal;font-weight:500;font-size:11.5px;opacity:.75}
+    .bon-dock:not(.ready) .bon-choice .bon-btn{filter:saturate(.3)}
+    .bon-dock .bon-pick{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:12px;border-top:1px solid var(--line)}
+    .bon-dock .bon-pick label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .bon-dock .bon-pick select{width:100%;height:36px;background-color:var(--sunk);color:var(--ink);border:1px solid var(--line-2);border-radius:10px}
+    .bon-dock .bon-result{display:none;padding:9px 11px;border-radius:10px;background:rgba(61,220,151,.08);border:1px solid rgba(61,220,151,.3);color:#9cf0c9;font-size:12.5px;line-height:1.45}
+    .bon-dock .bon-result.show{display:block;animation:adm-rise .3s ease both}
+    @media (max-width:1099px){.bon-stage{grid-template-columns:1fr}.bon-fit{grid-template-columns:1fr}.bon-fit > .bon-p-file,.bon-fit > .bon-p-stats{grid-column:1}.bon-p-col-rules{border-right:0;padding-right:0}}
+
+    /* panel chrome while on this page */
+    .app-content:has(#panel-bonotifications:not([hidden])) .page-foot{display:none !important}
+    body.admin-page #panel-bonotifications #bo-notif-unlock-note{display:none !important}
+    .bon-dock .bon-choice .bon-btn{display:grid;grid-template-columns:18px minmax(0,1fr);column-gap:8px;border-radius:12px}
+    .bon-dock .bon-mini{display:flex;flex-direction:column;gap:4px;min-height:0}
+    .bon-dock .bon-mini:empty{display:none}
+    .bon-dock .bon-mini > small{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+    .bon-dock .bon-mini > div{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;background:rgba(148,163,184,.05);font-size:12.5px;color:var(--ink-2);animation:adm-rise .3s ease both}
+    .bon-dock .bon-mini > div b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-weight:600}
+    .bon-dock .bon-mini > div span{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--muted)}
+    .bon-dock .bon-mini > div i{font-style:normal;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:rgba(122,162,255,.14);color:#c7d6ff;font-size:11px;font-weight:700}
     @keyframes adm-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
     @keyframes bon-pop{0%{transform:translateY(10px) scale(.98);opacity:.4}100%{transform:none;opacity:1}}
     @keyframes bon-sh{to{background-position:-200% 0}}
     @keyframes bon-tin{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
     @keyframes bon-tout{to{opacity:0;transform:translateX(20px)}}
-    @media (max-width:640px){.bon-seg{grid-template-columns:1fr}.bon-stats{grid-template-columns:1fr 1fr}.bon-dock{bottom:8px}}
-    @media (prefers-reduced-motion:reduce){body.live-app.admin-page.toyota-theme *,.bon-drawer,.bon-scrim,.bon-toast{animation:none !important;transition:none !important}}
+    @media (max-width:640px){.bon-seg{grid-template-columns:1fr}.bon-stats{grid-template-columns:1fr 1fr}}
+    @media (prefers-reduced-motion:reduce){body.admin-page *,.bon-drawer,.bon-scrim,.bon-toast{animation:none !important;transition:none !important}}
   </style>
   <style id="admin-dark-v2-fix">
     /* Beat toyota-theme / dashboard hardcoded whites and BO panel light tokens. */
@@ -3073,18 +3142,99 @@
 
   const state = { rule: null, data: null, mode: "", staff: null, headers: null, rules: null, picked: new Set(), busy: false, testSeq: 0 };
 
-  /* ---------- dock ---------- */
-  const dock = document.createElement("div");
+  /* ---------- side panel ("what next?") ---------- */
+  const dock = document.createElement("aside");
   dock.className = "bon-dock";
+  dock.setAttribute("aria-label", "Next step");
   dock.innerHTML = `
-    <div class="bon-ico">?</div>
-    <div class="bon-txt"><b id="bon-title">Test a condition, then choose what to do</b><span id="bon-sub">Press Test conditions above, or pick a saved rule here.</span></div>
-    <div class="bon-pick" id="bon-pickwrap"><select id="bon-saved" aria-label="Saved rule"><option value="">Saved rules…</option></select></div>
-    <div class="bon-acts">
-      <button type="button" class="bon-btn bon-red" id="bon-go-err" disabled><i>⚠</i> Add to BO Error dashboard</button>
-      <button type="button" class="bon-btn bon-blue" id="bon-go-msg" disabled><i>✉</i> Send message only</button>
-    </div>`;
-  card.insertAdjacentElement("afterend", dock);
+    <div class="bon-side-h"><span class="bon-ico">?</span><div><small class="bon-eyebrow">Next step</small><b id="bon-title">Test a condition</b></div></div>
+    <div class="bon-kpis"><div><b id="bon-o">—</b><small>Orders</small></div><div><b id="bon-e">—</b><small>Employees</small></div></div>
+    <p id="bon-sub">Build a condition and press Test conditions. Then choose what to do with the orders.</p>
+    <div class="bon-result" id="bon-result" role="status"></div>
+    <div class="bon-mini" id="bon-mini"></div>
+    <div class="bon-choice">
+      <button type="button" class="bon-btn bon-red" id="bon-go-err" disabled><i>⚠</i><span>Add to BO Error dashboard<em>Shows under Order Errors · must be fixed</em></span></button>
+      <button type="button" class="bon-btn bon-blue" id="bon-go-msg" disabled><i>✉</i><span>Send message only<em>Messages page · nothing added to Order Errors</em></span></button>
+    </div>
+    <div class="bon-pick" id="bon-pickwrap"><label for="bon-saved">Or test a saved rule</label><select id="bon-saved"><option value="">Saved rules…</option></select></div>`;
+  const stage = document.createElement("div");
+  stage.className = "bon-stage";
+  root.parentNode.insertBefore(stage, root);
+  stage.append(root, dock);
+
+  /* ---------- fit the builder on one screen ---------- */
+  const textOf = (el) => String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+  function findByText(re, within) {
+    const all = (within || root).querySelectorAll("h1,h2,h3,h4,h5,b,strong,small,span,label,div,p");
+    for (const el of all) {
+      if (el.children.length > 2) continue;
+      if (re.test(textOf(el))) return el;
+    }
+    return null;
+  }
+  function childOf(frame, el) {
+    while (el && el.parentElement !== frame) el = el.parentElement;
+    return el;
+  }
+  function lca(a, b) {
+    const seen = new Set();
+    for (let n = a; n; n = n.parentElement) seen.add(n);
+    for (let n = b; n; n = n.parentElement) if (seen.has(n)) return n;
+    return null;
+  }
+  function tag(el, cls) { if (el && !el.classList.contains(cls)) el.classList.add(cls); }
+  function gridOf(lab) {
+    if (!lab) return null;
+    let box = lab;
+    while (box.parentElement && box.parentElement !== root && box.parentElement.children.length < 3) box = box.parentElement;
+    return box.parentElement && box.parentElement.children.length >= 3 ? box.parentElement : null;
+  }
+  let fitting = false;
+  function fitBuilder() {
+    if (fitting) return;
+    fitting = true;
+    try {
+      const rulesHead = findByText(/^message rules$/);
+      const formHead = findByText(/^(new message rule|edit message rule|message rule)$/) || findByText(/^(new|edit) .*rule$/);
+      if (!rulesHead || !formHead) return;
+      const cols = lca(rulesHead, formHead);
+      if (!cols || !root.contains(cols)) return;
+      const fileGrid = gridOf(findByText(/^bo file$/));
+      const statGrid = gridOf(findByText(/^messages generated$/));
+      let frame = cols;
+      [fileGrid, statGrid].forEach((g) => { if (g) frame = lca(frame, g); });
+      if (frame === cols) frame = cols.parentElement;
+      if (!frame || !root.contains(frame) && frame !== root) return;
+      tag(frame, "bon-fit");
+      for (let n = frame; n && n !== root; n = n.parentElement) if (n !== frame) tag(n, "bon-p-chain");
+      if (frame !== root) for (let n = frame.parentElement; n && n !== root; n = n.parentElement) tag(n, "bon-p-chain");
+      const colsChild = childOf(frame, cols);
+      tag(colsChild, "bon-p-cols-slot");
+      for (let n = cols; n && n !== colsChild; n = n.parentElement) tag(n, "bon-p-chain");
+      tag(cols, "bon-p-cols");
+      [...cols.children].forEach((c) => {
+        if (c.contains(rulesHead)) { tag(c, "bon-p-col"); tag(c, "bon-p-col-rules"); }
+        else if (c.contains(formHead)) { tag(c, "bon-p-col"); tag(c, "bon-p-col-form"); }
+      });
+      if (fileGrid) { tag(childOf(frame, fileGrid), "bon-p-file"); tag(fileGrid, "bon-p-boxes"); tag(fileGrid, "bon-p-line"); }
+      if (statGrid) { tag(childOf(frame, statGrid), "bon-p-stats"); tag(statGrid, "bon-p-boxes"); }
+      const note = findByText(/^the back order file is pushed from/);
+      if (note && frame.contains(note)) tag(note, "bon-p-note");
+      root.classList.add("bon-has-fit");
+    } finally { fitting = false; sizeStage(); }
+  }
+  function sizeStage() {
+    if (panel.hidden) return;
+    const card = stage.closest(".card");
+    const top = stage.getBoundingClientRect().top + window.scrollY;
+    const cs = card ? getComputedStyle(card) : null;
+    const below = (cs ? parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth) : 0) + 22;
+    const h = Math.max(480, Math.floor(window.innerHeight - top - below));
+    stage.style.setProperty("--bon-h", h + "px");
+  }
+  let fitTimer = 0;
+  new MutationObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(fitBuilder, 60); }).observe(root, { childList: true, subtree: true });
+  window.addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitBuilder, 80); });
 
   /* ---------- drawer ---------- */
   const scrim = document.createElement("div");
@@ -3144,19 +3294,23 @@
     const emps = Number(d.employeeCount) || 0;
     const has = !!state.rule && orders > 0;
     dock.classList.toggle("ready", has);
-    dock.querySelector(".bon-ico").textContent = has ? "✓" : "?";
-    document.getElementById("bon-title").innerHTML = state.rule
-      ? (orders ? `<span class="bon-num">${orders}</span> order${orders === 1 ? "" : "s"} · <span class="bon-num">${emps}</span> employee${emps === 1 ? "" : "s"} match — what next?` : "No orders match this condition")
-      : "Test a condition, then choose what to do";
+    dock.querySelector(".bon-ico").textContent = has ? "✓" : (state.rule ? "0" : "?");
+    document.getElementById("bon-title").textContent = has ? "What do you want to do?" : (state.rule ? "No orders match" : "Test a condition");
+    document.getElementById("bon-o").textContent = state.rule ? orders.toLocaleString("en-US") : "—";
+    document.getElementById("bon-e").textContent = state.rule ? emps.toLocaleString("en-US") : "—";
     document.getElementById("bon-sub").textContent = state.rule
       ? (d.conditionText || state.rule.name || "Checked against the current Back Order file") + (d.warning ? " · " + d.warning : "")
-      : "Press Test conditions above, or pick a saved rule here.";
+      : "Build a condition and press Test conditions. Then choose what to do with the orders.";
+    document.getElementById("bon-result").classList.remove("show");
+    const top = (d.previews || []).slice().sort((a, b) => (Number(b.orderCount) || 0) - (Number(a.orderCount) || 0)).slice(0, 5);
+    document.getElementById("bon-mini").innerHTML = has && top.length
+      ? `<small>Employees with most orders</small>` + top.map((p) => {
+        const name = String(p.salesmanName || p.name || "Employee");
+        return `<div><i>${esc(name.trim().charAt(0).toUpperCase())}</i><b>${esc(name)}</b>${p.orderCount != null ? `<span>${Number(p.orderCount)}</span>` : ""}</div>`;
+      }).join("") + ((d.previews || []).length > 5 ? `<small style="text-transform:none;letter-spacing:0;font-weight:500">+ ${(d.previews || []).length - 5} more</small>` : "")
+      : "";
     document.getElementById("bon-go-err").disabled = !has;
     document.getElementById("bon-go-msg").disabled = !has;
-    if (has && !panel.hidden) {
-      const r = dock.getBoundingClientRect();
-      if (r.top > window.innerHeight || r.bottom < 0) dock.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
   }
 
   /* saved rules in the dock */
@@ -3174,15 +3328,15 @@
   document.getElementById("bon-saved").addEventListener("change", async (e) => {
     const rule = (state.rules || []).find((r) => r.id === e.target.value);
     if (!rule) return;
-    document.getElementById("bon-title").textContent = "Checking against the Back Order file…";
+    document.getElementById("bon-title").textContent = "Checking…";
     const copy = JSON.parse(JSON.stringify(rule));
     delete copy.current;
     const { res, data } = await api("/bo-rules/test", { rule: copy });
     if (!res.ok) { toast("Could not test the rule", data.error || "", true); paintDock(); return; }
     onTested(copy, data);
   });
-  new MutationObserver(() => { if (!panel.hidden) loadMeta(); }).observe(panel, { attributes: true, attributeFilter: ["hidden"] });
-  if (!panel.hidden) loadMeta();
+  new MutationObserver(() => { if (!panel.hidden) { loadMeta(); requestAnimationFrame(fitBuilder); } }).observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+  if (!panel.hidden) { loadMeta(); requestAnimationFrame(fitBuilder); }
 
   async function loadStaff() {
     if (state.staff) return state.staff;
@@ -3488,7 +3642,9 @@
 
   function done(line) {
     close();
-    document.getElementById("bon-sub").textContent = line;
+    const box = document.getElementById("bon-result");
+    box.textContent = "✓ " + line;
+    box.classList.add("show");
     if (typeof window.loadNotifications === "function") { try { window.loadNotifications(); } catch (e) { /* ignore */ } }
   }
 })();
