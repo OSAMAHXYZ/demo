@@ -155,6 +155,373 @@
       background: #fff7ed !important;
     }
   </style>
+  <!-- ===== Admin dark design + BO next step (v2) ===== -->
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style id="admin-dark-v2">
+    body.admin-page{
+      --bg:#070a10; --surface:#111622; --surface-2:#151b29; --sunk:#0c111b; --raise:#192132;
+      --line:rgba(148,163,184,.13); --line-2:rgba(148,163,184,.24);
+      --ink:#eef2f8; --ink-2:#b3bccb; --muted:#7f8899;
+      --accent:#ff2d42; --accent-2:#d40a1c; --you:#7aa2ff;
+      --ok:#3ddc97; --warn:#f5b84b; --bad:#ff6b8b;
+      color-scheme:dark;
+      background:
+        radial-gradient(900px 520px at 85% -10%, rgba(255,45,66,.10), transparent 60%),
+        radial-gradient(700px 500px at 0% 100%, rgba(122,162,255,.07), transparent 60%),
+        var(--bg) !important;
+      background-attachment:fixed !important;
+      color:var(--ink) !important;
+    }
+    body.admin-page .app-frame, body.admin-page .app-main, body.admin-page .app-content, body.admin-page .shell{background:transparent !important;color:var(--ink)}
+
+    /* ---- sidebar ---- */
+    body.admin-page .app-sidebar{background:linear-gradient(180deg,#0d1220,#090d16) !important;border-right:1px solid var(--line) !important;box-shadow:none !important}
+    body.admin-page .sidebar-section-label{color:var(--muted) !important;letter-spacing:.14em}
+    body.admin-page .side-nav-item{color:var(--ink-2) !important;background:transparent !important;border-radius:12px !important;position:relative;transition:background .2s ease,color .2s ease,transform .2s ease}
+    body.admin-page .side-nav-item:hover{background:rgba(148,163,184,.08) !important;color:var(--ink) !important}
+    body.admin-page .side-nav-item .side-nav-label{color:inherit !important}
+    body.admin-page .side-nav-item.active{background:linear-gradient(90deg,rgba(255,45,66,.20),rgba(255,45,66,.04)) !important;color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,45,66,.25) !important}
+    body.admin-page .side-nav-item.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+    body.admin-page .sidebar-user-card{background:var(--surface-2) !important;border:1px solid var(--line) !important;color:var(--ink) !important}
+    body.admin-page .sidebar-user-meta span{color:var(--muted) !important}
+
+    /* ---- top bar ---- */
+    body.admin-page .app-topbar{background:rgba(9,13,22,.78) !important;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line) !important;box-shadow:none !important}
+    body.admin-page .app-topbar-eyebrow{color:var(--muted) !important;letter-spacing:.18em}
+    body.admin-page .app-page-title{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important;letter-spacing:-.01em}
+    body.admin-page .status{background:rgba(148,163,184,.10) !important;color:var(--ink-2) !important;border:1px solid var(--line-2) !important;border-radius:999px !important;font-weight:600}
+    body.admin-page .status.ok{background:rgba(61,220,151,.10) !important;color:var(--ok) !important;border-color:rgba(61,220,151,.3) !important}
+    body.admin-page .status.warn, body.admin-page .status.err{background:rgba(245,184,75,.10) !important;color:var(--warn) !important;border-color:rgba(245,184,75,.3) !important}
+
+    /* ---- buttons ---- */
+    body.admin-page .btn, body.admin-page button.btn, body.admin-page a.btn{background:var(--surface-2) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:11px !important;box-shadow:none !important;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+    body.admin-page .btn:hover:not(:disabled){background:var(--raise) !important;border-color:rgba(148,163,184,.4) !important;transform:translateY(-1px)}
+    body.admin-page .btn:disabled{opacity:.45 !important}
+    body.admin-page .btn-primary{background:linear-gradient(180deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:1px solid rgba(255,90,105,.6) !important;border-radius:11px !important;box-shadow:0 8px 24px -8px rgba(255,45,66,.65),inset 0 1px 0 rgba(255,255,255,.18) !important;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+    body.admin-page .btn-primary:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.07);box-shadow:0 12px 30px -8px rgba(255,45,66,.8),inset 0 1px 0 rgba(255,255,255,.18) !important}
+    body.admin-page .btn-primary:disabled{opacity:.5 !important;box-shadow:none !important}
+
+    /* ---- KPI tiles ---- */
+    body.admin-page .pbi-kpi{background:linear-gradient(180deg,var(--surface-2),var(--surface)) !important;border:1px solid var(--line) !important;border-radius:16px !important;box-shadow:0 10px 30px -18px rgba(0,0,0,.8) !important;position:relative;overflow:hidden;color:var(--ink) !important;animation:adm-rise .5s cubic-bezier(.2,.7,.2,1) both}
+    body.admin-page .pbi-kpi::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--accent),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(2)::before{background:linear-gradient(90deg,var(--warn),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(3)::before,body.admin-page .pbi-kpi:nth-child(4)::before{background:linear-gradient(90deg,var(--you),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(n+5)::before{background:linear-gradient(90deg,var(--ok),transparent 70%)}
+    body.admin-page .pbi-kpi:nth-child(2){animation-delay:.04s} body.admin-page .pbi-kpi:nth-child(3){animation-delay:.08s}
+    body.admin-page .pbi-kpi:nth-child(4){animation-delay:.12s} body.admin-page .pbi-kpi:nth-child(5){animation-delay:.16s}
+    body.admin-page .pbi-kpi:nth-child(6){animation-delay:.2s} body.admin-page .pbi-kpi:nth-child(7){animation-delay:.24s}
+    body.admin-page .pbi-kpi .lab{color:var(--muted) !important;letter-spacing:.12em}
+    body.admin-page .pbi-kpi .val{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important}
+
+    /* ---- cards ---- */
+    body.admin-page .card, body.admin-page .admin-section-card, body.admin-page .pbi-slicer{background:linear-gradient(180deg,rgba(21,27,41,.92),rgba(17,22,34,.92)) !important;border:1px solid var(--line) !important;border-radius:18px !important;box-shadow:0 18px 50px -30px rgba(0,0,0,.9) !important;color:var(--ink) !important}
+    body.admin-page .admin-panel:not([hidden]){animation:adm-rise .35s cubic-bezier(.2,.7,.2,1) both}
+    body.admin-page .pbi-viz-head h2, body.admin-page .card h2{color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important;font-weight:800 !important;letter-spacing:-.01em}
+    body.admin-page .card h3, body.admin-page .card h4{color:var(--ink) !important}
+    body.admin-page .admin-section-tag{background:rgba(148,163,184,.08) !important;color:var(--ink-2) !important;border:1px solid var(--line-2) !important;border-radius:999px !important}
+    body.admin-page .admin-lead, body.admin-page .hint, body.admin-page .foot, body.admin-page .pbi-slicer-hint, body.admin-page .muted{color:var(--muted) !important}
+    body.admin-page .admin-lead b, body.admin-page .hint b{color:var(--ink) !important}
+    body.admin-page .xl-toolbar, body.admin-page .admin-toolbar{background:transparent !important;border-color:var(--line) !important}
+    body.admin-page .banner{border-radius:12px !important}
+    body.admin-page .banner.err{background:rgba(255,107,139,.10) !important;color:var(--bad) !important;border:1px solid rgba(255,107,139,.3) !important}
+    body.admin-page .banner.load{background:rgba(122,162,255,.08) !important;color:var(--you) !important;border:1px solid rgba(122,162,255,.25) !important}
+    body.admin-page .page-foot{color:var(--muted) !important}
+    body.admin-page .page-foot a{color:var(--you) !important}
+
+    /* everything inside cards: no white boxes, readable text */
+    :where(body.admin-page .card) :where(div,section,article,aside,fieldset,details,summary,li,ul,ol,p,label,header,footer,form,dl,dt,dd,span):where(:not([style*="background"])){background-color:transparent !important;border-color:var(--line-2) !important}
+    :where(body.admin-page .card) :where(p,li,label,legend,span,dt,dd,small,td,div,summary,h3,h4,h5,h6){color:inherit !important}
+    :where(body.admin-page .card) :where(b,strong,h3,h4,h5,legend){color:var(--ink) !important}
+    body.admin-page .card{--muted:#7f8899}
+
+    /* ---- form controls ---- */
+    body.admin-page .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea){background-color:var(--sunk) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:10px !important;box-shadow:none !important;transition:border-color .18s ease,box-shadow .18s ease}
+    body.admin-page .app-main :is(input,select,textarea)::placeholder{color:#5d6678 !important}
+    body.admin-page .app-main :is(input,select,textarea):focus{outline:none !important;border-color:rgba(122,162,255,.7) !important;box-shadow:0 0 0 3px rgba(122,162,255,.18) !important}
+    body.admin-page .app-main select option{background:#111622;color:var(--ink)}
+    body.admin-page .app-main input[type=checkbox], body.admin-page .app-main input[type=radio]{accent-color:var(--accent)}
+    body.admin-page .app-main input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.85)}
+    body.admin-page .app-main :is(button:not(.btn):not(.btn-primary):not(.side-nav-item):not([class*="bon-"])){background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:10px}
+    body.admin-page .app-main :is(button:not(.btn):not(.btn-primary):not(.side-nav-item):not([class*="bon-"])):hover{background:var(--raise)}
+
+    /* ---- tables ---- */
+    body.admin-page .app-main table{background:transparent !important;color:var(--ink-2) !important;border-color:var(--line) !important}
+    body.admin-page .app-main table th{background:var(--surface-2) !important;color:var(--muted) !important;border-color:var(--line) !important;letter-spacing:.06em}
+    body.admin-page .app-main table td{border-color:var(--line) !important;color:var(--ink-2)}
+    body.admin-page .app-main table tbody tr:hover > td{background:rgba(148,163,184,.05)}
+
+    /* ---- upload slots ---- */
+    body.admin-page .slot{background:var(--sunk) !important;border:1px dashed var(--line-2) !important;border-radius:16px !important;color:var(--ink) !important;transition:border-color .2s ease,transform .2s ease,background .2s ease}
+    body.admin-page .slot:hover{border-color:rgba(255,45,66,.55) !important;transform:translateY(-2px);background:#0f1522 !important}
+    body.admin-page .slot.loaded, body.admin-page .slot.is-loaded{border-style:solid !important;border-color:rgba(61,220,151,.45) !important;background:linear-gradient(180deg,rgba(61,220,151,.07),var(--sunk)) !important}
+    body.admin-page .slot h3{color:var(--ink) !important}
+    body.admin-page .slot .meta, body.admin-page .slot .ar{color:var(--muted) !important}
+    body.admin-page .slot .n{background:rgba(255,45,66,.14) !important;color:#ff8a96 !important;border:1px solid rgba(255,45,66,.3) !important}
+    body.admin-page .pill{border-radius:999px !important}
+    body.admin-page .pill.slot-draft{background:rgba(245,184,75,.12) !important;color:var(--warn) !important;border:1px solid rgba(245,184,75,.35) !important}
+    body.admin-page .pill.slot-required{background:rgba(255,45,66,.12) !important;color:#ff8a96 !important;border:1px solid rgba(255,45,66,.35) !important}
+
+    /* ---- GEC, allocation, dialog ---- */
+    body.admin-page .gec-ctl-col{border-color:var(--line-2) !important;background:var(--sunk) !important}
+    body.admin-page .gec-ctl-list li{background:rgba(148,163,184,.07) !important;color:var(--ink-2)}
+    body.admin-page .gec-found-table .stage.s-visitor{background:rgba(167,139,250,.14);color:#c4b5fd}
+    body.admin-page .gec-found-table .stage.s-lead{background:rgba(122,162,255,.14);color:var(--you)}
+    body.admin-page .gec-found-table .stage.s-converted{background:rgba(61,220,151,.12);color:var(--ok)}
+    body.admin-page .gec-found-table .stage.s-unlisted{background:rgba(245,184,75,.12);color:var(--warn)}
+    body.admin-page #allocation-plan-wrap{background:var(--sunk) !important;border:1px solid var(--line-2) !important;border-radius:14px}
+    body.admin-page .allocation-plan-table{background:transparent !important;color:var(--ink) !important}
+    body.admin-page .allocation-plan-table .alloc-head-title th{background:#05080d !important;color:#fff !important}
+    body.admin-page .allocation-plan-table .alloc-head-cols th{background:var(--surface-2) !important;color:var(--ink-2) !important}
+    body.admin-page .allocation-plan-table td{color:var(--ink-2) !important;background:transparent !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-pc > td{background:rgba(29,78,216,.06) !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-cv > td{background:rgba(180,83,9,.06) !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-suv > td{background:rgba(4,120,87,.06) !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-pc > td.alloc-seg{background:#1d3fa8 !important;color:#fff !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-cv > td.alloc-seg{background:#8a4208 !important;color:#fff !important}
+    body.admin-page .allocation-plan-table tr.alloc-band-suv > td.alloc-seg{background:#06604a !important;color:#fff !important}
+    body.admin-page .allocation-plan-table td.alloc-product{color:var(--ink) !important}
+    body.admin-page .allocation-plan-table .alloc-sfx input, body.admin-page .allocation-plan-table .alloc-esales input{background:var(--bg) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important}
+    body.admin-page .allocation-plan-table .alloc-esales input{border-color:rgba(122,162,255,.5) !important;color:#c7d6ff !important}
+    body.admin-page .allocation-plan-table tr.is-product-total > td{background:rgba(122,162,255,.10) !important;color:#c7d6ff !important}
+    body.admin-page .allocation-plan-table tr.is-seg-total > td{background:rgba(148,163,184,.12) !important;color:var(--ink) !important}
+    body.admin-page .allocation-plan-table tr.is-grand-total > td{background:#05080d !important;color:#fff !important}
+    body.admin-page .allocation-plan-table tbody tr.is-leaf:hover > td:not(.alloc-seg){background:rgba(255,45,66,.06) !important}
+    body.admin-page .eom-dialog{background:var(--surface) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important}
+    body.admin-page .eom-dialog::backdrop{background:rgba(3,5,10,.7);backdrop-filter:blur(3px)}
+    body.admin-page .eom-dialog input{background:var(--sunk) !important;color:var(--ink) !important;border-color:var(--line-2) !important}
+    body.admin-page .eom-dialog .eom-err{color:var(--bad) !important}
+
+    /* ---- BO Error Condition: builder on dark ---- */
+    body.admin-page #panel-bonotifications .card :is(div,section,article,aside,p,li,ul,label,header,form)[style*="background"]{background:transparent !important}
+    body.admin-page #boe-rules-root :is(h1,h2,h3,h4){color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important}
+    body.admin-page #boe-rules-root{color:var(--ink-2)}
+    body.admin-page #boe-rules-root :is(div,section,article,aside)[class]{border-radius:12px}
+
+    /* ---- the next-step dock (after Test conditions) ---- */
+    .bon-dock{position:sticky;bottom:14px;z-index:30;margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border-radius:16px;
+      background:linear-gradient(180deg,rgba(25,33,50,.96),rgba(17,22,34,.96)) !important;border:1px solid var(--line-2) !important;
+      box-shadow:0 24px 60px -20px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.02) inset;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .3s ease,box-shadow .3s ease}
+    .bon-dock.ready{border-color:rgba(255,45,66,.45) !important;box-shadow:0 24px 60px -20px rgba(0,0,0,.9),0 0 0 4px rgba(255,45,66,.08);animation:bon-pop .45s cubic-bezier(.2,.8,.2,1)}
+    .bon-dock .bon-ico{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(148,163,184,.1);color:var(--muted);font-weight:800}
+    .bon-dock.ready .bon-ico{background:rgba(255,45,66,.15);color:#ff8a96}
+    .bon-dock .bon-txt{flex:1 1 260px;min-width:0}
+    .bon-dock .bon-txt b{display:block;color:var(--ink);font-family:"Archivo",system-ui,sans-serif;font-size:15px}
+    .bon-dock .bon-txt > span{display:block;color:var(--muted);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bon-dock .bon-num{font-family:"JetBrains Mono",ui-monospace,monospace;color:var(--ink)}
+    .bon-dock .bon-acts{display:flex;gap:8px;flex-wrap:wrap}
+    .bon-dock .bon-pick{display:flex;gap:8px;align-items:center}
+    .bon-dock .bon-pick select{max-width:240px;height:38px;padding:0 10px}
+    .bon-btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border-radius:11px;font-family:inherit;font-size:13.5px;font-weight:600;line-height:1;cursor:pointer;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);transition:transform .18s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease,opacity .18s}
+    .bon-btn:hover:not(:disabled){transform:translateY(-1px);background:var(--raise);border-color:rgba(148,163,184,.4)}
+    .bon-btn:disabled{opacity:.4;cursor:not-allowed}
+    .bon-btn.bon-red{background:linear-gradient(180deg,var(--accent),var(--accent-2));border-color:rgba(255,90,105,.6);color:#fff;box-shadow:0 8px 22px -8px rgba(255,45,66,.7)}
+    .bon-btn.bon-red:hover:not(:disabled){filter:brightness(1.07);background:linear-gradient(180deg,var(--accent),var(--accent-2))}
+    .bon-btn.bon-blue{background:rgba(122,162,255,.12);border-color:rgba(122,162,255,.4);color:#c7d6ff}
+    .bon-btn.bon-blue:hover:not(:disabled){background:rgba(122,162,255,.2)}
+    .bon-btn i{font-style:normal;font-size:15px}
+
+    /* drawer */
+    .bon-dock,.bon-drawer,.bon-toasts{font-family:"IBM Plex Sans Arabic","Outfit",system-ui,-apple-system,"Segoe UI",sans-serif}
+    .bon-drawer *,.bon-drawer *::before,.bon-drawer *::after,.bon-dock *{box-sizing:border-box}
+    .bon-scrim{position:fixed;inset:0;background:rgba(3,5,10,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:900;opacity:0;pointer-events:none;transition:opacity .28s ease}
+    .bon-scrim.open{opacity:1;pointer-events:auto}
+    .bon-drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);z-index:901;display:flex;flex-direction:column;background:#0e131e;border-left:1px solid var(--line-2);box-shadow:-30px 0 80px -20px rgba(0,0,0,.9);
+      transform:translateX(104%);transition:transform .38s cubic-bezier(.2,.8,.2,1);color:var(--ink);font-family:inherit}
+    .bon-drawer.open{transform:none}
+    .bon-dh{padding:20px 22px 14px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+    .bon-dh .bon-tag{display:inline-block;font:700 10.5px/1 "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;padding:5px 8px;border-radius:999px;margin-bottom:8px}
+    .bon-dh .bon-tag.t-err{background:rgba(255,45,66,.14);color:#ff8a96;border:1px solid rgba(255,45,66,.3)}
+    .bon-dh .bon-tag.t-msg{background:rgba(122,162,255,.14);color:#c7d6ff;border:1px solid rgba(122,162,255,.3)}
+    .bon-dh h3{margin:0;font:800 20px/1.2 "Archivo",system-ui,sans-serif;letter-spacing:-.01em;color:var(--ink)}
+    .bon-dh p{margin:6px 0 0;color:var(--muted);font-size:13px;line-height:1.5}
+    .bon-x{margin-left:auto;flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink-2);cursor:pointer;font-size:18px;line-height:1}
+    .bon-x:hover{background:var(--raise);color:var(--ink)}
+    .bon-db{flex:1;overflow:auto;padding:16px 22px 22px;display:flex;flex-direction:column;gap:16px}
+    .bon-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .bon-stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+    .bon-stat small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+    .bon-stat b{display:block;margin-top:4px;font:800 20px/1.1 "Archivo",system-ui,sans-serif;color:var(--ink)}
+    .bon-stat b.sm{font-family:inherit;font-size:13px;font-weight:600;line-height:1.35;color:var(--ink-2)}
+    .bon-sec{display:flex;flex-direction:column;gap:8px}
+    .bon-sec > label, .bon-sec > .bon-lab{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .bon-in{width:100%;background:var(--sunk);color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;transition:border-color .18s,box-shadow .18s}
+    .bon-in:focus{outline:none;border-color:rgba(122,162,255,.7);box-shadow:0 0 0 3px rgba(122,162,255,.18)}
+    textarea.bon-in{min-height:120px;resize:vertical;line-height:1.55}
+    .bon-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+    .bon-seg button{text-align:left;padding:10px 11px;border-radius:12px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);cursor:pointer;font:inherit;font-size:12.5px;line-height:1.3;transition:border-color .18s,background .18s,color .18s}
+    .bon-seg button b{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}
+    .bon-seg button[aria-pressed="true"]{border-color:rgba(255,45,66,.55);background:rgba(255,45,66,.08);color:var(--ink-2);box-shadow:0 0 0 3px rgba(255,45,66,.08)}
+    .bon-dsub{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .bon-dsub[hidden]{display:none}
+    .bon-step{display:inline-flex;align-items:center;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:var(--sunk)}
+    .bon-step button{width:36px;height:38px;border:0;background:transparent;color:var(--ink);cursor:pointer;font-size:16px}
+    .bon-step button:hover{background:var(--raise)}
+    .bon-step output{min-width:70px;text-align:center;font:600 13px "JetBrains Mono",monospace;color:var(--ink)}
+    .bon-chips{display:flex;gap:6px;flex-wrap:wrap}
+    .bon-chips button{padding:5px 9px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);color:#c7d6ff;font:500 11.5px "JetBrains Mono",monospace;cursor:pointer}
+    .bon-chips button:hover{background:var(--raise)}
+    .bon-list{display:flex;flex-direction:column;gap:6px}
+    .bon-head{display:flex;align-items:center;gap:10px;justify-content:space-between}
+    .bon-head a{color:var(--you);font-size:12.5px;cursor:pointer;text-decoration:none}
+    .bon-emp{border:1px solid var(--line);border-radius:12px;background:var(--surface);transition:border-color .2s,opacity .2s}
+    .bon-emp.off{opacity:.5}
+    .bon-emp.na{opacity:.45}
+    .bon-emp > div{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}
+    .bon-emp input{accent-color:var(--accent);width:16px;height:16px;flex:none}
+    .bon-av{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font:700 12px "Archivo",sans-serif;background:rgba(122,162,255,.14);color:#c7d6ff}
+    .bon-emp .nm{flex:1;min-width:0}
+    .bon-emp .nm b{display:block;color:var(--ink);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bon-emp .nm span{display:block;color:var(--muted);font-size:12px}
+    .bon-emp .tw{flex:none;color:var(--muted);font-size:12px;transition:transform .25s}
+    .bon-emp.open .tw{transform:rotate(90deg)}
+    .bon-emp pre{display:none;margin:0 12px 12px;padding:12px;border-radius:10px;background:var(--sunk);border:1px solid var(--line);white-space:pre-wrap;word-break:break-word;font:13px/1.6 "IBM Plex Sans Arabic",system-ui,sans-serif;color:var(--ink-2);max-height:260px;overflow:auto}
+    .bon-emp.open pre{display:block;animation:adm-rise .25s ease both}
+    .bon-note{padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.5}
+    .bon-note.warn{background:rgba(245,184,75,.08);border:1px solid rgba(245,184,75,.3);color:#f7cf86}
+    .bon-note.info{background:rgba(122,162,255,.07);border:1px solid rgba(122,162,255,.25);color:#c7d6ff}
+    .bon-note.bad{background:rgba(255,107,139,.08);border:1px solid rgba(255,107,139,.3);color:#ffb3c3}
+    .bon-note button{margin-top:8px}
+    .bon-df{padding:14px 22px calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;background:rgba(9,13,22,.9)}
+    .bon-df .bon-sum{flex:1;min-width:0;color:var(--muted);font-size:12.5px}
+    .bon-df .bon-sum b{color:var(--ink)}
+    .bon-bar{height:4px;border-radius:4px;background:rgba(148,163,184,.12);overflow:hidden}
+    .bon-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff8a96);transition:width .3s ease}
+    .bon-skel{height:46px;border-radius:12px;background:linear-gradient(90deg,var(--surface) 0%,var(--raise) 50%,var(--surface) 100%);background-size:200% 100%;animation:bon-sh 1.2s linear infinite}
+
+    .bon-toasts{position:fixed;right:18px;bottom:18px;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .bon-toast{pointer-events:auto;display:flex;gap:10px;align-items:flex-start;min-width:260px;max-width:380px;padding:12px 14px;border-radius:14px;background:#151b29;border:1px solid var(--line-2);color:var(--ink);box-shadow:0 20px 50px -15px rgba(0,0,0,.9);animation:bon-tin .35s cubic-bezier(.2,.8,.2,1) both;font-size:13px}
+    .bon-toast i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+    .bon-toast i.bad{background:var(--bad);box-shadow:0 0 10px var(--bad)}
+    .bon-toast b{display:block} .bon-toast span{color:var(--muted)}
+    .bon-toast.out{animation:bon-tout .3s ease forwards}
+
+
+    /* ===== polish: small details ===== */
+    body.admin-page ::selection{background:rgba(255,45,66,.35);color:#fff}
+    body.admin-page{scrollbar-color:#2a3346 transparent}
+    body.admin-page ::-webkit-scrollbar{width:10px;height:10px}
+    body.admin-page ::-webkit-scrollbar-thumb{background:#232b3c;border-radius:10px;border:2px solid transparent;background-clip:padding-box}
+    body.admin-page ::-webkit-scrollbar-thumb:hover{background:#334058;background-clip:padding-box;border:2px solid transparent}
+    body.admin-page ::-webkit-scrollbar-track{background:transparent}
+    body.admin-page :is(button,a,select,input,textarea,summary):focus-visible{outline:2px solid rgba(122,162,255,.8) !important;outline-offset:2px}
+    body.admin-page a{color:var(--you)}
+    body.admin-page .page-foot a{text-decoration:none;border-bottom:1px solid rgba(122,162,255,.35)}
+    body.admin-page .page-foot a:hover{border-bottom-color:var(--you)}
+
+    /* sidebar details */
+    body.admin-page .sidebar-section-label{font-size:10.5px !important;font-weight:700 !important;text-transform:uppercase}
+    body.admin-page .sidebar-mark{box-shadow:0 8px 22px -6px rgba(255,45,66,.55),inset 0 1px 0 rgba(255,255,255,.25)}
+    body.admin-page .sidebar-brand{border-bottom:1px solid var(--line)}
+    body.admin-page .sidebar-footer{border-top:1px solid var(--line)}
+    body.admin-page .side-nav-icon{width:22px;text-align:center;opacity:.7;transition:opacity .2s,transform .2s}
+    body.admin-page .side-nav-item:hover .side-nav-icon{opacity:1;transform:scale(1.08)}
+    body.admin-page .side-nav-item.active .side-nav-icon{opacity:1;color:#ff8a96}
+    body.admin-page .side-nav-item[disabled]{opacity:.35 !important}
+
+    /* top bar details */
+    body.admin-page .app-topbar .btn, body.admin-page .app-topbar .btn-primary{height:40px;font-weight:600 !important}
+    body.admin-page .status{height:28px;display:inline-flex !important;align-items:center;padding:0 11px !important;font-size:12px !important}
+    body.admin-page .status:not(.ok)::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--warn);margin-right:7px;box-shadow:0 0 8px var(--warn)}
+    body.admin-page .status.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:7px;box-shadow:0 0 8px var(--ok)}
+
+    /* KPI details */
+    body.admin-page .pbi-kpi .lab{font-size:10.5px !important;font-weight:700 !important;text-transform:uppercase}
+    body.admin-page .pbi-kpi .val{font-variant-numeric:tabular-nums;line-height:1.1}
+    body.admin-page .pbi-kpi{transition:transform .2s ease,border-color .2s ease}
+    body.admin-page .pbi-kpi:hover{transform:translateY(-2px);border-color:var(--line-2) !important}
+
+    /* card details */
+    body.admin-page .pbi-viz-head{padding-bottom:12px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+    body.admin-page .admin-section-tag{font-size:11.5px !important;padding:5px 11px !important}
+    body.admin-page .admin-lead{max-width:110ch;line-height:1.65 !important}
+    :where(body.admin-page .card) :where(small){color:var(--muted) !important;letter-spacing:.08em}
+    :where(body.admin-page .card) :where(label){color:var(--ink-2) !important}
+    :where(body.admin-page .card) :where(div,li,article):has(> small + b, > small + strong){background-color:var(--sunk) !important;border-color:var(--line) !important}
+    :where(body.admin-page .card) :where(ul){padding-left:20px}
+    :where(body.admin-page .card) :where(li)::marker{color:var(--accent)}
+    :where(body.admin-page .card) :where(hr){border:0;border-top:1px solid var(--line)}
+    :where(body.admin-page .card) :where(code,kbd){font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.9em;background:rgba(148,163,184,.1);padding:1px 6px;border-radius:6px;color:#c7d6ff}
+
+    /* ===== buttons: one dark system for the whole page ===== */
+    body.admin-page :is(button,input[type=button],input[type=submit],input[type=reset],a[class*="btn"],[role="button"]):not(.btn-primary):not([class*="primary"]):not(.side-nav-item):not([class*="bon-"]):not(.gec-ctl-list button):not(.sidebar-user-card){
+      background:var(--surface-2) !important;color:var(--ink) !important;border:1px solid var(--line-2) !important;border-radius:10px !important;box-shadow:none !important;
+      font-family:inherit;font-weight:600 !important;cursor:pointer;text-shadow:none !important;transition:background .18s,border-color .18s,color .18s,transform .18s}
+    body.admin-page :is(button,input[type=button],input[type=submit],input[type=reset],a[class*="btn"],[role="button"]):not(.btn-primary):not([class*="primary"]):not(.side-nav-item):not([class*="bon-"]):not(.gec-ctl-list button):not(.sidebar-user-card):hover:not(:disabled){
+      background:var(--raise) !important;border-color:rgba(148,163,184,.42) !important;transform:translateY(-1px)}
+    body.admin-page :is(button,input[type=button],input[type=submit]):not(.side-nav-item):not([class*="bon-"]):active:not(:disabled){transform:translateY(0) scale(.98)}
+    body.admin-page :is(button,input[type=button],input[type=submit],a[class*="btn"]):disabled{opacity:.42 !important;cursor:not-allowed !important;transform:none !important;box-shadow:none !important}
+    /* main actions stay red */
+    body.admin-page :is(button,a,input[type=submit])[class*="primary"]:not(.side-nav-item):not([class*="bon-"]){
+      background:linear-gradient(180deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:1px solid rgba(255,90,105,.6) !important;border-radius:10px !important;
+      box-shadow:0 8px 22px -8px rgba(255,45,66,.65),inset 0 1px 0 rgba(255,255,255,.18) !important;font-weight:600 !important}
+    body.admin-page :is(button,a,input[type=submit])[class*="primary"]:not(.side-nav-item):not([class*="bon-"]):hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
+    /* remove / delete: quiet until hover */
+    body.admin-page :is(button,a)[data-notif-remove], body.admin-page :is(button,a)[data-ytd-remove], body.admin-page :is(button,a)[class*="danger"], body.admin-page :is(button,a)[class*="remove"], body.admin-page :is(button,a)[class*="delete"]{color:#ff9aac !important;background:rgba(255,107,139,.06) !important;border-color:rgba(255,107,139,.28) !important}
+    body.admin-page :is(button,a)[data-notif-remove]:hover, body.admin-page :is(button,a)[data-ytd-remove]:hover, body.admin-page :is(button,a)[class*="danger"]:hover, body.admin-page :is(button,a)[class*="remove"]:hover, body.admin-page :is(button,a)[class*="delete"]:hover{background:rgba(255,107,139,.14) !important;border-color:rgba(255,107,139,.5) !important}
+    /* small buttons */
+    body.admin-page .btn.small, body.admin-page button.small{height:32px !important;padding:0 11px !important;font-size:12.5px !important}
+    body.admin-page .gec-ctl-list button{background:transparent !important;color:var(--muted) !important;border:0 !important}
+    body.admin-page .gec-ctl-list button:hover{color:var(--bad) !important}
+    /* dialog buttons */
+    body.admin-page .eom-dialog .btn{height:38px;padding:0 14px}
+    body.admin-page .eom-dialog .btn-primary{height:38px;padding:0 16px}
+
+    /* form text uses the page font */
+    body.admin-page :is(input,select,textarea,button){font-family:inherit}
+    body.admin-page .app-main :is(input[type=text],input[type=number],input[type=date],input[type=month],input[type=search],input[type=password],input:not([type]),select){min-height:36px;padding-left:12px;padding-right:12px}
+    body.admin-page .app-main textarea{padding:10px 12px !important;line-height:1.55}
+
+    /* selects: dark chevron, even padding */
+    body.admin-page .app-main select:not([multiple]), .bon-drawer select.bon-in, .bon-dock select{-webkit-appearance:none;appearance:none;padding-left:12px !important;padding-right:34px !important;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237f8899' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+      background-repeat:no-repeat !important;background-position:right 12px center !important;background-size:12px 8px !important;cursor:pointer}
+    body.admin-page .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea):hover:not(:focus):not(:disabled){border-color:rgba(148,163,184,.38) !important}
+    body.admin-page .app-main :is(input,select,textarea):disabled{opacity:.5}
+    body.admin-page .app-main input[type=checkbox], body.admin-page .app-main input[type=radio]{width:16px;height:16px;vertical-align:-3px;cursor:pointer}
+    body.admin-page .app-main input[type=file]{color:var(--muted)}
+    body.admin-page .app-main input[type=file]::file-selector-button{background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:9px;padding:7px 12px;margin-right:10px;cursor:pointer;font:inherit;font-weight:600}
+    body.admin-page .app-main fieldset{border:1px solid var(--line) !important;border-radius:12px !important;padding:10px 14px 12px !important}
+    body.admin-page .app-main legend{padding:0 6px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted) !important}
+    body.admin-page .notif-radio{display:inline-flex !important;align-items:center;gap:8px;margin-right:14px;color:var(--ink-2) !important}
+    body.admin-page .br-picks label{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;margin:3px;border:1px solid var(--line) !important;border-radius:9px;background:var(--sunk) !important}
+    body.admin-page .br-picks label:has(input:checked){border-color:rgba(255,45,66,.45) !important;background:rgba(255,45,66,.08) !important;color:var(--ink) !important}
+    body.admin-page .gen-chips button{font-family:"JetBrains Mono",ui-monospace,monospace !important;font-size:11.5px !important;color:#c7d6ff !important;padding:4px 9px !important;height:auto !important}
+    body.admin-page .gen-preview-card{border:1px solid var(--line) !important;border-radius:12px;padding:10px 12px;margin-top:8px;background:var(--sunk) !important}
+    body.admin-page .gen-preview-card pre{white-space:pre-wrap;color:var(--ink-2);font-family:inherit;margin:6px 0 0}
+    body.admin-page details > summary{cursor:pointer;color:var(--ink-2);font-weight:600}
+    body.admin-page details > summary::marker{color:var(--accent)}
+
+    /* table details */
+    body.admin-page .app-main table{border-collapse:separate !important;border-spacing:0;border:1px solid var(--line) !important;border-radius:12px;overflow:hidden}
+    body.admin-page .app-main table th{font-size:11px;font-weight:700;text-transform:uppercase;text-align:left;padding:10px 12px}
+    body.admin-page .app-main table td{padding:10px 12px;border-top:1px solid var(--line) !important;border-bottom:0 !important}
+    body.admin-page .app-main table tbody tr:first-child td{border-top:0 !important}
+    body.admin-page .app-main .allocation-plan-table{border-radius:0;overflow:visible}
+
+    /* upload slot details */
+    body.admin-page .slot{position:relative;overflow:hidden}
+    body.admin-page .slot.loaded::after{content:"✓";position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;color:#06210f;background:var(--ok);box-shadow:0 0 14px rgba(61,220,151,.5)}
+    body.admin-page .slot .meta b{color:var(--ink) !important}
+    body.admin-page .slot .n{border-radius:10px !important;font-family:"JetBrains Mono",monospace;font-weight:700}
+
+    /* target rows */
+    body.admin-page .target-row{border-bottom:1px solid var(--line) !important;transition:background .15s}
+    body.admin-page .target-row:hover{background:rgba(148,163,184,.04) !important}
+    body.admin-page .target-row.is-vacation{opacity:.6}
+    body.admin-page .target-emp-code{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted) !important;background:rgba(148,163,184,.08) !important;border-radius:6px;padding:2px 6px}
+
+    /* dock: quiet while idle, sticky once there is a result */
+    .bon-dock{position:relative;bottom:auto}
+    .bon-dock.ready{position:sticky;bottom:14px}
+    .bon-dock:not(.ready) .bon-acts .bon-btn{filter:saturate(.4)}
+    @keyframes adm-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes bon-pop{0%{transform:translateY(10px) scale(.98);opacity:.4}100%{transform:none;opacity:1}}
+    @keyframes bon-sh{to{background-position:-200% 0}}
+    @keyframes bon-tin{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+    @keyframes bon-tout{to{opacity:0;transform:translateX(20px)}}
+    @media (max-width:640px){.bon-seg{grid-template-columns:1fr}.bon-stats{grid-template-columns:1fr 1fr}.bon-dock{bottom:8px}}
+    @media (prefers-reduced-motion:reduce){body.admin-page *,.bon-drawer,.bon-scrim,.bon-toast{animation:none !important;transition:none !important}}
+  </style>
 </head>
 <body class="live-app admin-page toyota-theme">
   <div class="app-frame">
@@ -2585,6 +2952,445 @@
   if (window.ContactPerformance) {
     window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));
   }
+</script>
+<script>
+/* ===== BO Error Condition · next step after "Test conditions" =====
+   After a condition is tested, the admin chooses:
+   A) Add to BO Error dashboard  → saves the rule and pushes it (Order Errors in Reserved Orders)
+   B) Send as a message only     → each employee gets his own message (Messages page), nothing added to Order Errors
+   Works with the existing BO Error Condition builder: it listens to its /bo-rules/test call. */
+(function () {
+  const panel = document.getElementById("panel-bonotifications");
+  const root = document.getElementById("boe-rules-root");
+  if (!panel || !root) return;
+  const card = root.closest(".card") || root.parentElement;
+  const API = "/api/reserved-orders";
+  const rawFetch = window.fetch.bind(window);
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const norm = (v) => String(v || "").toLowerCase().replace(/[ً-ٰٟ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, " ").trim();
+  const DEFAULT_MSG = "Hello {employeeName},\nplease fix these orders before {deadline}:\n{orderLines}";
+
+  const state = { rule: null, data: null, mode: "", staff: null, headers: null, rules: null, picked: new Set(), busy: false, testSeq: 0 };
+
+  /* ---------- dock ---------- */
+  const dock = document.createElement("div");
+  dock.className = "bon-dock";
+  dock.innerHTML = `
+    <div class="bon-ico">?</div>
+    <div class="bon-txt"><b id="bon-title">Test a condition, then choose what to do</b><span id="bon-sub">Press Test conditions above, or pick a saved rule here.</span></div>
+    <div class="bon-pick" id="bon-pickwrap"><select id="bon-saved" aria-label="Saved rule"><option value="">Saved rules…</option></select></div>
+    <div class="bon-acts">
+      <button type="button" class="bon-btn bon-red" id="bon-go-err" disabled><i>⚠</i> Add to BO Error dashboard</button>
+      <button type="button" class="bon-btn bon-blue" id="bon-go-msg" disabled><i>✉</i> Send message only</button>
+    </div>`;
+  card.insertAdjacentElement("afterend", dock);
+
+  /* ---------- drawer ---------- */
+  const scrim = document.createElement("div");
+  scrim.className = "bon-scrim";
+  const drawer = document.createElement("aside");
+  drawer.className = "bon-drawer";
+  drawer.setAttribute("aria-hidden", "true");
+  drawer.innerHTML = `
+    <div class="bon-dh"><div style="min-width:0"><span class="bon-tag" id="bon-tag"></span><h3 id="bon-dtitle"></h3><p id="bon-dlead"></p></div><button type="button" class="bon-x" id="bon-close" aria-label="Close">×</button></div>
+    <div class="bon-db" id="bon-body"></div>
+    <div class="bon-df"><div class="bon-sum" id="bon-sum"></div><button type="button" class="bon-btn" id="bon-cancel">Cancel</button><button type="button" class="bon-btn bon-red" id="bon-send">Send</button></div>`;
+  const toasts = document.createElement("div");
+  toasts.className = "bon-toasts";
+  toasts.setAttribute("aria-live", "polite");
+  document.body.append(scrim, drawer, toasts);
+
+  function toast(title, text, bad) {
+    const t = document.createElement("div");
+    t.className = "bon-toast";
+    t.innerHTML = `<i class="${bad ? "bad" : ""}"></i><div><b>${esc(title)}</b>${text ? `<span>${esc(text)}</span>` : ""}</div>`;
+    toasts.appendChild(t);
+    setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, 3800);
+  }
+
+  async function api(path, body) {
+    const res = await rawFetch(API + path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  }
+
+  /* ---------- listen to the builder's Test ---------- */
+  window.fetch = async function (input, init) {
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    const res = await rawFetch(input, init);
+    if (method === "POST" && /\/api\/reserved-orders\/bo-rules\/test(\?|$)/.test(url)) {
+      try {
+        const body = JSON.parse((init && init.body) || "{}");
+        const data = await res.clone().json();
+        if (res.ok) onTested(body.rule || body, data);
+      } catch (e) { /* ignore */ }
+    }
+    if (method === "POST" && /\/api\/reserved-orders\/bo-rules(\?|$)/.test(url)) state.rules = null;
+    return res;
+  };
+
+  function onTested(rule, data) {
+    state.rule = JSON.parse(JSON.stringify(rule || {}));
+    delete state.rule.current;
+    state.data = data || {};
+    paintDock();
+  }
+
+  function paintDock() {
+    const d = state.data || {};
+    const orders = Number(d.orderCount) || 0;
+    const emps = Number(d.employeeCount) || 0;
+    const has = !!state.rule && orders > 0;
+    dock.classList.toggle("ready", has);
+    dock.querySelector(".bon-ico").textContent = has ? "✓" : "?";
+    document.getElementById("bon-title").innerHTML = state.rule
+      ? (orders ? `<span class="bon-num">${orders}</span> order${orders === 1 ? "" : "s"} · <span class="bon-num">${emps}</span> employee${emps === 1 ? "" : "s"} match — what next?` : "No orders match this condition")
+      : "Test a condition, then choose what to do";
+    document.getElementById("bon-sub").textContent = state.rule
+      ? (d.conditionText || state.rule.name || "Checked against the current Back Order file") + (d.warning ? " · " + d.warning : "")
+      : "Press Test conditions above, or pick a saved rule here.";
+    document.getElementById("bon-go-err").disabled = !has;
+    document.getElementById("bon-go-msg").disabled = !has;
+    if (has && !panel.hidden) {
+      const r = dock.getBoundingClientRect();
+      if (r.top > window.innerHeight || r.bottom < 0) dock.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }
+
+  /* saved rules in the dock */
+  async function loadMeta() {
+    if (state.rules && state.headers) return;
+    try {
+      const { res, data } = await api("/bo-rules");
+      if (!res.ok) throw new Error(data.error || "");
+      state.rules = (data.rules || []).filter((r) => r && !r.archived);
+      state.headers = (data.file && data.file.headers) || [];
+      const sel = document.getElementById("bon-saved");
+      sel.innerHTML = '<option value="">Saved rules…</option>' + state.rules.map((r) => `<option value="${esc(r.id)}">${esc(r.name || "Untitled condition")}</option>`).join("");
+    } catch (e) { state.headers = state.headers || []; }
+  }
+  document.getElementById("bon-saved").addEventListener("change", async (e) => {
+    const rule = (state.rules || []).find((r) => r.id === e.target.value);
+    if (!rule) return;
+    document.getElementById("bon-title").textContent = "Checking against the Back Order file…";
+    const copy = JSON.parse(JSON.stringify(rule));
+    delete copy.current;
+    const { res, data } = await api("/bo-rules/test", { rule: copy });
+    if (!res.ok) { toast("Could not test the rule", data.error || "", true); paintDock(); return; }
+    onTested(copy, data);
+  });
+  new MutationObserver(() => { if (!panel.hidden) loadMeta(); }).observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+  if (!panel.hidden) loadMeta();
+
+  async function loadStaff() {
+    if (state.staff) return state.staff;
+    try {
+      const { res, data } = await api("/notifications");
+      state.staff = res.ok ? (data.staff || []) : [];
+    } catch (e) { state.staff = []; }
+    return state.staff;
+  }
+  function recordIdFor(p) {
+    if (p.recordId) return p.recordId;
+    const n = norm(p.salesmanName || p.name);
+    if (!n) return "";
+    const staff = state.staff || [];
+    const hit = staff.find((s) => norm(s.name) === n) || staff.find((s) => norm(s.name).includes(n) || n.includes(norm(s.name)));
+    return hit ? hit.recordId : "";
+  }
+
+  /* ---------- date ---------- */
+  function dateOf(rule) {
+    const src = rule.deadlineSource || "";
+    return { source: src === "column" || src === "fixed" || src === "sent" ? src : "", column: rule.deadlineColumn || "", fixed: rule.deadlineDate || "", days: Number(rule.deadlineDays) || 0 };
+  }
+  function dateText(dt) {
+    if (dt.source === "column") return dt.column ? `From BO column “${dt.column}” · each order its own date` : "From a BO column (choose one)";
+    if (dt.source === "fixed") return dt.fixed ? `Fixed date ${dt.fixed.split("-").reverse().join(".")}` : "Fixed date (choose one)";
+    if (dt.source === "sent") return dt.days ? `${dt.days} day${dt.days === 1 ? "" : "s"} after sending` : "The day it is sent";
+    return "No date";
+  }
+  function dateValid(dt) { return !(dt.source === "column" && !dt.column) && !(dt.source === "fixed" && !dt.fixed); }
+
+  /* ---------- open drawer ---------- */
+  let draft = null;
+  async function open(mode) {
+    if (!state.rule) return;
+    state.mode = mode;
+    draft = {
+      title: state.rule.name || "Order correction",
+      message: String(state.rule.message || "").trim() || DEFAULT_MSG,
+      date: dateOf(state.rule),
+      data: state.data,
+      confirm: false,
+    };
+    const isErr = mode === "err";
+    const tag = document.getElementById("bon-tag");
+    tag.className = "bon-tag " + (isErr ? "t-err" : "t-msg");
+    tag.textContent = isErr ? "BO Error dashboard" : "Message only";
+    document.getElementById("bon-dtitle").textContent = isErr ? "Add these orders to the BO Error dashboard" : "Send a message to each employee";
+    document.getElementById("bon-dlead").textContent = isErr
+      ? "Each employee sees only his own orders under Order Errors in Reserved Orders, with the date, and must fix them."
+      : "Each employee gets one message with his own orders on the Messages page. Nothing is added to Order Errors.";
+    drawer.classList.add("open");
+    scrim.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+    document.getElementById("bon-body").innerHTML = '<div class="bon-skel"></div><div class="bon-skel"></div><div class="bon-skel"></div>';
+    await Promise.all([loadStaff(), loadMeta()]);
+    state.picked = new Set((draft.data.previews || []).map((p, i) => String(i)));
+    paintBody();
+  }
+  function close() {
+    drawer.classList.remove("open");
+    scrim.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+  }
+  document.getElementById("bon-go-err").addEventListener("click", () => open("err"));
+  document.getElementById("bon-go-msg").addEventListener("click", () => open("msg"));
+  document.getElementById("bon-close").addEventListener("click", close);
+  document.getElementById("bon-cancel").addEventListener("click", close);
+  scrim.addEventListener("click", close);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && drawer.classList.contains("open")) close(); });
+
+  function paintBody() {
+    const d = draft.data || {};
+    const previews = d.previews || [];
+    const isMsg = state.mode === "msg";
+    const dt = draft.date;
+    const headers = state.headers || [];
+    const dateCols = headers.filter((h) => /date|deadline|due|تاريخ|موعد/i.test(h));
+    const otherCols = headers.filter((h) => !dateCols.includes(h));
+    const body = document.getElementById("bon-body");
+    body.innerHTML = `
+      <div class="bon-stats">
+        <div class="bon-stat"><small>Orders</small><b>${Number(d.orderCount) || 0}</b></div>
+        <div class="bon-stat"><small>Employees</small><b>${Number(d.employeeCount) || 0}</b></div>
+        <div class="bon-stat"><small>Condition</small><b class="sm">${esc(d.conditionText || state.rule.name || "—")}</b></div>
+      </div>
+      ${isMsg ? `
+      <div class="bon-sec"><label for="bon-mtitle">Title</label><input class="bon-in" id="bon-mtitle" maxlength="120" value="${esc(draft.title)}" /></div>
+      <div class="bon-sec"><label for="bon-mtext">Message · written once, filled in for each employee</label>
+        <textarea class="bon-in" id="bon-mtext" maxlength="2000">${esc(draft.message)}</textarea>
+        <div class="bon-chips">${["{employeeName}", "{affectedOrderCount}", "{orderLines}", "{deadline}", "{correctValue}", "{conditionText}"].map((t) => `<button type="button" data-tok="${t}">${t}</button>`).join("")}</div>
+      </div>` : ""}
+      <div class="bon-sec"><span class="bon-lab">Date on the ${isMsg ? "message" : "orders"}</span>
+        <div class="bon-seg" role="group" aria-label="Date">
+          <button type="button" data-src="column" aria-pressed="${dt.source === "column"}"><b>From the BO file</b>Each order its own date</button>
+          <button type="button" data-src="sent" aria-pressed="${dt.source === "sent" || !dt.source}"><b>Days after sending</b>Same for everyone</button>
+          <button type="button" data-src="fixed" aria-pressed="${dt.source === "fixed"}"><b>One fixed date</b>Pick on the calendar</button>
+        </div>
+        <div class="bon-dsub" data-for="column" ${dt.source === "column" ? "" : "hidden"}>
+          <select class="bon-in" id="bon-col"><option value="">Choose the date column…</option>
+            ${dateCols.length ? `<optgroup label="Date columns">${dateCols.map((h) => `<option ${h === dt.column ? "selected" : ""}>${esc(h)}</option>`).join("")}</optgroup>` : ""}
+            ${otherCols.length ? `<optgroup label="More columns">${otherCols.map((h) => `<option ${h === dt.column ? "selected" : ""}>${esc(h)}</option>`).join("")}</optgroup>` : ""}
+          </select>
+        </div>
+        <div class="bon-dsub" data-for="sent" ${dt.source === "sent" || !dt.source ? "" : "hidden"}>
+          <div class="bon-step"><button type="button" id="bon-dm" aria-label="One day less">−</button><output id="bon-dv">${dt.days ? "+" + dt.days + " days" : "Same day"}</output><button type="button" id="bon-dp" aria-label="One day more">+</button></div>
+        </div>
+        <div class="bon-dsub" data-for="fixed" ${dt.source === "fixed" ? "" : "hidden"}>
+          <input type="date" class="bon-in" id="bon-fixed" value="${esc(dt.fixed)}" style="max-width:220px" />
+        </div>
+      </div>
+      ${d.warning ? `<div class="bon-note warn">${esc(d.warning)}</div>` : ""}
+      <div class="bon-sec">
+        <div class="bon-head"><span class="bon-lab" style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Employees · ${isMsg ? "tap a name to read his message" : "tick who receives it"}</span><a id="bon-all">Select all</a></div>
+        <div class="bon-list" id="bon-list">${previews.length ? previews.map((p, i) => {
+          const rid = recordIdFor(p);
+          const na = isMsg && !rid;
+          const on = state.picked.has(String(i)) && !na;
+          const name = p.salesmanName || p.name || "Employee";
+          const count = p.orderCount != null ? `${p.orderCount} order${p.orderCount == 1 ? "" : "s"}` : "";
+          return `<div class="bon-emp ${on ? "" : "off"} ${na ? "na" : ""}" data-i="${i}">
+            <div><input type="checkbox" ${on ? "checked" : ""} ${na ? "disabled" : ""} aria-label="${esc(name)}" />
+              <span class="bon-av">${esc(name.trim().charAt(0).toUpperCase() || "?")}</span>
+              <span class="nm"><b>${esc(name)}</b><span>${na ? "No login account · can't receive messages" : esc(count || "Ready")}</span></span>
+              ${p.message ? '<span class="tw">›</span>' : ""}</div>
+            ${p.message ? `<pre>${esc(p.message)}</pre>` : ""}
+          </div>`;
+        }).join("") : '<div class="bon-note info">The server returned no per-employee preview. The rule will still be checked when it is sent.</div>'}</div>
+        ${previews.length && previews.length < (Number(d.employeeCount) || 0) ? `<div class="bon-note warn">The preview lists ${previews.length} of ${Number(d.employeeCount)} employees.${isMsg ? " Only the listed employees can get a message-only send." : " All matching employees receive it when everyone is selected."}</div>` : ""}
+      </div>
+      <div id="bon-confirm"></div>
+      <div class="bon-bar" id="bon-bar" hidden><i></i></div>`;
+    wireBody();
+    paintFoot();
+  }
+
+  let retestTimer = 0;
+  function retest() {
+    clearTimeout(retestTimer);
+    retestTimer = setTimeout(async () => {
+      if (!dateValid(draft.date)) { paintFoot(); return; }
+      const seq = ++state.testSeq;
+      const list = document.getElementById("bon-list");
+      if (list) list.style.opacity = ".5";
+      const { res, data } = await api("/bo-rules/test", { rule: buildRule() });
+      if (seq !== state.testSeq) return;
+      if (list) list.style.opacity = "";
+      if (!res.ok) { toast("Could not refresh the preview", data.error || "", true); return; }
+      const keep = new Set(state.picked);
+      draft.data = data;
+      state.picked = keep;
+      const scroll = document.getElementById("bon-body").scrollTop;
+      paintBody();
+      document.getElementById("bon-body").scrollTop = scroll;
+    }, 450);
+  }
+
+  function wireBody() {
+    const body = document.getElementById("bon-body");
+    const t = document.getElementById("bon-mtitle");
+    if (t) t.addEventListener("input", () => { draft.title = t.value; });
+    const m = document.getElementById("bon-mtext");
+    if (m) m.addEventListener("input", () => { draft.message = m.value; retest(); paintFoot(); });
+    body.querySelectorAll("[data-tok]").forEach((b) => b.addEventListener("click", () => {
+      const tok = b.dataset.tok;
+      const s = m.selectionStart == null ? m.value.length : m.selectionStart;
+      const e = m.selectionEnd == null ? s : m.selectionEnd;
+      m.value = m.value.slice(0, s) + tok + m.value.slice(e);
+      m.focus(); m.setSelectionRange(s + tok.length, s + tok.length);
+      draft.message = m.value; retest();
+    }));
+    body.querySelectorAll("[data-src]").forEach((b) => b.addEventListener("click", () => {
+      draft.date.source = b.dataset.src;
+      body.querySelectorAll("[data-src]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      body.querySelectorAll(".bon-dsub").forEach((x) => { x.hidden = x.dataset.for !== b.dataset.src; });
+      retest(); paintFoot();
+    }));
+    const col = document.getElementById("bon-col");
+    if (col) col.addEventListener("change", () => { draft.date.column = col.value; retest(); paintFoot(); });
+    const fx = document.getElementById("bon-fixed");
+    if (fx) fx.addEventListener("change", () => { draft.date.fixed = fx.value; retest(); paintFoot(); });
+    const step = (n) => {
+      draft.date.days = Math.max(0, Math.min(30, (Number(draft.date.days) || 0) + n));
+      document.getElementById("bon-dv").textContent = draft.date.days ? "+" + draft.date.days + " days" : "Same day";
+      retest(); paintFoot();
+    };
+    const dm = document.getElementById("bon-dm"); if (dm) dm.addEventListener("click", () => step(-1));
+    const dp = document.getElementById("bon-dp"); if (dp) dp.addEventListener("click", () => step(1));
+    body.querySelectorAll(".bon-emp").forEach((row) => {
+      const cb = row.querySelector("input");
+      cb.addEventListener("click", (e) => e.stopPropagation());
+      cb.addEventListener("change", () => {
+        if (cb.checked) state.picked.add(row.dataset.i); else state.picked.delete(row.dataset.i);
+        row.classList.toggle("off", !cb.checked);
+        paintFoot();
+      });
+      row.firstElementChild.addEventListener("click", () => { if (row.querySelector("pre")) row.classList.toggle("open"); });
+    });
+    const all = document.getElementById("bon-all");
+    if (all) all.addEventListener("click", () => {
+      const boxes = [...body.querySelectorAll(".bon-emp input:not(:disabled)")];
+      const every = boxes.every((b) => b.checked);
+      boxes.forEach((b) => { b.checked = !every; b.dispatchEvent(new Event("change")); });
+    });
+  }
+
+  function chosen() {
+    const previews = (draft.data && draft.data.previews) || [];
+    return previews.map((p, i) => ({ p, i: String(i), rid: recordIdFor(p) }))
+      .filter((x) => state.picked.has(x.i) && (state.mode === "err" || x.rid));
+  }
+  function paintFoot() {
+    const btn = document.getElementById("bon-send");
+    const sum = document.getElementById("bon-sum");
+    const previews = (draft.data && draft.data.previews) || [];
+    const n = chosen().length;
+    const allPicked = state.mode === "err" && previews.length && n === previews.length;
+    const okDate = dateValid(draft.date);
+    const okMsg = state.mode === "err" || String(draft.message || "").trim();
+    const emps = allPicked || !previews.length ? (Number(draft.data.employeeCount) || 0) : n;
+    sum.innerHTML = `<b>${emps}</b> employee${emps === 1 ? "" : "s"} · ${esc(dateText(draft.date))}`;
+    btn.textContent = state.mode === "err" ? `Add to BO Error dashboard` : `Send ${n} message${n === 1 ? "" : "s"}`;
+    btn.disabled = state.busy || !okDate || !okMsg || (previews.length > 0 && n === 0) || (state.mode === "msg" && n === 0);
+  }
+
+  function buildRule() {
+    const r = JSON.parse(JSON.stringify(state.rule));
+    delete r.current;
+    const dt = draft.date;
+    r.deadlineSource = dt.source || "sent";
+    r.deadlineColumn = dt.source === "column" ? dt.column : "";
+    r.deadlineDate = dt.source === "fixed" ? dt.fixed : "";
+    r.deadlineDays = dt.source === "sent" || !dt.source ? Number(dt.days) || 0 : (Number(dt.days) || 0);
+    if (state.mode === "msg") {
+      let msg = String(draft.message || "").trim();
+      if (!/\{(deadline|orderDateLine)\}/.test(msg)) msg += "\n\nDeadline: {deadline}";
+      if (dt.source === "column" && !/\{(orderLines|orderDateLine)\}/.test(msg)) msg += "\n{orderLines}";
+      r.message = msg;
+    } else if (!String(r.message || "").trim()) {
+      r.message = DEFAULT_MSG;
+    }
+    return r;
+  }
+
+  /* ---------- send ---------- */
+  document.getElementById("bon-send").addEventListener("click", () => (state.mode === "err" ? sendErrors(false) : sendMessages()));
+
+  async function sendErrors(confirmRepublish) {
+    const btn = document.getElementById("bon-send");
+    const previews = (draft.data && draft.data.previews) || [];
+    const pick = chosen();
+    const all = !previews.length || pick.length === previews.length;
+    const recordIds = all ? [] : pick.map((x) => x.rid).filter(Boolean);
+    if (!all && !recordIds.length) { toast("No login account", "The selected employees have no Reserved Orders account.", true); return; }
+    state.busy = true; paintFoot(); btn.textContent = "Adding…";
+    try {
+      const { res: sres, data: saved } = await api("/bo-rules", { rule: buildRule(), analyze: true });
+      if (!sres.ok) throw new Error(saved.error || "Could not save the rule.");
+      const id = (saved.rule && saved.rule.id) || state.rule.id;
+      if (saved.rule && saved.rule.id) state.rule.id = saved.rule.id;
+      const { res, data } = await api("/bo-rules/" + encodeURIComponent(id) + "/push-targeted", { recordIds, confirmRepublish: !!confirmRepublish });
+      if (res.status === 409 && data.needsConfirm && !confirmRepublish) {
+        const box = document.getElementById("bon-confirm");
+        box.innerHTML = `<div class="bon-note warn">${esc(data.error || "This rule was pushed before.")} Sending again updates those employees' Order Errors.<br><button type="button" class="bon-btn bon-red" id="bon-again">Send again</button></div>`;
+        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        document.getElementById("bon-again").addEventListener("click", () => { box.innerHTML = ""; sendErrors(true); });
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || "Push failed.");
+      toast("Added to BO Error dashboard", `${data.employeeCount || 0} employee(s) · ${data.orderCount || 0} order(s) now in Order Errors`);
+      done(`Added to BO Error dashboard · ${data.employeeCount || 0} employees · ${data.orderCount || 0} orders`);
+    } catch (e) {
+      toast("Not added", e.message || "", true);
+    } finally {
+      state.busy = false; paintFoot();
+    }
+  }
+
+  async function sendMessages() {
+    const list = chosen();
+    if (!list.length) return;
+    const bar = document.getElementById("bon-bar");
+    const fill = bar.firstElementChild;
+    bar.hidden = false;
+    state.busy = true; paintFoot();
+    const title = String(draft.title || "").trim();
+    let ok = 0; const failed = [];
+    for (let k = 0; k < list.length; k++) {
+      const { p, rid } = list[k];
+      document.getElementById("bon-send").textContent = `Sending ${k + 1}/${list.length}…`;
+      try {
+        const { res, data } = await api("/notifications", { password: "", title, message: p.message || draft.message, recordIds: [rid] });
+        if (!res.ok) throw new Error(data.error || "failed");
+        ok++;
+      } catch (e) { failed.push(p.salesmanName || p.name || "?"); }
+      fill.style.width = Math.round(((k + 1) / list.length) * 100) + "%";
+    }
+    state.busy = false; paintFoot();
+    if (failed.length) toast(`${ok} sent · ${failed.length} failed`, failed.join(", "), true);
+    else toast(`${ok} message${ok === 1 ? "" : "s"} sent`, "Employees see them now on the Messages page in Reserved Orders");
+    if (ok) done(`Message sent to ${ok} employee${ok === 1 ? "" : "s"} · not added to Order Errors`);
+  }
+
+  function done(line) {
+    close();
+    document.getElementById("bon-sub").textContent = line;
+    if (typeof window.loadNotifications === "function") { try { window.loadNotifications(); } catch (e) { /* ignore */ } }
+  }
+})();
 </script>
 </body>
 </html>
