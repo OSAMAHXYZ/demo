@@ -600,95 +600,178 @@
     @media (prefers-reduced-motion:reduce){body.admin-page *,.bon-drawer,.bon-scrim,.bon-toast{animation:none !important;transition:none !important}}
   </style>
   <style id="admin-dark-v2-fix">
-    /* Beat toyota-theme / dashboard hardcoded whites and BO panel light tokens. */
-    body.live-app.admin-page.toyota-theme .app-topbar{
-      background:rgba(9,13,22,.78) !important;
+    /* Beat toyota-theme / ops / dashboard / unified-design light tokens on Admin Push. */
+    html:has(body.live-app.admin-page.toyota-theme){
+      background:#070a10 !important;
+      color-scheme:dark;
+    }
+    html:has(body.live-app.admin-page.toyota-theme)::-webkit-scrollbar,
+    html body.live-app.admin-page.toyota-theme *::-webkit-scrollbar{width:10px;height:10px}
+    html:has(body.live-app.admin-page.toyota-theme)::-webkit-scrollbar-track,
+    html body.live-app.admin-page.toyota-theme *::-webkit-scrollbar-track{background:#070a10}
+    html:has(body.live-app.admin-page.toyota-theme)::-webkit-scrollbar-thumb,
+    html body.live-app.admin-page.toyota-theme *::-webkit-scrollbar-thumb{
+      background:#192132;border-radius:8px;border:2px solid #070a10;
+    }
+    html body.live-app.admin-page.toyota-theme{
+      --bg:#070a10 !important; --surface:#111622 !important; --surface-2:#151b29 !important;
+      --sunk:#0c111b !important; --raise:#192132 !important;
+      --line:rgba(148,163,184,.13) !important; --line-2:rgba(148,163,184,.24) !important;
+      --ink:#eef2f8 !important; --ink-2:#b3bccb !important; --muted:#7f8899 !important;
+      --ops-bg:#070a10 !important; --ops-fg:#eef2f8 !important; --ops-ink:#eef2f8 !important;
+      --ops-muted:#7f8899 !important; --ops-card:#111622 !important; --ops-secondary:#151b29 !important;
+      --ops-input:#0c111b !important; --ops-border:rgba(148,163,184,.13) !important;
+      --eu-bg:#070a10 !important; --eu-bg-2:#070a10 !important; --eu-ink:#eef2f8 !important;
+      --eu-ink-soft:#b3bccb !important; --eu-muted:#7f8899 !important;
+      --eu-line:rgba(148,163,184,.13) !important; --eu-surface:#111622 !important; --eu-surface-2:#151b29 !important;
+      --cx-bg:#070a10 !important; --cx-fg:#eef2f8 !important; --cx-ink:#eef2f8 !important;
+      --cx-ink-2:#b3bccb !important; --cx-muted:#7f8899 !important;
+      --cx-surface:#111622 !important; --cx-surface-2:#151b29 !important;
+      --cx-line:rgba(148,163,184,.13) !important; --cx-line-strong:rgba(148,163,184,.24) !important;
+      --crm-bg:#070a10 !important; --crm-text:#eef2f8 !important; --crm-muted:#7f8899 !important;
+      color-scheme:dark;
+      background:
+        radial-gradient(900px 520px at 85% -10%, rgba(255,45,66,.10), transparent 60%),
+        radial-gradient(700px 500px at 0% 100%, rgba(122,162,255,.07), transparent 60%),
+        #070a10 !important;
+      color:#eef2f8 !important;
+    }
+    html body.live-app.admin-page.toyota-theme .app-frame,
+    html body.live-app.admin-page.toyota-theme .app-main,
+    html body.live-app.admin-page.toyota-theme .app-content,
+    html body.live-app.admin-page.toyota-theme .shell{
+      background:transparent !important;
+      color:#eef2f8 !important;
+    }
+    html body.live-app.admin-page.toyota-theme .app-sidebar{
+      background:linear-gradient(180deg,#0d1220,#090d16) !important;
+      border-right:1px solid rgba(148,163,184,.13) !important;
+    }
+    html body.live-app.admin-page.toyota-theme .side-nav-item{
+      background:transparent !important;
+      color:#b3bccb !important;
+    }
+    html body.live-app.admin-page.toyota-theme .side-nav-item:hover{
+      background:rgba(148,163,184,.08) !important;
+      color:#eef2f8 !important;
+    }
+    html body.live-app.admin-page.toyota-theme .side-nav-item.active,
+    html body.live-app.admin-page.toyota-theme .sidebar-tabs .tab.side-nav-item.active,
+    html body.live-app.admin-page.toyota-theme #panel-tabs .tab.active{
+      background:linear-gradient(90deg,rgba(255,45,66,.20),rgba(255,45,66,.04)) !important;
+      color:#fff !important;
+      box-shadow:inset 0 0 0 1px rgba(255,45,66,.25) !important;
+    }
+    html body.live-app.admin-page.toyota-theme .side-nav-item.active .side-nav-icon,
+    html body.live-app.admin-page.toyota-theme .side-nav-item.active .side-nav-label{
+      color:#fff !important;
+    }
+    html body.live-app.admin-page.toyota-theme .sidebar-user-card{
+      background:#151b29 !important;
+      border-color:rgba(148,163,184,.13) !important;
+      color:#eef2f8 !important;
+    }
+    html body.live-app.admin-page.toyota-theme .app-topbar{
+      background:rgba(9,13,22,.92) !important;
       border-bottom:1px solid rgba(148,163,184,.13) !important;
       box-shadow:none !important;
+      color:#eef2f8 !important;
     }
-    body.live-app.admin-page.toyota-theme .app-page-title,
-    body.live-app.admin-page.toyota-theme .pbi-kpi .val,
-    body.live-app.admin-page.toyota-theme .pbi-kpi .kpi-value,
-    body.live-app.admin-page.toyota-theme .slot-val{color:#eef2f8 !important}
-    body.live-app.admin-page.toyota-theme .pbi-kpi .lab,
-    body.live-app.admin-page.toyota-theme .pbi-kpi .kpi-label,
-    body.live-app.admin-page.toyota-theme .slot-lab{color:#7f8899 !important}
-    body.live-app.admin-page.toyota-theme .card,
-    body.live-app.admin-page.toyota-theme .pbi-viz,
-    body.live-app.admin-page.toyota-theme .pbi-slicer,
-    body.live-app.admin-page.toyota-theme .pbi-kpi,
-    body.live-app.admin-page.toyota-theme .admin-section-card,
-    body.live-app.admin-page.toyota-theme .kpi,
-    body.live-app.admin-page.toyota-theme .bo-kpi,
-    body.live-app.admin-page.toyota-theme .slot{
+    html body.live-app.admin-page.toyota-theme .app-page-title{color:#eef2f8 !important}
+    html body.live-app.admin-page.toyota-theme .app-topbar-eyebrow{color:#7f8899 !important}
+    html body.live-app.admin-page.toyota-theme .app-topbar :is(.btn,.sidebar-toggle,.app-search-kbd,.app-topbar-search){
+      background:#151b29 !important;
+      color:#eef2f8 !important;
+      border-color:rgba(148,163,184,.24) !important;
+      box-shadow:none !important;
+    }
+    html body.live-app.admin-page.toyota-theme .app-topbar .btn-primary,
+    html body.live-app.admin-page.toyota-theme .app-topbar .btn.primary{
+      background:linear-gradient(180deg,#ff2d42,#d40a1c) !important;
+      color:#fff !important;
+      border-color:rgba(255,90,105,.6) !important;
+    }
+    html body.live-app.admin-page.toyota-theme .pbi-kpi .val,
+    html body.live-app.admin-page.toyota-theme .pbi-kpi .kpi-value,
+    html body.live-app.admin-page.toyota-theme .slot-val{color:#eef2f8 !important}
+    html body.live-app.admin-page.toyota-theme .pbi-kpi .lab,
+    html body.live-app.admin-page.toyota-theme .pbi-kpi .kpi-label,
+    html body.live-app.admin-page.toyota-theme .slot-lab{color:#7f8899 !important}
+    html body.live-app.admin-page.toyota-theme .card,
+    html body.live-app.admin-page.toyota-theme .pbi-viz,
+    html body.live-app.admin-page.toyota-theme .pbi-slicer,
+    html body.live-app.admin-page.toyota-theme .pbi-kpi,
+    html body.live-app.admin-page.toyota-theme .admin-section-card,
+    html body.live-app.admin-page.toyota-theme .kpi,
+    html body.live-app.admin-page.toyota-theme .bo-kpi,
+    html body.live-app.admin-page.toyota-theme .slot{
       background:#111622 !important;
       color:#eef2f8 !important;
       border-color:rgba(148,163,184,.13) !important;
       box-shadow:none !important;
     }
-    body.live-app.admin-page.toyota-theme .btn:not(.btn-primary):not(.primary):not(.solid){
+    html body.live-app.admin-page.toyota-theme :is(.btn,button.btn,a.btn):not(.btn-primary):not(.primary):not(.solid):not(.side-nav-item){
       background:#151b29 !important;
       color:#eef2f8 !important;
       border-color:rgba(148,163,184,.24) !important;
+      box-shadow:none !important;
     }
-    body.live-app.admin-page.toyota-theme .btn-primary,
-    body.live-app.admin-page.toyota-theme .btn.primary,
-    body.live-app.admin-page.toyota-theme .solid{
-      background:#ff2d42 !important;
+    html body.live-app.admin-page.toyota-theme :is(.btn-primary,.btn.primary,.solid){
+      background:linear-gradient(180deg,#ff2d42,#d40a1c) !important;
       color:#fff !important;
-      border-color:#ff2d42 !important;
+      border-color:rgba(255,90,105,.6) !important;
     }
-    body.live-app.admin-page.toyota-theme .app-main :is(input,select,textarea),
-    body.live-app.admin-page.toyota-theme #panel-bonotifications :is(input,select,textarea){
+    html body.live-app.admin-page.toyota-theme .app-main :is(input,select,textarea),
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications :is(input,select,textarea){
       background-color:#0c111b !important;
       color:#eef2f8 !important;
       border-color:rgba(148,163,184,.24) !important;
       caret-color:#eef2f8 !important;
     }
-    body.live-app.admin-page.toyota-theme #panel-bonotifications{
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications{
       --ink:#eef2f8 !important;
       --muted:#7f8899 !important;
       --line:rgba(148,163,184,.13) !important;
       --navy:#eef2f8 !important;
       --ok-bg:rgba(61,220,151,.12) !important;
     }
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-file div,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-kpis article,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule-row,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-picks,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-apply,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-test-out,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-msg,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-template,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-bubble{
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-file div,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-kpis article,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule-row,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-picks,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-apply,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-test-out,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-msg,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-template,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-bubble{
       background:#0c111b !important;
       color:#eef2f8 !important;
       border-color:rgba(148,163,184,.13) !important;
       box-shadow:none !important;
     }
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-cond button,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-head button,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications #br-add-cond,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications #br-test,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-chips button,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-actions button,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-table button,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-buttons button,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-wa button{
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-cond button,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-head button,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications #br-add-cond,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications #br-test,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-chips button,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-actions button,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-table button,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-buttons button,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-wa button{
       background:#151b29 !important;
       color:#eef2f8 !important;
       border-color:rgba(148,163,184,.24) !important;
     }
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule b,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications #br-note{
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule b,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications #br-note{
       color:#eef2f8 !important;
     }
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule span,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-file b,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-kpis span,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-form label > span,
-    body.live-app.admin-page.toyota-theme #panel-bonotifications .br-label{
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-rule span,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-file b,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-kpis span,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-form label > span,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-label{
       color:#7f8899 !important;
     }
   </style>
