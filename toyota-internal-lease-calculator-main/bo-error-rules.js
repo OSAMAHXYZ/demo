@@ -189,6 +189,7 @@ function analyzeTable(table, rule) {
     const orderHeader = mappedHeader(headers, fieldMap.orderNumber, ['Back Order Number', 'BO Number', 'Order Number']);
     const yearHeader = findHeader(headers, ['Model Year']);
     const orderDateHeader = mappedHeader(headers, fieldMap.orderDate, ['Order Date']);
+    const customerHeader = findHeader(headers, ['Customer Name', 'Customer', 'Guest Name', 'Guest', 'Client Name']);
     const deadlineHeader = deadlineDateHeader(headers, rule);
     const mappingWarnings = [];
     if (fieldMap.orderNumber && !orderHeader) mappingWarnings.push(`Order number column "${fieldMap.orderNumber}" is not in the BO file.`);
@@ -273,6 +274,7 @@ function analyzeTable(table, rule) {
             order = {
                 boNumber,
                 product,
+                customerName: cellString(customerHeader ? row[customerHeader] : ''),
                 modelYear: cellString(yearHeader ? row[yearHeader] : ''),
                 orderDate: rowOrderDate,
                 deadlineRaw: rowDeadline,
@@ -344,6 +346,91 @@ function formatBoDate(date) {
     return `${dd}.${mm}.${date.getFullYear()}`;
 }
 
+function formatIsoDate(date) {
+    if (!date || Number.isNaN(date.getTime())) return '';
+    const yyyy = String(date.getFullYear());
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function firstName(value) {
+    const text = cellString(value);
+    return text.split(/\s+/).filter(Boolean)[0] || text;
+}
+
+function cleanOrderOverrides(raw) {
+    const src = raw && raw.orderOverrides && typeof raw.orderOverrides === 'object' ? raw.orderOverrides : {};
+    const out = {};
+    Object.keys(src).forEach((key) => {
+        const number = cellString(key);
+        if (!number) return;
+        const item = src[key] && typeof src[key] === 'object' ? src[key] : {};
+        const row = {};
+        if (item.skip === true) row.skip = true;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(cellString(item.date))) row.date = cellString(item.date);
+        if (row.skip || row.date) out[number] = row;
+    });
+    return out;
+}
+
+function orderDeadlineDate(rule, order, now) {
+    const days = deadlineDays(rule);
+    const source = deadlineSource(rule);
+    let base = null;
+    if (source === 'fixed') base = parseBoDate(rule && rule.deadlineDate);
+    else if (source === 'sent') {
+        const today = now instanceof Date ? now : new Date();
+        base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    } else base = parseBoDate(order && (order.deadlineRaw || order.orderDate));
+    if (!base || Number.isNaN(base.getTime())) return null;
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+}
+
+function perOrderMessageBag(rule, person, order, dateDisplay) {
+    const bag = messageBag(rule, person, [order]);
+    bag.customerName = cellString(order && order.customerName);
+    bag.orderNumber = cellString(order && order.boNumber) || 'Order number unavailable';
+    bag.product = cellString(order && order.product) || rule.product || 'all cars';
+    bag.wrongValue = cellString(order && (order.incorrectValue || order.currentValue)) || 'blank';
+    bag.correctValue = cellString(order && order.correctValue) || cellString(rule && rule.correctValue) || '—';
+    bag.date = dateDisplay || 'No deadline date';
+    bag.deadline = bag.date;
+    bag.salesmanName = firstName(person && (person.salesmanName || person.name));
+    return bag;
+}
+
+function staffForPerson(person, staff) {
+    if (!person || !Array.isArray(staff)) return null;
+    const id = cellString(person.salesmanId);
+    if (id && id !== 'UNASSIGNED') {
+        const byId = staff.find((item) => String(item.id) === id);
+        if (byId) return byId;
+    }
+    return staff.find((item) => samePersonName(item.name, person.salesmanName)) || null;
+}
+
+function applyPerOrderEmployees(rule, employees, now) {
+    if (!isPerOrder(rule)) return employees;
+    const overrides = rule.orderOverrides || {};
+    return (employees || []).map((person) => {
+        const orders = (person.orders || []).filter((order) => {
+            const override = overrides[order.boNumber];
+            return !(override && override.skip);
+        }).map((order) => {
+            const override = overrides[order.boNumber] || {};
+            const due = override.date ? parseBoDate(override.date) : orderDeadlineDate(rule, order, now);
+            const dateDisplay = due ? formatBoDate(due) : '';
+            return Object.assign({}, order, {
+                deadline: dateDisplay,
+                deadlineIso: due ? formatIsoDate(due) : '',
+                message: fillMessage(rule.message, perOrderMessageBag(rule, person, order, dateDisplay))
+            });
+        });
+        return Object.assign({}, person, { orders });
+    }).filter((person) => person.orders.length);
+}
+
 function shiftDateText(value, days) {
     const date = parseBoDate(value);
     if (!date || Number.isNaN(date.getTime())) return cellString(value);
@@ -354,8 +441,16 @@ function shiftDateText(value, days) {
 const DEADLINE_DAYS = [0, 1, 2, 3, 5, 6, 7];
 const DEADLINE_SOURCES = ['column', 'fixed', 'sent'];
 
+function isPerOrder(rule) {
+    return !!(rule && rule.messageMode === 'perOrder');
+}
+
 function deadlineDays(rule) {
     const days = Number(rule && rule.deadlineDays);
+    if (isPerOrder(rule)) {
+        if (!Number.isFinite(days)) return 0;
+        return Math.max(0, Math.min(30, Math.round(days)));
+    }
     return DEADLINE_DAYS.includes(days) ? days : 0;
 }
 
@@ -470,6 +565,8 @@ function attachBoErrorRules(app, deps) {
         const products = chosenList(raw, 'products', 'product');
         const columns = conditions.map((item) => item.column);
         const now = new Date().toISOString();
+        const has = (key) => Object.prototype.hasOwnProperty.call(raw, key);
+        const messageMode = raw.messageMode === 'perOrder' ? 'perOrder' : (has('messageMode') ? '' : ((previous && previous.messageMode) || ''));
         return {
             id: (previous && previous.id) || cellString(raw.id) || newId('rule'),
             name: cellString(raw.name) || 'BO error',
@@ -482,9 +579,13 @@ function attachBoErrorRules(app, deps) {
             conditions,
             matchMode: raw.matchMode === 'any' ? 'any' : (raw.matchMode === 'all' ? 'all' : ruleMatchMode(raw)),
             correctValue: cellString(raw.correctValue),
+            errorLabel: has('errorLabel') ? cellString(raw.errorLabel) : cellString(previous && previous.errorLabel),
+            language: raw.language === 'ar' || raw.language === 'en' ? raw.language : (has('language') ? '' : ((previous && previous.language) || '')),
+            messageMode,
+            orderOverrides: has('orderOverrides') ? cleanOrderOverrides(raw) : cleanOrderOverrides(previous || {}),
             message: cellString(raw.message),
             whatsappMessage: cellString(raw.whatsappMessage),
-            deadlineDays: deadlineDays(raw),
+            deadlineDays: deadlineDays(Object.assign({}, raw, { messageMode })),
             deadlineSource: deadlineSource(raw),
             deadlineColumn: deadlineSource(raw) === 'column' ? cellString(raw.deadlineColumn) : '',
             deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(cellString(raw.deadlineDate)) ? cellString(raw.deadlineDate) : '',
@@ -502,7 +603,7 @@ function attachBoErrorRules(app, deps) {
             current: previous ? previous.current || null : null
         };
     }
-    function validate(rule, headers) {
+    function validate(rule, headers, opts) {
         if (!rule.name) return 'Enter a rule name.';
         const conditions = ruleConditions(rule);
         if (!conditions.length) return 'Choose at least one BO column.';
@@ -510,9 +611,9 @@ function attachBoErrorRules(app, deps) {
             const missing = conditions.filter((item) => !findHeader(headers, [item.column]));
             if (missing.length === conditions.length) return `Those columns are not in the latest BO file: ${missing.map((item) => item.column).join(', ')}. The rule can be saved, but it cannot be analyzed until a column is present.`;
         }
-        const missingValue = conditions.find((item) => NEEDS_VALUE.has(item.operator) && !(item.values || []).length);
-        if (missingValue) return `Enter the value for ${missingValue.column}.`;
-        if (!rule.message) return 'Write the message employees will see.';
+        const missingValue = conditions.filter((item) => NEEDS_VALUE.has(item.operator) && !(item.values || []).length);
+        if (missingValue.length) return `Enter the value for ${missingValue[0].column}.`;
+        if (!rule.message && !(opts && opts.allowEmptyMessage)) return 'Write the message employees will see.';
         return '';
     }
     function publicRule(rule) {
@@ -643,7 +744,15 @@ function attachBoErrorRules(app, deps) {
             sentOrders += row.sentOrders;
             if (row.status === 'sent') sentEmployees += 1;
         });
-        return { sentOrders, sentEmployees, trackedEmployees: employees.length };
+        const last = [...store.publications].reverse().find((item) => item.ruleId === rule.id);
+        return {
+            sentOrders,
+            sentEmployees,
+            trackedEmployees: employees.length,
+            lastPublishedAt: last ? last.publishedAt : '',
+            lastPublishedOrderCount: last ? (last.orderCount || 0) : 0,
+            lastPublishedEmployeeCount: last ? (last.employeeCount || 0) : 0
+        };
     }
 
     app.get('/api/reserved-orders/bo-rules', (req, res) => {
@@ -699,10 +808,34 @@ function attachBoErrorRules(app, deps) {
         if (!deps.requireAdmin(req, res)) return;
         const table = deps.loadAnalysisTable() || { headers: [], rows: [] };
         const rule = cleanRule(req.body?.rule || {}, null);
-        const problem = validate(rule, table.headers || []);
+        const problem = validate(rule, table.headers || [], { allowEmptyMessage: true });
         const hard = problem && !problem.includes('cannot be analyzed');
         if (hard) return res.status(400).json({ error: problem });
         const result = analyzeTable(table, rule);
+        const staff = typeof deps.loadStaff === 'function' ? (deps.loadStaff() || []).filter((person) => person && person.active !== false) : [];
+        const now = new Date();
+        const overrides = rule.orderOverrides || {};
+        const orders = [];
+        function dueFor(order) {
+            const override = overrides[order.boNumber] || {};
+            const due = override.date ? parseBoDate(override.date) : orderDeadlineDate(rule, order, now);
+            return due && !Number.isNaN(due.getTime()) ? due : null;
+        }
+        (result.employees || []).forEach((person) => {
+            const recordId = (staffForPerson(person, staff) || {}).recordId || '';
+            (person.orders || []).forEach((order) => {
+                const due = dueFor(order);
+                orders.push({
+                    orderNumber: order.boNumber,
+                    recordId,
+                    salesmanName: person.salesmanName,
+                    customerName: order.customerName || '',
+                    product: order.product || '',
+                    currentValue: order.incorrectValue || order.currentValue || 'blank',
+                    date: due ? formatIsoDate(due) : ''
+                });
+            });
+        });
         res.json({
             ok: true,
             warning: problem || '',
@@ -716,18 +849,31 @@ function attachBoErrorRules(app, deps) {
             columnMissing: result.columnMissing,
             missingColumns: result.missingColumns,
             mappingWarnings: result.mappingWarnings || [],
-            previews: (result.employees || []).filter((item) => item.salesmanId !== 'UNASSIGNED').slice(0, 8).map((person) => ({
-                salesmanId: person.salesmanId,
-                salesmanName: person.salesmanName,
-                orders: (person.orders || []).map((order) => ({
-                    boNumber: order.boNumber,
-                    orderDate: order.orderDate,
-                    product: order.product,
-                    incorrectValue: order.incorrectValue,
-                    correctValue: order.correctValue
-                })),
-                message: fillMessage(rule.message, messageBag(rule, person, person.orders))
-            }))
+            orders,
+            previews: (result.employees || []).filter((item) => item.salesmanId !== 'UNASSIGNED').slice(0, 8).map((person) => {
+                const first = (person.orders || [])[0];
+                const firstDue = first ? dueFor(first) : null;
+                return {
+                    salesmanId: person.salesmanId,
+                    salesmanName: person.salesmanName,
+                    orders: (person.orders || []).map((order) => {
+                        const due = dueFor(order);
+                        const dateDisplay = due ? formatBoDate(due) : '';
+                        return {
+                            boNumber: order.boNumber,
+                            orderDate: order.orderDate,
+                            product: order.product,
+                            incorrectValue: order.incorrectValue,
+                            correctValue: order.correctValue,
+                            customerName: order.customerName || '',
+                            message: isPerOrder(rule) ? fillMessage(rule.message, perOrderMessageBag(rule, person, order, dateDisplay)) : undefined
+                        };
+                    }),
+                    message: fillMessage(rule.message, isPerOrder(rule) && first
+                        ? perOrderMessageBag(rule, person, first, firstDue ? formatBoDate(firstDue) : '')
+                        : messageBag(rule, person, person.orders))
+                };
+            })
         });
     });
 
@@ -821,12 +967,12 @@ function attachBoErrorRules(app, deps) {
         const chosen = wanted.length ? staff.filter((person) => wanted.includes(person.recordId)) : [];
         const targeted = wanted.length > 0;
         if (targeted && !chosen.length) return res.status(400).json({ error: 'None of the selected employees could be found.' });
-        const employees = ((rule.current && rule.current.employees) || []).filter((item) => {
+        const employees = applyPerOrderEmployees(rule, ((rule.current && rule.current.employees) || []).filter((item) => {
             if (!item) return false;
             if (item.salesmanId === 'UNASSIGNED' && (!item.salesmanName || item.salesmanName === 'Unassigned')) return false;
             if (!targeted) return true;
             return chosen.some((person) => (item.salesmanId !== 'UNASSIGNED' && String(person.id) === String(item.salesmanId)) || samePersonName(person.name, item.salesmanName));
-        });
+        }), new Date());
         if (!employees.length) {
             return res.status(400).json({ error: targeted
                 ? 'None of the selected employees have orders matching this condition in the current Back Order file.'
@@ -834,7 +980,10 @@ function attachBoErrorRules(app, deps) {
         }
         const orderCount = employees.reduce((sum, item) => sum + (item.orders || []).length, 0);
         const audienceKey = targeted ? chosen.map((person) => person.recordId).sort().join(',') : 'all';
-        const nextPrint = `${fingerprint(employees)}#${audienceKey}`;
+        const perOrderKey = isPerOrder(rule)
+            ? employees.map((item) => `${item.salesmanId}:${(item.orders || []).map((order) => `${order.boNumber}=${order.deadline || ''}`).sort().join(',')}`).sort().join('|')
+            : '';
+        const nextPrint = `${fingerprint(employees)}#${audienceKey}${perOrderKey ? '#' + perOrderKey : ''}`;
         const last = [...store.publications].reverse().find((item) => item.ruleId === rule.id);
         if (last && last.fingerprint === nextPrint && !req.body?.confirmRepublish) {
             return res.status(409).json({ error: 'This same result was already pushed to the same employees. Confirm to publish it again.', needsConfirm: true });
@@ -973,6 +1122,9 @@ function attachBoErrorRules(app, deps) {
                 ruleId: rule.id,
                 publicationId: publication.id,
                 name: rule.name,
+                errorLabel: rule.errorLabel || '',
+                messageMode: rule.messageMode || '',
+                language: rule.language || '',
                 product: rule.product || 'All cars',
                 column: rule.column,
                 incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
@@ -985,7 +1137,9 @@ function attachBoErrorRules(app, deps) {
                     ...order,
                     status: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].status) || 'new',
                     at: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].at) || '',
-                    phone: phones.get(cellString(order.boNumber)) || order.phone || ''
+                    phone: phones.get(cellString(order.boNumber)) || order.phone || '',
+                    message: order.message || '',
+                    deadline: order.deadline || ''
                 }))
             });
         });

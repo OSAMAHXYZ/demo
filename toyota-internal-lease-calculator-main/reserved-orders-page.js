@@ -1338,18 +1338,18 @@
                 return `<tr>
                     <td><b>${esc(order.boNumber || '—')}</b></td>
                     <td>${esc(order.product || item.product || '—')}</td>
-                    <td>${esc(order.orderDate || '—')}</td>
+                    <td>${esc(order.deadline || order.orderDate || '—')}</td>
                     <td>${esc(item.column || order.column || '—')}: <b>${esc(wrong)}</b></td>
                     <td><span class="pill ${state.cls === 'is-sent' ? 'p-ok' : state.cls ? 'p-warn' : 'p-bad'}"><span class="dot"></span>${state.label}</span></td>
                 </tr>`;
             }).join('');
             return `<article class="oe-card card pane${allDone ? ' is-done' : ''}">
                 <div class="mdetail-head">
-                    <h2 dir="auto">${esc(item.name || 'Order error')}</h2>
+                    <h2 dir="auto">${esc(item.errorLabel || item.name || 'Order error')}</h2>
                     <span class="pill ${allDone ? 'p-ok' : 'p-bad'}"><span class="dot"></span>${orders.length} order${orders.length === 1 ? '' : 's'}</span>
                 </div>
                 <div class="fixline"><span class="muted-text">${esc(item.column || 'BO file')}</span><span class="from">${esc(item.incorrectValue || 'blank')}</span>${item.correctValue ? `${icon('chevron')}<span class="to">${esc(item.correctValue)}</span>` : ''}${item.product ? `<span class="muted-text">· ${esc(item.product)}</span>` : ''}</div>
-                ${item.message ? `<div class="cur-note" dir="auto">${esc(item.message)}</div>` : ''}
+                ${item.message && item.messageMode !== 'perOrder' ? `<div class="cur-note" dir="auto">${esc(item.message)}</div>` : ''}
                 <div class="tbl-wrap"><table class="oe-table"><thead><tr><th>Order number</th><th>Car</th><th>Order date</th><th>What is wrong</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No orders listed.</td></tr>'}</tbody></table></div>
                 <div class="row-end">
                     ${allDone ? '' : `<button type="button" class="btn" data-oe-viewed="${esc(item.ruleId)}">Mark as viewed</button>`}
@@ -1655,8 +1655,15 @@
         if (status === 'viewed') return { label: 'Viewed', cls: 'is-viewed' };
         return { label: 'Needs action', cls: 'is-need' };
     }
+    function mcOrderDate(order) {
+        return (order && (order.deadline || order.orderDate)) || '';
+    }
+    function mcOrderMessage(row) {
+        if (!row) return '';
+        return (row.order && row.order.message) || (row.alert && row.alert.message) || '';
+    }
     function mcSoon(order) {
-        const match = String(order.orderDate || '').match(/(\d{1,2})[./](\d{1,2})[./](\d{4})|(\d{4})-(\d{2})-(\d{2})/);
+        const match = String(mcOrderDate(order) || '').match(/(\d{1,2})[./](\d{1,2})[./](\d{4})|(\d{4})-(\d{2})-(\d{2})/);
         if (!match) return false;
         const date = match[3]
             ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]))
@@ -1671,7 +1678,7 @@
         const rows = mcRows();
         const needle = mcQuery.trim().toLowerCase();
         const visible = rows.filter((row) => {
-            const blob = [row.order.boNumber, row.order.product, row.vin, row.alert.column, row.alert.name, row.alert.message].join(' ').toLowerCase();
+            const blob = [row.order.boNumber, row.order.product, row.vin, row.alert.column, row.alert.errorLabel, row.alert.name, mcOrderMessage(row)].join(' ').toLowerCase();
             return !needle || blob.includes(needle);
         });
         const need = rows.filter((row) => mcStatus(row).cls === 'is-need' || mcStatus(row).cls === 'is-viewed').length;
@@ -1687,10 +1694,11 @@
         list.innerHTML = visible.map((row) => {
             const state = mcStatus(row);
             const pill = state.cls === 'is-sent' ? 'p-ok' : state.cls === 'is-need' ? 'p-bad' : 'p-warn';
-            const error = row.alert.name || row.alert.column || 'Error';
+            const error = row.alert.errorLabel || row.alert.name || row.alert.column || 'Error';
+            const when = mcOrderDate(row.order);
             return `<button type="button" class="mitem" aria-current="${row.key === mcKey ? 'true' : 'false'}" data-mc="${esc(row.key)}">
                 <b dir="auto">${esc(row.order.product || row.alert.product || 'Vehicle')} · ${esc(row.order.boNumber || '—')}</b>
-                <small dir="auto">${esc(error)}${row.order.orderDate ? ` · <span class="${mcSoon(row.order) && state.cls !== 'is-sent' ? 'soon' : ''}">${esc(row.order.orderDate)}</span>` : ''}</small>
+                <small dir="auto">${esc(error)}${when ? ` · <span class="${mcSoon(row.order) && state.cls !== 'is-sent' ? 'soon' : ''}">${esc(when)}</span>` : ''}</small>
                 <span class="pill ${pill}"><span class="dot"></span>${state.label}</span>
             </button>`;
         }).join('') || '<p class="empty">No orders match this search.</p>';
@@ -1710,18 +1718,18 @@
             return;
         }
         const state = mcStatus(row);
-        const draft = mcDrafts[row.key] != null ? mcDrafts[row.key] : row.alert.message;
+        const draft = mcDrafts[row.key] != null ? mcDrafts[row.key] : mcOrderMessage(row);
         const dated = hasMessageDate(draft);
         const when = row.order.at ? new Date(row.order.at).toLocaleString() : '';
         const pill = state.cls === 'is-sent' ? 'p-ok' : state.cls === 'is-need' ? 'p-bad' : 'p-warn';
         work.innerHTML = `<div class="mdetail-head">
-                <h2 dir="auto">${esc(row.alert.name || row.alert.column || 'Order error')}</h2>
+                <h2 dir="auto">${esc(row.alert.errorLabel || row.alert.name || row.alert.column || 'Order error')}</h2>
                 <span class="pill ${pill}"><span class="dot"></span>${state.label}</span>
             </div>
             <p class="muted-line" dir="auto">${[row.order.product, row.order.boNumber ? 'order ' + row.order.boNumber : '', row.alert.column, row.vin ? 'VIN ' + row.vin : ''].filter(Boolean).map(esc).join(' · ')}</p>
-            <div class="fixline"><span class="from">${esc(row.alert.incorrectValue || 'blank')}</span>${icon('chevron')}<span class="to">${esc(row.order.correctValue || row.alert.correctValue || '—')}</span></div>
+            <div class="fixline"><span class="from">${esc(row.order.incorrectValue || row.alert.incorrectValue || 'blank')}</span>${icon('chevron')}<span class="to">${esc(row.order.correctValue || row.alert.correctValue || '—')}</span></div>
             <div class="facts">
-                <div><span>BO date</span><b>${esc(row.order.orderDate || '—')}</b></div>
+                <div><span>BO date</span><b>${esc(mcOrderDate(row.order) || '—')}</b></div>
                 <div><span>WhatsApp</span><b class="mono">${esc(phone(row.order.phone) || 'No number in column X')}</b></div>
                 <div><span>Saved</span><b>${esc(when || 'Not confirmed')}</b></div>
             </div>
