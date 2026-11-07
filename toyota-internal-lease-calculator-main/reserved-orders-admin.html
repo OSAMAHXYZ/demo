@@ -7,18 +7,23 @@
     <title>Reserved Orders Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261106d4">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261107c">
 </head>
 <body>
     <section id="gate" class="login-screen">
         <form class="login-card" id="gate-form">
             <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
             <h1>Reserved admin</h1>
-            <p>Use the same admin password as the report admin.</p>
-            <label class="field" for="admin-password"><span>Admin password</span><input id="admin-password" type="password" required></label>
+            <p>Sign in with an admin name and ID, or the report admin password.</p>
+            <label class="field" for="gate-staff"><span>Admin name</span>
+                <select id="gate-staff">
+                    <option value="">Report admin password</option>
+                </select>
+            </label>
+            <label class="field" for="admin-password"><span id="gate-pass-label">Password</span><input id="admin-password" type="password" required></label>
             <div class="err" id="gate-error"></div>
             <button class="btn primary" type="submit">Continue</button>
-            <p class="login-note"><a href="hub.html">Back to hub</a></p>
+            <p class="login-note"><a href="hub.html">Back to hub</a> · <a href="reserved-orders.html">Employee sign in</a></p>
         </form>
     </section>
     <div id="admin-app" class="hidden tower-app">
@@ -28,7 +33,7 @@
                 <span><b>Reserved Orders</b><small id="admin-updated">Admin</small></span>
             </div>
             <span class="spacer"></span>
-            <div class="who"><span class="av">AD</span><div><b>Admin</b><small>Full access</small></div></div>
+            <div class="who" id="admin-who"><span class="av" id="admin-who-av">AD</span><div><b id="admin-who-name">Admin</b><small id="admin-who-role">Full access</small></div></div>
             <a class="btn" href="hub.html">Hub</a>
             <a class="btn" href="reserved-orders.html">Employee page</a>
             <button class="btn" id="admin-out" type="button">Sign out</button>
@@ -113,24 +118,35 @@
                 <div class="head">
                     <div>
                         <h1>Live sheet</h1>
-                        <p class="sheet-note" id="sheet-note">One row per VIN of the Reserved Order File, matched with RTL Stock and ranked against the Toyota Back Order file. Click a row to change its status.</p>
+                        <p class="sheet-note" id="sheet-note">One row per VIN. Filter, then click a row to change its status. Redesign the columns and submit so employees see the same sheet.</p>
                     </div>
                 </div>
-                <div class="bar">
-                    <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="sheet-search" type="search" placeholder="Search merged sheet" aria-label="Search this sheet"></label>
+                <div class="bar" id="sheet-filter-bar">
+                    <section class="chips" id="sheet-chips" aria-label="Filter by status"></section>
+                    <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="sheet-search" type="search" placeholder="Search VIN, order, customer, salesman" aria-label="Search this sheet"></label>
+                    <select class="sel" id="sheet-filter-salesman" aria-label="Salesman"><option value="">All salesmen</option></select>
+                    <select class="sel" id="sheet-filter-product" aria-label="Car"><option value="">All cars</option></select>
+                    <select class="sel" id="sheet-filter-area" aria-label="Area"><option value="">All areas</option></select>
+                    <select class="sel" id="sheet-filter-expiry" aria-label="Expiry">
+                        <option value="">All timers</option>
+                        <option value="soon">Expires in 24 hours</option>
+                        <option value="expired">Expired</option>
+                    </select>
+                    <button type="button" class="btn" id="sheet-filter-clear">Clear</button>
                     <div class="rel">
                         <button type="button" class="btn" id="xl-cols-btn" aria-haspopup="true" aria-expanded="false">Columns <span class="mono muted"></span></button>
-                        <div class="colpop hidden" id="xl-cols-pop" role="dialog" aria-label="Show or hide columns">
+                        <div class="colpop hidden" id="xl-cols-pop" role="dialog" aria-label="Show, hide or reorder columns">
                             <div class="xl-colspop-head"><b id="xl-cols-title">Columns</b><button type="button" class="x" id="xl-cols-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+                            <p class="muted xl-cols-hint">Drag to reorder. Uncheck to hide. Submit for everyone so employees see the same columns.</p>
                             <div class="bar"><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="xl-cols-q" type="search" placeholder="Find a column" aria-label="Find a column"></label><button type="button" class="btn sm" id="xl-cols-showall">Show all</button></div>
                             <ul id="xl-cols-list" class="xl-cols-list"></ul>
                         </div>
                     </div>
-                    <button type="button" class="btn" id="xl-save-layout" disabled>Save layout</button>
+                    <button type="button" class="btn primary" id="xl-save-layout" disabled>Submit for everyone</button>
                     <button type="button" class="btn" id="xl-reset-layout">Reset</button>
                     <small class="muted" id="xl-layout-state">Layout saved</small>
                     <span class="spacer"></span>
-                    <button type="button" class="btn primary" data-notify-pending title="Send a reminder right away to every employee whose reserved orders have no status update"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20h4"/></svg>Notify all not updated</button>
+                    <button type="button" class="btn" data-notify-pending title="Send a reminder right away to every employee whose reserved orders have no status update"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20h4"/></svg>Notify all not updated</button>
                 </div>
                 <div class="colpop hidden" id="xl-ctx" role="menu">
                     <div class="xl-ctx-title"></div>
@@ -143,20 +159,30 @@
                 <span id="xl-formula" hidden></span>
                 <span id="xl-filename" hidden></span>
                 <span class="sheet-source-count" id="sheet-count-merged" hidden>0</span>
-                <div class="card"><div class="tbl-wrap sheet-wrap" id="live-sheet-merged" data-source="merged" tabindex="0"></div></div>
-                <p class="legend"><span id="xl-stat"></span><span id="xl-novin"></span><span class="xl-zoom"><label for="xl-zoom">Zoom</label><input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom"><b id="xl-zoom-val">100%</b></span></p>
+                <div class="sheet-stage">
+                    <div class="card"><div class="tbl-wrap sheet-wrap" id="live-sheet-merged" data-source="merged" tabindex="0"></div></div>
+                    <p class="legend"><span id="xl-stat"></span><span id="xl-novin"></span><span class="xl-zoom"><label for="xl-zoom">Zoom</label><input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom"><b id="xl-zoom-val">100%</b></span></p>
+                </div>
             </section>
             <section id="panel-employees" class="hidden view">
-                <div class="head"><div><h1>Employees</h1><p>Add or edit logins. Disabling a person keeps their audit history.</p></div></div>
+                <div class="head"><div><h1>Employees</h1><p>Add a person and set Admin or Employee. They sign in with their name and ID: Admin opens this page, Employee opens the salesman page. Disabling keeps their audit history.</p></div></div>
                 <div class="admin-grid split">
                     <section class="card pane">
-                        <h2>Employee</h2>
-                        <div class="stack">
-                            <input id="staff-name" placeholder="Employee name">
-                            <input id="staff-id" placeholder="Employee ID">
-                            <select class="sel" id="staff-role"><option value="employee">Employee</option><option value="admin">Admin</option></select>
-                            <label><input id="staff-active" type="checkbox" checked> Active</label>
-                            <button class="btn primary" id="save-staff" type="button">Save employee</button>
+                        <h2 id="staff-form-title">Add person</h2>
+                        <div class="staff-fields">
+                            <label class="field" for="staff-name"><span>Name</span><input id="staff-name" placeholder="Full name" autocomplete="off"></label>
+                            <label class="field" for="staff-id"><span>Employee ID</span><input id="staff-id" placeholder="Sign-in number" autocomplete="off"></label>
+                            <label class="field" for="staff-role"><span>Opens</span>
+                                <select class="sel" id="staff-role">
+                                    <option value="employee">Employee page</option>
+                                    <option value="admin">Admin page</option>
+                                </select>
+                            </label>
+                            <label class="staff-active"><input id="staff-active" type="checkbox" checked> Active — can sign in</label>
+                            <div class="bar">
+                                <button class="btn primary" id="save-staff" type="button">Save person</button>
+                                <button class="btn" id="staff-cancel" type="button">Clear</button>
+                            </div>
                             <div class="err" id="staff-error"></div>
                         </div>
                     </section>
@@ -239,6 +265,6 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261106d4"></script>
+    <script src="reserved-orders-admin.js?v=20261107c"></script>
 </body>
 </html>

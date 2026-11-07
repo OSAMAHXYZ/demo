@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261106cp2" />
   <link rel="stylesheet" href="bo-notifications.css?v=20261105ytd1" />
-  <script src="auth.js?v=20261105zt1"></script>
+  <script src="auth.js?v=20261107cf1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
@@ -197,7 +197,7 @@
         </button>
         <button type="button" class="tab side-nav-item" data-admin-panel="contact" id="tab-contact">
           <span class="side-nav-icon" aria-hidden="true">☎</span>
-          <span class="side-nav-label">CRM &amp; Contact</span>
+          <span class="side-nav-label">Contact file</span>
         </button>
         <button type="button" class="tab side-nav-item" data-admin-panel="ytd" id="tab-ytd">
           <span class="side-nav-icon" aria-hidden="true">▤</span>
@@ -283,10 +283,10 @@
 
       <div class="card admin-section-card" id="contact-files">
         <div class="pbi-viz-head">
-          <h2>CRM export and contact file</h2>
+          <h2>Contact file</h2>
           <span class="admin-section-tag">Contact Performance</span>
         </div>
-        <p class="admin-lead">Drop the <b>CRM export</b> (sheet <b>Export</b>) here, then click <b>Push to live</b>; it is enough on its own. Columns are read by header name: Lead Number, Employee Responsible, Initial Contact, Created Date, Source, Status, Lead Type, Centre Name. A separate <b>contact file</b> is optional and overrides Initial Contact per Lead Number.</p>
+        <p class="admin-lead">Drop the <b>contact file</b> (sheet <b>Export</b>) here, then click <b>Push to live</b>. Columns are read by header name: Lead Number, Employee Responsible, Initial Contact, Created Date, Source, Status, Lead Type, Centre Name.</p>
         <div id="contact-admin-host"></div>
       </div>
 
@@ -1908,8 +1908,8 @@
           if (contactResult && contactResult.message) contactNote = ` · ${contactResult.message}`;
         }
       } catch (err) {
-        const detail = (err.payload && err.payload.errors && err.payload.errors[0]) || err.message || "Contact / CRM was not published.";
-        contactNote = ` · Contact / CRM not published: ${detail}`;
+        const detail = (err.payload && err.payload.errors && err.payload.errors[0]) || err.message || "Contact file was not published.";
+        contactNote = ` · Contact file not published: ${detail}`;
         contactResult = { ok: false, message: detail };
       }
       let ytdResult = null;
@@ -2580,7 +2580,7 @@
   });
 })();
 </script>
-<script src="contact-performance.js?v=20261106cp2"></script>
+<script src="contact-performance.js?v=20261107cf1"></script>
 <script>
   if (window.ContactPerformance) {
     window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));

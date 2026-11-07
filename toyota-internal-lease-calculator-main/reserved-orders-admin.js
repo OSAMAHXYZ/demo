@@ -1,6 +1,8 @@
 (function () {
     let STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
     const passKey = 'reserved-orders-admin-pass';
+    const tokenKey = 'reserved-orders-admin-token';
+    const whoKey = 'reserved-orders-admin-who';
     let orders = [];
     let sold = [];
     let staff = [];
@@ -33,6 +35,41 @@
 
     const $ = (id) => document.getElementById(id);
     function password() { return sessionStorage.getItem(passKey) || ''; }
+    function adminToken() { return sessionStorage.getItem(tokenKey) || ''; }
+    function authFields() {
+        const out = {};
+        const pass = password();
+        const token = adminToken();
+        if (pass) out.password = pass;
+        if (token) out.token = token;
+        return out;
+    }
+    function withAuthUrl(url) {
+        const parts = Object.keys(authFields()).map((key) => encodeURIComponent(key) + '=' + encodeURIComponent(authFields()[key]));
+        if (!parts.length) return url;
+        return url + (url.indexOf('?') >= 0 ? '&' : '?') + parts.join('&');
+    }
+    function clearAdminAuth() {
+        sessionStorage.removeItem(passKey);
+        sessionStorage.removeItem(tokenKey);
+        sessionStorage.removeItem(whoKey);
+    }
+    function paintAdminWho() {
+        let name = 'Admin';
+        let role = 'Full access';
+        let av = 'AD';
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(whoKey) || 'null');
+            if (saved && saved.name) {
+                name = saved.name;
+                role = 'Admin page';
+                av = initials(name);
+            }
+        } catch (e) { /* keep default */ }
+        if ($('admin-who-name')) $('admin-who-name').textContent = name;
+        if ($('admin-who-role')) $('admin-who-role').textContent = role;
+        if ($('admin-who-av')) $('admin-who-av').textContent = av;
+    }
     function esc(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
 
     /* ---------- v2 design helpers (shared with reserved-orders-page.js) ---------- */
@@ -268,14 +305,25 @@
         return /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vin);
     }
     async function api(url, options) {
-        const res = await fetch(url, options);
+        const opts = options ? Object.assign({}, options) : {};
+        if (opts.body && typeof opts.body === 'string') {
+            try {
+                const parsed = JSON.parse(opts.body);
+                opts.body = JSON.stringify(Object.assign({}, authFields(), parsed));
+            } catch (e) { /* leave body as-is */ }
+        }
+        const res = await fetch(withAuthUrl(url), opts);
         const data = await res.json().catch(() => ({}));
-        if (res.status === 401) { sessionStorage.removeItem(passKey); showGate('Admin password was not accepted.'); throw new Error('unauthorized'); }
+        if (res.status === 401) {
+            clearAdminAuth();
+            showGate('Sign in was not accepted.');
+            throw new Error('unauthorized');
+        }
         if (!res.ok) throw new Error(data.error || 'Request failed');
         return data;
     }
     function showGate(message) { $('gate').classList.remove('hidden'); $('admin-app').classList.add('hidden'); $('gate-error').textContent = message || ''; }
-    function showApp() { $('gate').classList.add('hidden'); $('admin-app').classList.remove('hidden'); requestAnimationFrame(paintAdminRail); }
+    function showApp() { $('gate').classList.add('hidden'); $('admin-app').classList.remove('hidden'); paintAdminWho(); requestAnimationFrame(paintAdminRail); }
     function showPanel(name) {
         document.querySelectorAll('[id^="panel-"]').forEach((panel) => panel.classList.toggle('hidden', panel.id !== 'panel-' + name));
         document.querySelectorAll('#admin-nav button').forEach((button) => button.classList.toggle('active', button.dataset.panel === name));
@@ -319,6 +367,7 @@
     let salesTypePick = null; // nothing listed until a card is clicked
     let showNoVinRows = false;
     let sheetSource = 'merged'; // E-Sales and Reserved Order File sheets are hidden; only the Merged sheet is shown
+    const sheetFilter = { chip: '', salesman: '', product: '', area: '', expiry: '' };
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
@@ -790,11 +839,36 @@
             });
         }
     }
+    function clearStaffForm() {
+        editing = '';
+        if ($('staff-name')) $('staff-name').value = '';
+        if ($('staff-id')) $('staff-id').value = '';
+        if ($('staff-role')) $('staff-role').value = 'employee';
+        if ($('staff-active')) $('staff-active').checked = true;
+        if ($('staff-form-title')) $('staff-form-title').textContent = 'Add person';
+        if ($('save-staff')) $('save-staff').textContent = 'Save person';
+        if ($('staff-error')) $('staff-error').textContent = '';
+    }
     function renderStaff() {
-        $('staff-list').innerHTML = '<h2>Employees</h2>' + staff.map((person) => `<div class="staff-row" style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #e6e8ee;">
-            <div><b>${esc(person.name)}</b><br>ID ${esc(person.id)} · ${esc(person.role)} · ${person.active ? 'Active' : 'Inactive'}</div>
-            <button class="ghost" type="button" data-edit="${esc(person.recordId)}">Edit</button>
-        </div>`).join('');
+        const list = $('staff-list');
+        if (!list) return;
+        const rows = staff.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        list.innerHTML = '<h2>People</h2>' + (rows.length
+            ? rows.map((person) => {
+                const admin = person.role === 'admin';
+                return `<div class="staff-row">
+                    <div>
+                        <b dir="auto">${esc(person.name)}</b>
+                        <small>ID ${esc(person.id || '—')}</small>
+                        <div class="staff-meta">
+                            <span class="pill ${admin ? 'p-info' : 'p-none'}"><span class="dot"></span>${admin ? 'Admin page' : 'Employee page'}</span>
+                            <span class="tag${person.active !== false ? ' good' : ''}">${person.active !== false ? 'Active' : 'Inactive'}</span>
+                        </div>
+                    </div>
+                    <button class="btn sm" type="button" data-edit="${esc(person.recordId)}">Edit</button>
+                </div>`;
+            }).join('')
+            : '<p class="empty">No people yet. Add the first person on the left.</p>');
     }
     function renderArchive() {
         $('archive-rows').innerHTML = archive.slice().reverse().map((item) => `<tr>
@@ -1095,6 +1169,73 @@
         }
         renderSheet();
     }
+    function sheetRemainMs(order) {
+        const end = parseLocal(expiryDeadlineOf(order));
+        return end ? end.getTime() - Date.now() : null;
+    }
+    function restoreSelect(select, value) {
+        if (!select) return;
+        const wanted = value && Array.from(select.options).some((opt) => opt.value === value) ? value : '';
+        select.value = wanted;
+    }
+    function distinctSheet(list, source, label) {
+        return Array.from(new Set(list.map((order) => String(sheetValue(order, label, source) || '').trim()).filter(Boolean)))
+            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
+    function fillSheetFilters(list) {
+        const chips = $('sheet-chips');
+        if (chips) {
+            const counts = { Payment: 0, 'In progress': 0, Cancelled: 0, none: 0, other: 0 };
+            list.forEach((order) => { counts[statusBucket(order)] += 1; });
+            const total = list.length;
+            const chip = (key, label, value, dot) => `<button type="button" data-sheet-chip="${esc(key)}" aria-pressed="${sheetFilter.chip === key ? 'true' : 'false'}">${dot ? `<span class="dot ${dot}"></span>` : ''}${esc(label)}<i>${value}</i></button>`;
+            chips.innerHTML = '<span class="ind"></span>'
+                + chip('', 'All', total, '')
+                + chip('Payment', 'Payment', counts.Payment, 'd-ok')
+                + chip('In progress', 'In progress', counts['In progress'], 'd-warn')
+                + chip('Cancelled', 'Cancelled', counts.Cancelled, 'd-bad')
+                + chip('none', 'Not updated', counts.none, 'd-none')
+                + (counts.other ? chip('other', 'Other', counts.other, 'd-you') : '');
+            slideIndicator(chips.querySelector('.ind'), chips.querySelector('[aria-pressed="true"]'));
+        }
+        const salesman = $('sheet-filter-salesman');
+        const product = $('sheet-filter-product');
+        const area = $('sheet-filter-area');
+        const keep = [sheetFilter.salesman, sheetFilter.product, sheetFilter.area, sheetFilter.expiry];
+        if (salesman) {
+            salesman.innerHTML = '<option value="">All salesmen</option>' + distinctSheet(list, 'merged', 'Salesman name').map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+            restoreSelect(salesman, keep[0]);
+            sheetFilter.salesman = salesman.value;
+        }
+        if (product) {
+            product.innerHTML = '<option value="">All cars</option>' + distinctSheet(list, 'merged', 'Product').map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+            restoreSelect(product, keep[1]);
+            sheetFilter.product = product.value;
+        }
+        if (area) {
+            area.innerHTML = '<option value="">All areas</option>' + distinctSheet(list, 'merged', 'Area').map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+            restoreSelect(area, keep[2]);
+            sheetFilter.area = area.value;
+        }
+        const expiry = $('sheet-filter-expiry');
+        if (expiry) {
+            restoreSelect(expiry, keep[3]);
+            sheetFilter.expiry = expiry.value;
+        }
+    }
+    function orderMatchesSheetFilter(order, source) {
+        if (sheetFilter.chip === 'none' && !isNotUpdated(order)) return false;
+        if (sheetFilter.chip && sheetFilter.chip !== 'none' && statusBucket(order) !== sheetFilter.chip) return false;
+        if (sheetFilter.salesman && sheetValue(order, 'Salesman name', source) !== sheetFilter.salesman) return false;
+        if (sheetFilter.product && sheetValue(order, 'Product', source) !== sheetFilter.product) return false;
+        if (sheetFilter.area && sheetValue(order, 'Area', source) !== sheetFilter.area) return false;
+        if (sheetFilter.expiry) {
+            const ms = sheetRemainMs(order);
+            if (sheetFilter.expiry === 'expired' && !(ms != null && ms <= 0)) return false;
+            if (sheetFilter.expiry === 'soon' && !(ms != null && ms > 0 && ms < 86400000)) return false;
+        }
+        return true;
+    }
     function renderOneSheet(box, source, list) {
         if (!box) return;
         const needle = ($('sheet-search') && $('sheet-search').value || '').trim().toLowerCase();
@@ -1115,7 +1256,11 @@
         const visible = source === 'merged'
             ? (showNoVinRows ? list : list.filter((order) => hasVin(order) || orderInSheet(order, 'esales') || orderInSheet(order, 'reserved')))
             : (showNoVinRows ? list : list.filter(hasVin));
-        const rows = visible.filter((order) => !needle || cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle)));
+        const rows = visible.filter((order) => {
+            if (!orderMatchesSheetFilter(order, source)) return false;
+            if (!needle) return true;
+            return cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle));
+        });
         const head = (label) => {
             const named = colName(label);
             if (/^[A-Z]{1,3}$/.test(label) && named && source !== 'merged') {
@@ -1210,11 +1355,13 @@
             const plain = String(value == null ? '' : value).trim();
             return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
         };
-        const emptyMsg = source === 'merged'
-            ? 'No rows yet. Push the Reserved Order File and the RTL Stock on Data push.'
-            : source === 'reserved'
-                ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
-                : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
+        const emptyMsg = !list.length
+            ? (source === 'merged'
+                ? 'No rows yet. Push the Reserved Order File and the RTL Stock on Data push.'
+                : source === 'reserved'
+                    ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
+                    : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.')
+            : 'No rows match these filters. Clear search or pick another filter.';
         const note = noVin ? `${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} <button type="button" class="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button>` : '';
         // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
         box.innerHTML = rows.length
@@ -1301,6 +1448,7 @@
     let xlSaved = {};
     let xlDraft = {};
     let xlFlash = '';
+    let xlServer = {};
     function xlCopy(value) { return JSON.parse(JSON.stringify(value || {})); }
     function xlNorm(all) {
         const out = {};
@@ -1336,16 +1484,30 @@
         return shown.length ? shown : all.slice();
     }
     function xlDirty() { return JSON.stringify(xlNorm(xlDraft)) !== JSON.stringify(xlNorm(xlSaved)); }
+    function applyServerLayout(data, asSaved) {
+        const next = { merged: { hidden: (data && data.hidden) || [], order: (data && data.order) || [] } };
+        xlServer = { hidden: next.merged.hidden.slice(), order: next.merged.order.slice() };
+        if (asSaved) {
+            xlSaved = xlNorm(next);
+            xlDraft = xlCopy(xlSaved);
+            try { localStorage.setItem(XL_LAYOUT_KEY, JSON.stringify(xlSaved)); } catch (e) { /* storage blocked */ }
+        }
+    }
     function xlPaintLayoutState() {
         const state = $('xl-layout-state');
         const save = $('xl-save-layout');
         const dirty = xlDirty();
+        const published = !dirty
+            && JSON.stringify(xlNorm(xlSaved)) === JSON.stringify(xlNorm({ merged: xlServer }))
+            && !!(xlServer && (xlServer.updatedAt || (xlServer.order && xlServer.order.length) || (xlServer.hidden && xlServer.hidden.length)));
         if (state) {
-            state.textContent = dirty ? 'Unsaved layout changes' : (xlFlash || 'Layout saved');
+            state.textContent = dirty
+                ? 'Unsaved layout changes'
+                : (xlFlash || (published ? 'Live for everyone' : 'Not submitted yet · employees still see the default sheet'));
             state.classList.toggle('is-dirty', dirty);
         }
         if (save) {
-            save.disabled = !dirty;
+            save.disabled = !dirty && published;
             save.classList.toggle('is-dirty', dirty);
         }
         const btn = $('xl-cols-btn');
@@ -1393,19 +1555,47 @@
         layout.order = ordered;
         xlAfterLayoutChange();
     }
-    function xlSaveLayout() {
+    async function xlSaveLayout() {
+        const info = xlInfo[sheetSource];
+        if (info) xlLayout(sheetSource).order = xlOrdered(sheetSource, info.all);
         xlSaved = xlNorm(xlDraft);
         xlDraft = xlCopy(xlSaved);
+        const merged = xlDraft.merged || xlSaved.merged || { hidden: [], order: [] };
+        try { localStorage.setItem(XL_LAYOUT_KEY, JSON.stringify(xlSaved)); } catch (e) { /* storage blocked */ }
         try {
-            localStorage.setItem(XL_LAYOUT_KEY, JSON.stringify(xlSaved));
-            xlFlash = 'Layout saved';
+            const data = await api('/api/reserved-orders/admin/sheet-layout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    password: password(),
+                    order: merged.order || (info ? info.all : []),
+                    hidden: merged.hidden || []
+                })
+            });
+            applyServerLayout(data, true);
+            xlFlash = 'Live for everyone';
+            toast('Layout submitted', 'Employees and this admin page now use these columns.', 'd-ok');
         } catch (e) {
-            xlFlash = 'Could not save in this browser';
+            xlFlash = e.message || 'Could not submit';
+            toast('Could not submit', xlFlash, 'd-bad');
         }
         xlPaintLayoutState();
     }
     function xlResetLayout() {
         delete xlDraft[sheetSource];
+        xlAfterLayoutChange();
+    }
+    function xlReorderTo(source, fromLabel, toLabel) {
+        if (!fromLabel || fromLabel === toLabel) return;
+        const info = xlInfo[source];
+        if (!info) return;
+        const ordered = xlOrdered(source, info.all);
+        const from = ordered.indexOf(fromLabel);
+        const to = ordered.indexOf(toLabel);
+        if (from < 0 || to < 0) return;
+        ordered.splice(from, 1);
+        ordered.splice(to, 0, fromLabel);
+        xlLayout(source).order = ordered;
         xlAfterLayoutChange();
     }
     function xlToggleColsPop(force) {
@@ -1436,10 +1626,11 @@
             if (q && !`${name} ${label}`.toLowerCase().includes(q)) return '';
             const isHidden = hidden.has(label);
             const letter = /^[A-Z]{1,3}$/.test(label) && sheetSource !== 'merged' ? `<small>col ${esc(label)}</small>` : '';
-            return `<li class="${isHidden ? 'is-hidden' : ''}" data-label="${esc(label)}">
+            return `<li class="${isHidden ? 'is-hidden' : ''}" data-label="${esc(label)}" draggable="true">
+                <button type="button" class="grip" draggable="true" aria-label="Drag ${esc(name)}" title="Drag to reorder">⋮⋮</button>
                 <label><input type="checkbox" data-xl-toggle${isHidden ? '' : ' checked'}${!isHidden && shownCount <= 1 ? ' disabled' : ''}><span>${esc(name)}</span>${letter}</label>
-                <button type="button" data-xl-move="-1" aria-label="Move ${esc(name)} left"${index === 0 ? ' disabled' : ''}>&#8593;</button>
-                <button type="button" data-xl-move="1" aria-label="Move ${esc(name)} right"${index === ordered.length - 1 ? ' disabled' : ''}>&#8595;</button>
+                <button type="button" data-xl-move="-1" aria-label="Move ${esc(name)} up"${index === 0 ? ' disabled' : ''}>&#8593;</button>
+                <button type="button" data-xl-move="1" aria-label="Move ${esc(name)} down"${index === ordered.length - 1 ? ' disabled' : ''}>&#8595;</button>
             </li>`;
         }).join('') || '<li class="xl-cols-none">No column matches.</li>';
         list.scrollTop = scroll;
@@ -1473,6 +1664,7 @@
         if (esalesCount) esalesCount.textContent = String(esalesList.filter(hasVin).length);
         if (reservedCount) reservedCount.textContent = String(reservedList.filter(hasVin).length);
         if (mergedCount) mergedCount.textContent = String(mergedList.length);
+        fillSheetFilters(mergedList);
         renderOneSheet($('live-sheet-esales'), 'esales', esalesList);
         renderOneSheet($('live-sheet-reserved'), 'reserved', reservedList);
         renderOneSheet($('live-sheet-merged'), 'merged', mergedList);
@@ -1577,6 +1769,13 @@
         archive = data.archive || [];
         report = data.report || {};
         if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
+        if (data.sheetLayout) {
+            const published = (data.sheetLayout.order && data.sheetLayout.order.length)
+                || (data.sheetLayout.hidden && data.sheetLayout.hidden.length)
+                || data.sheetLayout.updatedAt;
+            if (published && !xlDirty()) applyServerLayout(data.sheetLayout, true);
+            else xlServer = { hidden: data.sheetLayout.hidden || [], order: data.sheetLayout.order || [] };
+        }
         $('admin-updated').textContent = data.updatedAt ? `Last push ${new Date(data.updatedAt).toLocaleString()}` : 'No live push yet';
         const source = $('push-source');
         if (source) {
@@ -1616,13 +1815,60 @@
         renderAll();
     }
 
+    async function fillGateStaff() {
+        const select = $('gate-staff');
+        if (!select) return;
+        const keep = select.value;
+        try {
+            const data = await fetch('/api/reserved-orders/staff-names').then((res) => res.json()).catch(() => ({ people: [] }));
+            const admins = (data.people || []).filter((person) => person.role === 'admin');
+            select.innerHTML = '<option value="">Report admin password</option>'
+                + admins.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}</option>`).join('');
+            if (keep && Array.from(select.options).some((opt) => opt.value === keep)) select.value = keep;
+        } catch (e) { /* gate still accepts the shared password */ }
+        paintGatePassLabel();
+    }
+    function paintGatePassLabel() {
+        const label = $('gate-pass-label');
+        const staff = $('gate-staff') && $('gate-staff').value;
+        if (label) label.textContent = staff ? 'Employee ID' : 'Password';
+    }
+    if ($('gate-staff')) $('gate-staff').addEventListener('change', paintGatePassLabel);
     $('gate-form').addEventListener('submit', async (event) => {
         event.preventDefault();
-        sessionStorage.setItem(passKey, $('admin-password').value);
+        $('gate-error').textContent = '';
+        const recordId = $('gate-staff') && $('gate-staff').value;
+        const secret = $('admin-password').value;
         $('admin-password').value = '';
-        try { await refresh(); showApp(); } catch (e) { if (e.message !== 'unauthorized') $('gate-error').textContent = e.message; }
+        try {
+            if (recordId) {
+                const res = await fetch('/api/reserved-orders/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recordId,
+                        name: $('gate-staff').selectedOptions[0] ? $('gate-staff').selectedOptions[0].textContent : '',
+                        password: secret
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'Name or employee ID is not valid.');
+                if (data.role !== 'admin') throw new Error('This login is for the employee page.');
+                sessionStorage.removeItem(passKey);
+                sessionStorage.setItem(tokenKey, data.token);
+                sessionStorage.setItem(whoKey, JSON.stringify({ name: data.name, recordId: data.recordId }));
+            } else {
+                sessionStorage.removeItem(tokenKey);
+                sessionStorage.removeItem(whoKey);
+                sessionStorage.setItem(passKey, secret);
+            }
+            await refresh();
+            showApp();
+        } catch (e) {
+            if (e.message !== 'unauthorized') $('gate-error').textContent = e.message;
+        }
     });
-    $('admin-out').addEventListener('click', () => { sessionStorage.removeItem(passKey); showGate(''); });
+    $('admin-out').addEventListener('click', () => { clearAdminAuth(); showGate(''); fillGateStaff(); });
     $('admin-app').addEventListener('click', (event) => {
         const button = event.target.closest('[data-panel]');
         if (button && !event.target.closest('#pending-modal')) showPanel(button.dataset.panel);
@@ -1711,26 +1957,33 @@
     });
     $('save-staff').addEventListener('click', async () => {
         $('staff-error').textContent = '';
+        const name = $('staff-name').value.trim();
+        const id = $('staff-id').value.trim();
+        const role = $('staff-role').value === 'admin' ? 'admin' : 'employee';
+        if (!name || !id) {
+            $('staff-error').textContent = 'Enter a name and an employee ID.';
+            return;
+        }
         try {
             await api('/api/reserved-orders/staff', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    password: password(),
-                    name: $('staff-name').value,
-                    id: $('staff-id').value,
-                    role: $('staff-role').value,
+                    name,
+                    id,
+                    role,
                     active: $('staff-active').checked,
                     previousRecordId: editing
                 })
             });
-            editing = '';
-            $('staff-name').value = '';
-            $('staff-id').value = '';
-            $('staff-active').checked = true;
+            const page = role === 'admin' ? 'admin page' : 'employee page';
+            toast(editing ? 'Person saved' : 'Person added', name + ' opens the ' + page + '.', 'd-ok');
+            clearStaffForm();
             await refresh();
+            fillGateStaff();
         } catch (e) { if (e.message !== 'unauthorized') $('staff-error').textContent = e.message; }
     });
+    if ($('staff-cancel')) $('staff-cancel').addEventListener('click', clearStaffForm);
     $('staff-list').addEventListener('click', (event) => {
         const button = event.target.closest('[data-edit]');
         if (!button) return;
@@ -1741,6 +1994,9 @@
         $('staff-id').value = person.id;
         $('staff-role').value = person.role || 'employee';
         $('staff-active').checked = person.active !== false;
+        if ($('staff-form-title')) $('staff-form-title').textContent = 'Edit person';
+        if ($('save-staff')) $('save-staff').textContent = 'Save changes';
+        $('staff-name').focus();
     });
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
@@ -1887,6 +2143,32 @@
         });
     }, 1000);
     if ($('sheet-search')) $('sheet-search').addEventListener('input', renderSheet);
+    ['sheet-filter-salesman', 'sheet-filter-product', 'sheet-filter-area', 'sheet-filter-expiry'].forEach((id) => {
+        if (!$(id)) return;
+        $(id).addEventListener('change', () => {
+            if (id === 'sheet-filter-salesman') sheetFilter.salesman = $(id).value;
+            if (id === 'sheet-filter-product') sheetFilter.product = $(id).value;
+            if (id === 'sheet-filter-area') sheetFilter.area = $(id).value;
+            if (id === 'sheet-filter-expiry') sheetFilter.expiry = $(id).value;
+            renderSheet();
+        });
+    });
+    if ($('sheet-chips')) $('sheet-chips').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-sheet-chip]');
+        if (!button) return;
+        sheetFilter.chip = button.dataset.sheetChip || '';
+        renderSheet();
+    });
+    if ($('sheet-filter-clear')) $('sheet-filter-clear').addEventListener('click', () => {
+        sheetFilter.chip = '';
+        sheetFilter.salesman = '';
+        sheetFilter.product = '';
+        sheetFilter.area = '';
+        sheetFilter.expiry = '';
+        if ($('sheet-search')) $('sheet-search').value = '';
+        ['sheet-filter-salesman', 'sheet-filter-product', 'sheet-filter-area', 'sheet-filter-expiry'].forEach((id) => { if ($(id)) $(id).value = ''; });
+        renderSheet();
+    });
     document.querySelectorAll('.sheet-source').forEach((button) => {
         button.addEventListener('click', () => setSheetSource(button.dataset.sheet));
     });
@@ -2000,6 +2282,32 @@
             const move = event.target.closest('[data-xl-move]');
             const row = event.target.closest('li[data-label]');
             if (move && row && !move.disabled) xlMove(sheetSource, row.dataset.label, Number(move.dataset.xlMove));
+        });
+        let xlDragLabel = '';
+        $('xl-cols-list').addEventListener('dragstart', (event) => {
+            const row = event.target.closest('li[data-label]');
+            if (!row) return;
+            xlDragLabel = row.dataset.label;
+            row.classList.add('is-drag');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', xlDragLabel);
+        });
+        $('xl-cols-list').addEventListener('dragend', () => {
+            xlDragLabel = '';
+            $('xl-cols-list').querySelectorAll('.is-drag, .is-over').forEach((el) => el.classList.remove('is-drag', 'is-over'));
+        });
+        $('xl-cols-list').addEventListener('dragover', (event) => {
+            const row = event.target.closest('li[data-label]');
+            if (!row || !xlDragLabel) return;
+            event.preventDefault();
+            $('xl-cols-list').querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
+            row.classList.add('is-over');
+        });
+        $('xl-cols-list').addEventListener('drop', (event) => {
+            const row = event.target.closest('li[data-label]');
+            event.preventDefault();
+            if (row && xlDragLabel) xlReorderTo(sheetSource, xlDragLabel, row.dataset.label);
+            xlDragLabel = '';
         });
     }
     if ($('xl-cols-pop')) $('xl-cols-pop').addEventListener('click', (event) => event.stopPropagation());
@@ -2298,8 +2606,9 @@
         const socket = new WebSocket(`${protocol}//${location.host}`);
         socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
-            if ((msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') && password()) refresh().catch(() => {});
+            if ((msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') && (password() || adminToken())) refresh().catch(() => {});
         });
     } catch (e) { /* the sheet still refreshes on the next manual open */ }
-    if (password()) refresh().then(showApp).catch(() => {});
+    fillGateStaff();
+    if (password() || adminToken()) refresh().then(showApp).catch(() => { fillGateStaff(); });
 })();

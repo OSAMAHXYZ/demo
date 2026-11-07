@@ -423,7 +423,7 @@
       const message = s.loadError
         || (state.diagnostic && state.diagnostic.message)
         || (s.diagnostic && s.diagnostic.message)
-        || "Nothing is published yet. On the Admin page, drop the CRM export under Contact Performance, then click Push to live.";
+        || "Nothing is published yet. On the Admin page, drop the contact file under Contact Performance, then click Push to live.";
       $("#cp-empty").innerHTML = `<div class="cp-empty-card">
         <span class="cp-empty-ico">${icon("list", 26)}</span>
         <h3>${s.loadError ? "The dashboard could not be loaded" : "No Contact Performance data is published"}</h3>
@@ -450,7 +450,7 @@
         fresh.className = "cp-pill is-stale";
         fresh.innerHTML = "<i></i><span>Not published</span>";
         fresh.title = "";
-        sub.textContent = "Waiting for the CRM export · source: latest Admin push";
+        sub.textContent = "Waiting for the contact file · source: latest Admin push";
         return;
       }
       const historical = !!(s.publicationId && state.activeId && s.publicationId !== state.activeId);
@@ -935,22 +935,15 @@
     host.innerHTML = `<section class="grid-5">
       <label class="slot" id="cp-slot-crm">
         <input id="cp-file-crm" type="file" accept=".xlsx,.xls,.csv,.txt" />
-        <div class="n">R</div>
-        <h3>CRM export</h3>
-        <p class="ar">Required · sheet "Export"</p>
-        <span class="meta" id="cp-meta-crm">Drop or click · .xlsx / .xls / .csv</span>
-      </label>
-      <label class="slot" id="cp-slot-contact">
-        <input id="cp-file-contact" type="file" accept=".xlsx,.xls,.csv,.txt" />
         <div class="n">C</div>
         <h3>Contact file</h3>
-        <p class="ar">Optional · overrides Initial Contact</p>
-        <span class="meta" id="cp-meta-contact">Drop or click · .xlsx / .xls / .csv</span>
+        <p class="ar">Sheet "Export"</p>
+        <span class="meta" id="cp-meta-crm">Drop or click · .xlsx / .xls / .csv</span>
       </label>
     </section>
     <p class="hint" id="cp-result"></p>`;
 
-    const files = { contact: null, crm: null };
+    const files = { crm: null };
 
     function paint(kind) {
       const file = files[kind];
@@ -979,32 +972,25 @@
       host.querySelector("#cp-result").textContent = "";
     }
     host.addEventListener("change", (event) => {
-      if (event.target.id === "cp-file-contact" && event.target.files[0]) setChosen("contact", event.target.files[0]);
       if (event.target.id === "cp-file-crm" && event.target.files[0]) setChosen("crm", event.target.files[0]);
     });
     async function publishDraft() {
       const note = host.querySelector("#cp-result");
-      if (!files.contact && !files.crm) return null;
-      if (!files.crm) {
-        const message = "Add the CRM export (sheet \"Export\"). The contact file is optional and cannot be pushed on its own.";
-        note.textContent = message;
-        return { ok: false, message };
-      }
+      if (!files.crm) return null;
       const now = new Date();
       const period = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
       const crmFile = await readFile(files.crm);
-      const contactFile = files.contact ? await readFile(files.contact) : null;
       const preview = await getJson("/api/contact-performance/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period, publishedBy: "Administrator", crmFile, contactFile }),
+        body: JSON.stringify({ period, publishedBy: "Administrator", crmFile, contactFile: null }),
       });
       const counts = preview.counts || {};
       const summary = counts.leads ? ` · ${fmt(counts.leads)} leads · ${fmt(counts.advisors)} advisors` : "";
       if (preview.duplicate) {
         host.querySelectorAll(".slot-draft").forEach((el) => el.remove());
         note.textContent = "";
-        return { ok: true, message: `Same CRM export is already live for ${periodLabel(preview.period)} — no duplicate snapshot created.` };
+        return { ok: true, message: `Same contact file is already live for ${periodLabel(preview.period)} — no duplicate snapshot created.` };
       }
       await getJson("/api/contact-performance/publish", {
         method: "POST",

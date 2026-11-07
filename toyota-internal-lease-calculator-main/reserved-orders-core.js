@@ -1767,6 +1767,7 @@ function attachReservedOrders(app, options) {
     const marketingFile = path.join(options.storeDir, 'reserved-orders-marketing.json');
     const staffFile = path.join(options.storeDir, 'reserved-orders-staff.json');
     const statusesFile = path.join(options.storeDir, 'reserved-orders-statuses.json');
+    const layoutFile = path.join(options.storeDir, 'reserved-orders-sheet-layout.json');
     const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
     const archiveDir = path.join(options.storeDir, 'reserved-orders-archive');
     // RTL Stock pushed from the Reserved Orders admin. Kept here (not in the Report Sheet slots) so this push
@@ -1812,6 +1813,26 @@ function attachReservedOrders(app, options) {
         return next;
     }
     loadStatuses();
+
+    function sanitizeSheetLayout(raw) {
+        const order = Array.isArray(raw && raw.order)
+            ? raw.order.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 80)
+            : [];
+        const hidden = Array.isArray(raw && raw.hidden)
+            ? raw.hidden.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 80)
+            : [];
+        return { order, hidden, updatedAt: raw && raw.updatedAt ? String(raw.updatedAt) : '' };
+    }
+    function loadSheetLayout() {
+        return sanitizeSheetLayout(readJson(layoutFile, { order: [], hidden: [] }));
+    }
+    function saveSheetLayout(raw) {
+        const next = sanitizeSheetLayout(raw);
+        next.updatedAt = new Date().toISOString();
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(layoutFile, JSON.stringify(next, null, 2), 'utf8');
+        return next;
+    }
 
     function loadLive() {
         const data = readJson(liveFile, null);
@@ -2028,10 +2049,23 @@ function attachReservedOrders(app, options) {
     function adminPassword(req) {
         return String(req.body?.password || req.query?.password || '');
     }
+    function requestToken(req) {
+        return String((req.body && req.body.token) || (req.query && req.query.token) || '').trim();
+    }
+    function staffAdminFromReq(req) {
+        const user = sessionUser(requestToken(req));
+        return user && user.role === 'admin' ? user : null;
+    }
     function requireAdmin(req, res) {
         if (adminPassword(req) === String(options.adminPassword || '')) return true;
+        if (staffAdminFromReq(req)) return true;
         res.status(401).json({ error: 'Unauthorized: Invalid password' });
         return false;
+    }
+    function adminActor(req) {
+        const staff = staffAdminFromReq(req);
+        if (staff) return { name: staff.name, employeeNumber: staff.employeeNumber, recordId: staff.recordId, role: 'admin' };
+        return { name: 'Admin', employeeNumber: '', recordId: '', role: 'admin' };
     }
     // BO error conditions and employee notifications are managed from the admin
     // pages without a password (owner request, 2026-10-21). Every other admin
@@ -2382,7 +2416,11 @@ function attachReservedOrders(app, options) {
     app.get('/api/reserved-orders/staff-names', (req, res) => {
         const people = loadStaff()
             .filter((person) => person.active !== false && person.name)
-            .map((person) => ({ recordId: person.recordId, name: person.name }))
+            .map((person) => ({
+                recordId: person.recordId,
+                name: person.name,
+                role: person.role === 'admin' ? 'admin' : 'employee'
+            }))
             .sort((a, b) => a.name.localeCompare(b.name));
         res.json({ people, names: people.map((person) => person.name) });
     });
@@ -2445,8 +2483,25 @@ function attachReservedOrders(app, options) {
             report: live.report || {},
             statuses: loadStatuses(),
             employeeStatuses: EMPLOYEE_STATUSES.slice(),
+            sheetLayout: loadSheetLayout(),
             orders: orders.map(publicOrder)
         });
+    });
+    app.get('/api/reserved-orders/sheet-layout', (req, res) => {
+        res.json(loadSheetLayout());
+    });
+    app.post('/api/reserved-orders/admin/sheet-layout', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const saved = saveSheetLayout({ order: req.body?.order, hidden: req.body?.hidden });
+        audit(req, {
+            user: 'Admin',
+            role: 'admin',
+            action: 'SHEET_LAYOUT_SAVED',
+            entity: 'sheet',
+            source: 'admin-merged',
+            details: `${(saved.order || []).length} columns · ${(saved.hidden || []).length} hidden`
+        });
+        res.json(saved);
     });
     app.get('/api/reserved-orders/statuses', (req, res) => {
         res.json({ statuses: loadStatuses() });
@@ -2706,6 +2761,7 @@ function attachReservedOrders(app, options) {
             boName: live.boName || '',
             report: live.report || {},
             statuses: loadStatuses(),
+            sheetLayout: loadSheetLayout(),
             orders,
             sold,
             staff: loadStaff().map(publicStaff),
@@ -2923,7 +2979,18 @@ function attachReservedOrders(app, options) {
             staff.push({ recordId: `emp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name, id, role, active });
         }
         saveStaff(staff);
-        audit(req, { user: 'Admin', role: 'admin', action, entity: 'employee', oldValue, newValue: `${name} / ${id} / ${role} / ${active ? 'active' : 'inactive'}`, source: 'admin' });
+        const actor = adminActor(req);
+        audit(req, {
+            user: actor.name,
+            employeeNumber: actor.employeeNumber,
+            recordId: actor.recordId,
+            role: 'admin',
+            action,
+            entity: 'employee',
+            oldValue,
+            newValue: `${name} / ${id} / ${role} / ${active ? 'active' : 'inactive'}`,
+            source: 'admin'
+        });
         res.json({ ok: true, staff: staff.map(publicStaff) });
     });
     function publicMarketing(item, live) {

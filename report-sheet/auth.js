@@ -39,7 +39,7 @@
     { id: "lexusB2c", label: "Push · Lexus B2C", kind: "slot" },
     { id: "toyotaB2c", label: "Push · Toyota B2C", kind: "slot" },
     { id: "reserved", label: "Push · Reserved File", kind: "slot" },
-    { id: "contact", label: "Push · CRM & Contact", kind: "section" },
+    { id: "contact", label: "Push · Contact file", kind: "section" },
     { id: "ytd", label: "Push · YTD sales", kind: "section" },
     { id: "targets", label: "Push · Employees & Targets", kind: "section" },
     { id: "allocation", label: "Push · Allocation Plan", kind: "section" },

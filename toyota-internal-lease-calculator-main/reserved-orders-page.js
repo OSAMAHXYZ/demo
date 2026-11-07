@@ -37,6 +37,15 @@
     const mcDrafts = {};
     let searchTimer = null;
     let clock = null;
+    let sheetLayout = { order: [], hidden: [] };
+    const EMP_DEFAULT_COLS = ['Queue', 'Car', 'Customer', 'Order · VIN', 'Salesman', 'Expiry', 'Status', 'Note', 'Updated', 'Usage', 'Allocation age', 'Area', 'Share level'];
+    const EMP_SKIP_COLS = new Set(['Leader note']);
+    const EMP_KNOWN_COLS = new Set([
+        'Queue 1', 'Queue 2', 'Queue 3', 'Queue', 'Status', 'Note', 'Updated by', 'Updated',
+        'Salesman name', 'Salesman', 'Customer name', 'Customer', 'Order number', 'Order · VIN',
+        'Model year', 'Product', 'Car', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN',
+        'Expiry date', 'Expiry', 'Usage', 'Allocation age', 'Area', 'Share level'
+    ]);
 
     const $ = (id) => document.getElementById(id);
     function pad(n) { return String(n).padStart(2, '0'); }
@@ -221,8 +230,8 @@
     async function loadNames() {
         const data = await fetch('/api/reserved-orders/staff-names').then((res) => res.json()).catch(() => ({ people: [] }));
         const people = data.people || [];
-        const options = ['<option value="__admin__">Admin</option>'].concat(
-            people.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}</option>`)
+        const options = ['<option value="__admin__">Shared admin login</option>'].concat(
+            people.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}${person.role === 'admin' ? ' · Admin' : ''}</option>`)
         );
         $('employee-name').innerHTML = options.join('');
     }
@@ -253,7 +262,8 @@
         try { notifyMyNewOrders(); } catch (e) { console.error('New-order alert failed:', e); }
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
-        const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
+        if (data.sheetLayout) sheetLayout = data.sheetLayout;
+        const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|'), JSON.stringify(sheetLayout || {})].join('|');
         if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet table')) return tickTimers();
         loadLive.last = payload;
         fillFilters();
@@ -691,31 +701,80 @@
         const self = who && samePerson(who, (readSession() || {}).name);
         return `<div class="upd"><span>${esc(self || (mine && !who) ? 'You' : who || '—')}</span>${at ? `<small title="${esc(statusWhen(order.statusChangedAt))}">${esc(timeAgo(at))}</small>` : ''}</div>`;
     }
-    function sheetRowHtml(order) {
+    function publishedSheetCols() {
+        const hidden = new Set((sheetLayout.hidden || []).concat(['Leader note']));
+        const published = (sheetLayout.order && sheetLayout.order.length)
+            || (sheetLayout.hidden && sheetLayout.hidden.length)
+            || sheetLayout.updatedAt;
+        if (!published) return EMP_DEFAULT_COLS.slice();
+        const fallback = [
+            'Queue 1', 'Queue 2', 'Queue 3', 'Status', 'Note', 'Updated by',
+            'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product',
+            'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date',
+            'Usage', 'Allocation age', 'Area', 'Share level'
+        ];
+        const base = (sheetLayout.order && sheetLayout.order.length) ? sheetLayout.order : fallback;
+        const cols = base.filter((label) => EMP_KNOWN_COLS.has(label) && !hidden.has(label) && !EMP_SKIP_COLS.has(label));
+        return cols.length ? cols : fallback.filter((label) => !hidden.has(label));
+    }
+    function sheetHeadLabel(label) {
+        if (label === 'Updated by') return 'Updated';
+        if (label === 'Salesman name') return 'Salesman';
+        if (label === 'Customer name') return 'Customer';
+        if (label === 'Expiry date') return 'Expiry';
+        return label;
+    }
+    function queueTierHtml(order, n) {
+        const q = (order.boTierQueues || [])[n - 1];
+        if (!q) return '<span class="muted-text">—</span>';
+        const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
+        return `<div class="q" title="Colour choice ${n}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><b>#${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div>${pair ? `<span class="q-pair">${esc(pair)}</span>` : ''}`;
+    }
+    function sheetCellHtml(order, label, values, mine) {
+        const pill = statusPillHtml(statusKey(order.status));
+        if (label === 'Queue') return queueHtml(order);
+        if (label === 'Queue 1') return queueTierHtml(order, 1);
+        if (label === 'Queue 2') return queueTierHtml(order, 2);
+        if (label === 'Queue 3') return queueTierHtml(order, 3);
+        if (label === 'Car') return carCellHtml(values);
+        if (label === 'Product') return `<div class="car"><div><b dir="auto">${esc(values.Product || '—')}</b></div></div>`;
+        if (label === 'ALJ suffix') return esc(values['ALJ suffix'] || '—');
+        if (label === 'Model year') return esc(values['Model year'] || '—');
+        if (label === 'Exterior color') return values['Exterior color'] ? `<span class="sw">${swatch(values['Exterior color'])}</span> ${esc(values['Exterior color'])}` : '—';
+        if (label === 'Interior color') return values['Interior color'] ? `<span class="sw">${swatch(values['Interior color'])}</span> ${esc(values['Interior color'])}` : '—';
+        if (label === 'Customer' || label === 'Customer name') return `<span dir="auto">${esc(values['Customer name'] || '—')}</span>`;
+        if (label === 'Order · VIN') return `<b class="num">${esc(values['Order number'] || '—')}</b><br><span class="mono muted-text">${esc(values.VIN || '')}</span>`;
+        if (label === 'Order number') return `<b class="num">${esc(values['Order number'] || '—')}</b>`;
+        if (label === 'VIN') return `<span class="mono">${esc(values.VIN || '—')}</span>`;
+        if (label === 'Salesman' || label === 'Salesman name') {
+            const salesman = values['Salesman name'];
+            return salesman
+                ? `<span class="person"><span class="av">${esc(initials(salesman))}</span><span dir="auto">${esc(mine ? 'You' : salesman)}</span></span>`
+                : '<span class="muted-text">Unassigned</span>';
+        }
+        if (label === 'Expiry' || label === 'Expiry date') {
+            const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
+            return deadline ? expHtml(deadline, esc(values['Expiry date']), false) : '<span class="muted-text">No expiry date</span>';
+        }
+        if (label === 'Status') return mine ? `<span class="edit">${pill}${icon('chevron', 'chev')}</span>` : pill;
+        if (label === 'Note') {
+            const note = String(order.statusNote || '').trim();
+            return `<div class="note" title="${esc(note)}" dir="auto">${note ? esc(note) : '—'}</div>`;
+        }
+        if (label === 'Updated' || label === 'Updated by') return updatedHtml(order, mine);
+        if (label === 'Usage') return values.Usage ? `<span class="tag${retailMatch(values.Usage) ? ' good' : ''}">${esc(values.Usage)}</span>` : '<span class="muted-text">—</span>';
+        if (label === 'Allocation age') return ageTag(values['Allocation age']);
+        if (label === 'Area') return `<span dir="auto">${esc(values.Area || '—')}</span>`;
+        if (label === 'Share level') return `<span dir="auto">${esc(values['Share level'] || '—')}</span>`;
+        return esc(values[label] || '—');
+    }
+    function sheetRowHtml(order, cols) {
         const mine = canUpdateOrder(order);
         const values = sheetValues(order);
         const key = statusKey(order.status);
         const cancelled = key === 'Cancelled' || isCancelled(order);
-        const note = String(order.statusNote || '').trim();
-        const salesman = values['Salesman name'];
-        const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
-        const pill = statusPillHtml(key);
         const classes = ['rowlink', mine ? 'mine' : '', cancelled ? 'row-cancelled' : ''].filter(Boolean).join(' ');
-        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0">
-            <td>${queueHtml(order)}</td>
-            <td>${carCellHtml(values)}</td>
-            <td dir="auto">${esc(values['Customer name'] || '—')}</td>
-            <td><b class="num">${esc(values['Order number'] || '—')}</b><br><span class="mono muted-text">${esc(values.VIN || '')}</span></td>
-            <td>${salesman ? `<span class="person"><span class="av">${esc(initials(salesman))}</span><span dir="auto">${esc(mine ? 'You' : salesman)}</span></span>` : '<span class="muted-text">Unassigned</span>'}</td>
-            <td>${deadline ? expHtml(deadline, esc(values['Expiry date']), false) : '<span class="muted-text">No expiry date</span>'}</td>
-            <td>${mine ? `<span class="edit">${pill}${icon('chevron', 'chev')}</span>` : pill}</td>
-            <td><div class="note" title="${esc(note)}" dir="auto">${note ? esc(note) : '—'}</div></td>
-            <td>${updatedHtml(order, mine)}</td>
-            <td>${values.Usage ? `<span class="tag${retailMatch(values.Usage) ? ' good' : ''}">${esc(values.Usage)}</span>` : '<span class="muted-text">—</span>'}</td>
-            <td>${ageTag(values['Allocation age'])}</td>
-            <td dir="auto">${esc(values.Area || '—')}</td>
-            <td dir="auto">${esc(values['Share level'] || '—')}</td>
-        </tr>`;
+        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0">${cols.map((label) => `<td>${sheetCellHtml(order, label, values, mine)}</td>`).join('')}</tr>`;
     }
     function paintSheet(list) {
         const box = $('emp-sheet');
@@ -723,9 +782,10 @@
         const keepTop = box.scrollTop;
         const keepLeft = box.scrollLeft;
         const mineCount = list.filter(canUpdateOrder).length;
-        const heads = ['Queue', 'Car', 'Customer', 'Order · VIN', 'Salesman', 'Expiry', 'Status', 'Note', 'Updated', 'Usage', 'Allocation age', 'Area', 'Share level'];
+        const cols = publishedSheetCols();
+        const heads = cols.map(sheetHeadLabel);
         box.innerHTML = list.length
-            ? `<table class="sheet-table"><thead><tr>${heads.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${list.map(sheetRowHtml).join('')}</tbody></table>`
+            ? `<table class="sheet-table"><thead><tr>${heads.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${list.map((order) => sheetRowHtml(order, cols)).join('')}</tbody></table>`
             : '<div class="empty">No orders match this view. Clear the search or pick another filter.</div>';
         box.scrollTop = keepTop;
         box.scrollLeft = keepLeft;
@@ -1429,9 +1489,7 @@
         const select = $('employee-name');
         const password = $('employee-id').value;
         if (select.value === '__admin__') {
-            if (password !== '1234') { $('login-error').textContent = 'Admin password was not accepted.'; return; }
             sessionStorage.removeItem(sessionKey);
-            sessionStorage.setItem('reserved-orders-admin-pass', '1234');
             $('employee-id').value = '';
             location.href = 'reserved-orders-admin.html';
             return;
@@ -1443,11 +1501,21 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { $('login-error').textContent = data.error || 'Could not sign in.'; return; }
+        if (data.role === 'admin') {
+            sessionStorage.removeItem(sessionKey);
+            sessionStorage.removeItem('reserved-orders-admin-pass');
+            sessionStorage.setItem('reserved-orders-admin-token', data.token);
+            sessionStorage.setItem('reserved-orders-admin-who', JSON.stringify({ name: data.name, recordId: data.recordId }));
+            $('employee-id').value = '';
+            location.href = 'reserved-orders-admin.html';
+            return;
+        }
         writeSession({
             token: data.token,
             name: data.name,
             employeeNumber: data.employeeNumber,
             recordId: data.recordId,
+            role: data.role || 'employee',
             canEditOrdersStartingWith5: !!data.canEditOrdersStartingWith5,
             last: Date.now()
         });
