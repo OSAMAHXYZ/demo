@@ -14,13 +14,9 @@
         <form class="login-card" id="gate-form">
             <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
             <h1>Reserved admin</h1>
-            <p>Sign in with an admin name and ID, or the report admin password.</p>
-            <label class="field" for="gate-staff"><span>Admin name</span>
-                <select id="gate-staff">
-                    <option value="">Report admin password</option>
-                </select>
-            </label>
-            <label class="field" for="admin-password"><span id="gate-pass-label">Password</span><input id="admin-password" type="password" required></label>
+            <p>Sign in as admin. Other admins use their name and employee ID.</p>
+            <label class="field" for="admin-user"><span>User</span><input id="admin-user" type="text" value="admin" autocomplete="username" required></label>
+            <label class="field" for="admin-password"><span>Password</span><input id="admin-password" type="password" required autocomplete="current-password"></label>
             <div class="err" id="gate-error"></div>
             <button class="btn primary" type="submit">Continue</button>
             <p class="login-note"><a href="hub.html">Back to hub</a> · <a href="reserved-orders.html">Employee sign in</a></p>
@@ -265,6 +261,6 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261107c"></script>
+    <script src="reserved-orders-admin.js?v=20261107admin1"></script>
 </body>
 </html>

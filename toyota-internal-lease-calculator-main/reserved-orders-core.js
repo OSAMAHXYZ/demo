@@ -1757,7 +1757,13 @@ const SEEDED_EMPLOYEES = [
 ].map(([id, name, recordId]) => {
     const canEditOrdersStartingWith5 = recordId === 'emp-reda-salah' || recordId === 'emp-mohammed-al-fadul';
     return { recordId, id, name, role: 'employee', active: true, canEditOrdersStartingWith5 };
-});
+}).concat([{
+    recordId: 'emp-reserved-admin',
+    id: '1234',
+    name: 'admin',
+    role: 'admin',
+    active: true
+}]);
 
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
@@ -2082,7 +2088,7 @@ function attachReservedOrders(app, options) {
         }));
         SEEDED_EMPLOYEES.forEach((seed) => {
             let existing = staff.find((person) => person.recordId === seed.recordId);
-            if (!existing && seed.canEditOrdersStartingWith5) {
+            if (!existing && (seed.canEditOrdersStartingWith5 || seed.recordId === 'emp-reserved-admin')) {
                 const seedName = String(seed.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
                 existing = staff.find((person) => String(person.name || '').replace(/\s+/g, ' ').trim().toLowerCase() === seedName);
             }
@@ -2094,6 +2100,12 @@ function attachReservedOrders(app, options) {
                 existing.canEditOrdersStartingWith5 = true;
                 if (seed.id) existing.id = String(seed.id);
                 if (seed.name) existing.name = seed.name;
+            }
+            if (seed.role === 'admin' && seed.recordId === 'emp-reserved-admin') {
+                existing.id = '1234';
+                existing.name = 'admin';
+                existing.role = 'admin';
+                existing.active = true;
             }
         });
         saveStaff(staff);

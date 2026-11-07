@@ -1816,52 +1816,27 @@
     }
 
     async function fillGateStaff() {
-        const select = $('gate-staff');
-        if (!select) return;
-        const keep = select.value;
-        try {
-            const data = await fetch('/api/reserved-orders/staff-names').then((res) => res.json()).catch(() => ({ people: [] }));
-            const admins = (data.people || []).filter((person) => person.role === 'admin');
-            select.innerHTML = '<option value="">Report admin password</option>'
-                + admins.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}</option>`).join('');
-            if (keep && Array.from(select.options).some((opt) => opt.value === keep)) select.value = keep;
-        } catch (e) { /* gate still accepts the shared password */ }
-        paintGatePassLabel();
+        const user = $('admin-user');
+        if (user && !user.value.trim()) user.value = 'admin';
     }
-    function paintGatePassLabel() {
-        const label = $('gate-pass-label');
-        const staff = $('gate-staff') && $('gate-staff').value;
-        if (label) label.textContent = staff ? 'Employee ID' : 'Password';
-    }
-    if ($('gate-staff')) $('gate-staff').addEventListener('change', paintGatePassLabel);
     $('gate-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         $('gate-error').textContent = '';
-        const recordId = $('gate-staff') && $('gate-staff').value;
+        const name = (($('admin-user') && $('admin-user').value) || 'admin').trim();
         const secret = $('admin-password').value;
         $('admin-password').value = '';
         try {
-            if (recordId) {
-                const res = await fetch('/api/reserved-orders/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        recordId,
-                        name: $('gate-staff').selectedOptions[0] ? $('gate-staff').selectedOptions[0].textContent : '',
-                        password: secret
-                    })
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error || 'Name or employee ID is not valid.');
-                if (data.role !== 'admin') throw new Error('This login is for the employee page.');
-                sessionStorage.removeItem(passKey);
-                sessionStorage.setItem(tokenKey, data.token);
-                sessionStorage.setItem(whoKey, JSON.stringify({ name: data.name, recordId: data.recordId }));
-            } else {
-                sessionStorage.removeItem(tokenKey);
-                sessionStorage.removeItem(whoKey);
-                sessionStorage.setItem(passKey, secret);
-            }
+            const res = await fetch('/api/reserved-orders/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, password: secret })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'User or password is not valid.');
+            if (data.role !== 'admin') throw new Error('This login is for the employee page.');
+            sessionStorage.removeItem(passKey);
+            sessionStorage.setItem(tokenKey, data.token);
+            sessionStorage.setItem(whoKey, JSON.stringify({ name: data.name, recordId: data.recordId }));
             await refresh();
             showApp();
         } catch (e) {
