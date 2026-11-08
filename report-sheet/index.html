@@ -3395,7 +3395,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
 <script>
 (function () {
   const Auth = window.ReportSheetAuth;
-  const currentUser = Auth && Auth.requireLogin();
+  /** gecdashboardview.html → index.html?view=gec: open the GEC Control Center with no login. */
+  const GEC_VIEW = new URLSearchParams(location.search).get("view") === "gec";
+  const currentUser = GEC_VIEW
+    ? { id: "gec-view", username: "gec-view", name: "GEC Dashboard", role: "viewer", title: "View only", initial: "G" }
+    : Auth && Auth.requireLogin();
   if (!currentUser) return;
 
   const MAX_ROWS = 4000;
@@ -8738,8 +8742,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
-  /** gecdashboardview.html → index.html?view=gec: GEC Control Center only, view-only, reloads on every Admin Push. */
-  const GEC_VIEW = new URLSearchParams(location.search).get("view") === "gec";
   const GEC_VIEW_SLOTS = new Set(["gec", "gecVisitors", "sales", "backorder"]);
   /** lexusb2ctracker.html → index.html?view=lexus: Lexus Tracker only. The tracker loads its own files and reloads on every Admin Push. */
   const LEXUS_VIEW = new URLSearchParams(location.search).get("view") === "lexus";
@@ -8780,6 +8782,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "stockdashboard" || p.id === "dashboard") return false; // hidden from nav; panel code kept
+      if (GEC_VIEW) return p.id === "gec";
       if (Auth && !Auth.canViewPanel(p.id, currentUser)) return false;
       if (p.id === "salesreport" || p.id === "summary") return true;
       if (p.id === "reservedvehicles") return true;
