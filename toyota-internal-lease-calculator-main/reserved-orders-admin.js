@@ -156,9 +156,8 @@
             table.style.zoom = keep || '1';
         }
         if (tw < 8 || th < 8) return;
-        const next = String(Math.max(0.35, Math.min(sw / tw, sh / th, 1)));
-        if (table.style.zoom !== next) table.style.zoom = next;
-        box.classList.add('sheet-fit');
+        if (table.style.zoom !== '1') table.style.zoom = '1';
+        box.classList.remove('sheet-fit');
         if (!box._fitObs && typeof ResizeObserver === 'function') {
             box._fitObs = new ResizeObserver(() => fitSheet(box));
             box._fitObs.observe(box);
@@ -1438,7 +1437,7 @@
             }).join('')}</tbody></table>`
             : `<p class="empty">${emptyMsg}</p>`;
         const grid = box.querySelector('.xl-grid');
-        if (grid && xlZoom !== 100) grid.style.zoom = String(xlZoom / 100);
+        if (grid) grid.style.zoom = '1';
         scheduleFitSheet(box);
         if (source === sheetSource) {
             const stat = $('xl-stat');
@@ -2427,7 +2426,7 @@
         xlZoom = Number(xlZoomInput.value) || 100;
         const label = $('xl-zoom-val');
         if (label) label.textContent = `${xlZoom}%`;
-        document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = String(xlZoom / 100); });
+        document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = '1'; });
         scheduleFitSheet();
     });
     // ---- Notify employees who have not updated their reserved orders on reserved-orders.html ----

@@ -137,9 +137,8 @@
             table.style.zoom = keep || '1';
         }
         if (tw < 8 || th < 8) return;
-        const next = String(Math.max(0.35, Math.min(sw / tw, sh / th, 1)));
-        if (table.style.zoom !== next) table.style.zoom = next;
-        box.classList.add('sheet-fit');
+        if (table.style.zoom !== '1') table.style.zoom = '1';
+        box.classList.remove('sheet-fit');
         if (!box._fitObs && typeof ResizeObserver === 'function') {
             box._fitObs = new ResizeObserver(() => fitSheet(box));
             box._fitObs.observe(box);
