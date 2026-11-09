@@ -38,7 +38,32 @@
     let searchTimer = null;
     let clock = null;
     let sheetLayout = { order: [], hidden: [] };
-    const EMP_DEFAULT_COLS = ['Queue', 'Car', 'Customer', 'Order · VIN', 'Salesman', 'Expiry', 'Status', 'Note', 'Updated', 'Usage', 'Allocation age', 'Area', 'Share level'];
+    const EMP_DEFAULT_COLS = ['Queue 2', 'Queue 1', 'Salesman name', 'Queue 3', 'Model year', 'Customer name', 'Status', 'Note', 'Updated by', 'Order number', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
+    const EMP_HEAD_SHORT = {
+        'Queue 1': 'Q1', 'Queue 2': 'Q2', 'Queue 3': 'Q3',
+        'Salesman name': 'Salesman', Salesman: 'Salesman', 'Customer name': 'Customer', Customer: 'Customer',
+        'Updated by': 'Updated', Updated: 'Updated', 'Order number': 'Order #',
+        'Model year': 'Year', 'ALJ suffix': 'Suffix', 'Exterior color': 'Ext', 'Interior color': 'Int',
+        'Expiry date': 'Expiry', Expiry: 'Expiry', 'Allocation age': 'Age'
+    };
+    const EMP_WIDTHS = {
+        'Queue 2': 28, 'Queue 1': 28, 'Salesman name': 132, Salesman: 132, 'Queue 3': 28, 'Model year': 44,
+        'Customer name': 160, Customer: 160, Status: 100, Note: 40, 'Updated by': 56, Updated: 56,
+        'Order number': 92, Product: 88, 'ALJ suffix': 44, 'Exterior color': 44, 'Interior color': 36, VIN: 148,
+        'Expiry date': 128, Expiry: 128, Usage: 44, 'Allocation age': 44, Area: 72, 'Share level': 110
+    };
+    const EMP_MONO = new Set(['Order number', 'VIN', 'ALJ suffix', 'Exterior color', 'Interior color', 'Area', 'Model year', 'Queue 1', 'Queue 2', 'Queue 3']);
+    let empXlWidths = {};
+    try { empXlWidths = JSON.parse(localStorage.getItem('ro-sheet-colwidths') || '{}') || {}; } catch (e) { empXlWidths = {}; }
+    let empSheetSort = { label: '', dir: '' };
+    let empColFilter = { label: '', value: '' };
+    let empFreezeOn = true;
+    try { empFreezeOn = localStorage.getItem('ro-sheet-freeze') !== '0'; } catch (e) { /* keep */ }
+    let empCfOn = false;
+    try { empCfOn = localStorage.getItem('ro-sheet-cf') === '1'; } catch (e) { /* keep */ }
+    let empXlZoom = 100;
+    const empHist = [];
+    let empHistI = -1;
     const EMP_SKIP_COLS = new Set(['Leader note']);
     const EMP_KNOWN_COLS = new Set([
         'Queue 1', 'Queue 2', 'Queue 3', 'Queue', 'Status', 'Note', 'Updated by', 'Updated',
@@ -163,7 +188,7 @@
             table.style.zoom = keep || '1';
         }
         if (tw < 8 || th < 8) return;
-        if (table.style.zoom !== '1') table.style.zoom = '1';
+        table.style.zoom = String((typeof empXlZoom === 'number' ? empXlZoom : 100) / 100);
         box.classList.remove('sheet-fit');
         if (!box._fitObs && typeof ResizeObserver === 'function') {
             box._fitObs = new ResizeObserver(() => fitSheet(box));
@@ -207,6 +232,32 @@
         if (!info) return '<span class="muted-text">No expiry date</span>';
         return `<div class="exp ${info.tone}${big ? ' exp-big' : ''}" data-deadline="${esc(deadline)}"><b>${esc(info.text)}</b><div class="track"><i style="width:${info.pct.toFixed(1)}%"></i></div>${dateLabel ? `<small>${dateLabel}</small>` : ''}</div>`;
     }
+    function expiryCompactHtml(order, dateLabel) {
+        const deadline = expiryDeadline(order);
+        const end = parseLocal(deadline);
+        const title = dateLabel || '';
+        if (!end) return `<span class="muted-text" title="${esc(title)}">—</span>`;
+        const hoursAgo = Math.floor((Date.now() - end.getTime()) / 3600000);
+        let pill; let tone;
+        if (hoursAgo >= 0) {
+            pill = hoursAgo + 'h ago';
+            tone = hoursAgo >= 100 ? 'is-old' : 'is-warn';
+        } else {
+            const left = Math.max(1, Math.ceil(-hoursAgo));
+            pill = left + 'h left';
+            tone = left < 24 ? 'is-warn' : 'is-ok';
+        }
+        const date = pad(end.getDate()) + '/' + pad(end.getMonth() + 1);
+        return `<span class="exp-line" title="${esc(title || date)}"><span class="exp-pill ${tone}">${esc(pill)}</span><span class="exp-date">${esc(date)}</span></span>`;
+    }
+    function applySheetDensity(mode) {
+        const next = mode === 'comfy' ? 'comfy' : 'compact';
+        document.documentElement.setAttribute('data-sheet-density', next);
+        try { localStorage.setItem('ro-sheet-density', next); } catch (e) { /* blocked */ }
+        const btn = $('emp-xl-density');
+        if (btn) btn.classList.toggle('is-on', next === 'comfy');
+    }
+    try { applySheetDensity(localStorage.getItem('ro-sheet-density') === 'comfy' ? 'comfy' : 'compact'); } catch (e) { applySheetDensity('compact'); }
     // KPI tiles: [label, value, dot class, sub line]. Counts up only when the numbers change.
     function paintKpis(box, tiles) {
         if (!box) return;
@@ -800,28 +851,19 @@
             || (sheetLayout.hidden && sheetLayout.hidden.length)
             || sheetLayout.updatedAt;
         if (!published) return EMP_DEFAULT_COLS.slice();
-        const fallback = [
-            'Queue 1', 'Queue 2', 'Queue 3', 'Status', 'Note', 'Updated by',
-            'Salesman name', 'Customer name', 'Order number', 'Model year', 'Product',
-            'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date',
-            'Usage', 'Allocation age', 'Area', 'Share level'
-        ];
+        const fallback = EMP_DEFAULT_COLS.slice();
         const base = (sheetLayout.order && sheetLayout.order.length) ? sheetLayout.order : fallback;
         const cols = base.filter((label) => EMP_KNOWN_COLS.has(label) && !hidden.has(label) && !EMP_SKIP_COLS.has(label));
         return cols.length ? cols : fallback.filter((label) => !hidden.has(label));
     }
     function sheetHeadLabel(label) {
-        if (label === 'Updated by') return 'Updated';
-        if (label === 'Salesman name') return 'Salesman';
-        if (label === 'Customer name') return 'Customer';
-        if (label === 'Expiry date') return 'Expiry';
-        return label;
+        return EMP_HEAD_SHORT[label] || (label === 'Updated by' ? 'Updated' : label);
     }
     function queueTierHtml(order, n) {
         const q = (order.boTierQueues || [])[n - 1];
         if (!q) return '<span class="muted-text">—</span>';
         const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-        return `<div class="q" title="Colour choice ${n}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><b>#${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div>${pair ? `<span class="q-pair">${esc(pair)}</span>` : ''}`;
+        return `<div class="q" title="Colour choice ${n}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><b>${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div>`;
     }
     function sheetCellHtml(order, label, values, mine) {
         const pill = statusPillHtml(statusKey(order.status));
@@ -847,7 +889,7 @@
         }
         if (label === 'Expiry' || label === 'Expiry date') {
             const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
-            return deadline ? expHtml(deadline, esc(values['Expiry date']), false) : '<span class="muted-text">No expiry date</span>';
+            return deadline ? expiryCompactHtml(order, values['Expiry date']) : '<span class="muted-text">—</span>';
         }
         if (label === 'Status') return mine ? `<span class="edit">${pill}${icon('chevron', 'chev')}</span>` : pill;
         if (label === 'Note') {
@@ -861,13 +903,30 @@
         if (label === 'Share level') return `<span dir="auto">${esc(values['Share level'] || '—')}</span>`;
         return esc(values[label] || '—');
     }
+    function empWidth(label) { return Number(empXlWidths[label]) || EMP_WIDTHS[label] || 88; }
+    function empFreezeClass(label) {
+        if (!empFreezeOn) return '';
+        if (label === 'Queue 2') return ' xl-fz1';
+        if (label === 'Queue 1') return ' xl-fz2';
+        if (label === 'Salesman name' || label === 'Salesman') return ' xl-fz3';
+        return '';
+    }
     function sheetRowHtml(order, cols, rowNum) {
         const mine = canUpdateOrder(order);
         const values = sheetValues(order);
         const key = statusKey(order.status);
         const cancelled = key === 'Cancelled' || isCancelled(order);
-        const classes = ['rowlink', mine ? 'mine' : '', cancelled ? 'row-cancelled' : ''].filter(Boolean).join(' ');
-        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0"><th class="xl-rn" scope="row">${rowNum}</th>${cols.map((label) => `<td>${sheetCellHtml(order, label, values, mine)}</td>`).join('')}</tr>`;
+        const end = parseLocal(expiryDeadline(order));
+        const expired = end && end.getTime() <= Date.now();
+        const none = !key || (key === 'محجوز' && !order.statusChangedAt && !order.statusChangedBy);
+        const classes = ['rowlink', mine ? 'mine' : '', cancelled ? 'row-cancelled' : '', expired ? 'is-expired' : '', none ? 'is-none' : '', key === 'Payment' ? 'is-ok' : ''].filter(Boolean).join(' ');
+        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0"><th class="xl-rn" scope="row">${rowNum}</th>${cols.map((label) => {
+            const html = sheetCellHtml(order, label, values, mine);
+            const title = String(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const cls = [empFreezeClass(label).trim(), EMP_MONO.has(label) ? 'xl-mono' : ''].filter(Boolean).join(' ');
+            const w = empWidth(label);
+            return `<td class="${esc(cls)}" style="width:${w}px;min-width:${w}px;max-width:${w}px" title="${esc(title)}">${html}</td>`;
+        }).join('')}</tr>`;
     }
     function empXlLetter(index) {
         let n = index + 1;
@@ -879,7 +938,7 @@
         }
         return out;
     }
-    const empXlSel = { r: 0, c: 0 };
+    const empXlSel = { r: 0, c: 0, r2: 0, c2: 0 };
     function empXlCellText(td) {
         if (!td) return '';
         const clone = td.cloneNode(true);
@@ -908,58 +967,125 @@
         if (ok || (navigator.clipboard && navigator.clipboard.writeText)) toast('Copied', value || 'Empty cell', 'd-ok');
         else toast('Copy blocked', 'Select the cell and press Ctrl+C.', 'd-warn');
     }
+    function empCellValue(order, label) {
+        const values = sheetValues(order);
+        if (label === 'Queue 1' || label === 'Queue 2' || label === 'Queue 3') {
+            const n = Number(label.slice(-1));
+            const q = (order.boTierQueues || [])[n - 1];
+            return q ? String(q.position) : '';
+        }
+        if (label === 'Status') return order.status || '';
+        if (label === 'Note') return order.statusNote || '';
+        if (label === 'Updated' || label === 'Updated by') return order.statusChangedBy || '';
+        return String(values[label] || values['Salesman name'] && (label === 'Salesman') && values['Salesman name'] || '').trim();
+    }
     function copySelectedEmpCell() {
-        const td = document.querySelector('#emp-sheet .xl-sel');
-        if (!td) return false;
-        copySheetValue(empXlCellText(td));
+        const box = $('emp-sheet');
+        const rows = empRangeTexts(box, empXlSel);
+        if (!rows.length) {
+            const td = document.querySelector('#emp-sheet .xl-sel');
+            if (!td) return false;
+            copySheetValue(empXlCellText(td));
+            return true;
+        }
+        copySheetValue(rows.map((row) => row.join('\t')).join('\n'));
         return true;
     }
-    function empXlSelect(box, r, c, scroll) {
+    function empRangeTexts(box, sel) {
         const body = box && box.querySelector('.xl-grid tbody');
+        if (!body || !sel) return [];
+        const r1 = Math.min(sel.r, sel.r2 != null ? sel.r2 : sel.r);
+        const r2 = Math.max(sel.r, sel.r2 != null ? sel.r2 : sel.r);
+        const c1 = Math.min(sel.c, sel.c2 != null ? sel.c2 : sel.c);
+        const c2 = Math.max(sel.c, sel.c2 != null ? sel.c2 : sel.c);
+        const out = [];
+        for (let r = r1; r <= r2; r += 1) {
+            const row = [];
+            for (let c = c1; c <= c2; c += 1) {
+                const td = body.rows[r] && body.rows[r].cells[c + 1];
+                row.push(td ? empXlCellText(td) : '');
+            }
+            out.push(row);
+        }
+        return out;
+    }
+    function empPaintAgg(box, sel) {
+        const agg = $('emp-xl-agg');
+        if (!agg) return;
+        const cells = empRangeTexts(box, sel).flat();
+        const nums = cells.map((t) => {
+            const n = Number(String(t || '').replace(/,/g, '').trim());
+            return /^-?\d+(\.\d+)?$/.test(String(t || '').replace(/,/g, '').trim()) && Number.isFinite(n) ? n : null;
+        }).filter((n) => n != null);
+        const count = cells.filter((t) => String(t || '').trim()).length;
+        const sum = nums.reduce((a, b) => a + b, 0);
+        agg.textContent = `Count ${count} · Sum ${nums.length ? sum.toLocaleString('en-GB') : '—'} · Avg ${nums.length ? (sum / nums.length).toLocaleString('en-GB', { maximumFractionDigits: 2 }) : '—'}`;
+    }
+    function empXlSelect(box, r, c, scroll, r2, c2) {
+        const body = box && box.querySelector('.xl-grid tbody');
+        const head = box && box.querySelector('.xl-grid thead tr');
         if (!body || !body.rows.length) return;
         const rowMax = body.rows.length - 1;
         const colMax = Math.max(0, body.rows[0].cells.length - 2);
         r = Math.max(0, Math.min(rowMax, r));
         c = Math.max(0, Math.min(colMax, c));
-        empXlSel.r = r;
-        empXlSel.c = c;
-        box.querySelectorAll('.xl-sel').forEach((el) => el.classList.remove('xl-sel'));
+        const endR = r2 == null ? r : Math.max(0, Math.min(rowMax, r2));
+        const endC = c2 == null ? c : Math.max(0, Math.min(colMax, c2));
+        empXlSel.r = r; empXlSel.c = c; empXlSel.r2 = endR; empXlSel.c2 = endC;
+        box.querySelectorAll('.xl-sel, .xl-sel-range').forEach((el) => el.classList.remove('xl-sel', 'xl-sel-range'));
         box.querySelectorAll('.xl-active').forEach((el) => el.classList.remove('xl-active'));
-        const tr = body.rows[r];
-        const td = tr && tr.cells[c + 1];
-        if (!td) return;
-        td.classList.add('xl-sel');
-        if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
-        const letters = box.querySelector('.xl-letters');
-        if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
+        const rMin = Math.min(r, endR); const rMax = Math.max(r, endR);
+        const cMin = Math.min(c, endC); const cMax = Math.max(c, endC);
+        for (let rr = rMin; rr <= rMax; rr += 1) {
+            const tr = body.rows[rr];
+            if (!tr) continue;
+            if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
+            for (let cc = cMin; cc <= cMax; cc += 1) {
+                const td = tr.cells[cc + 1];
+                if (td) td.classList.add(rr === r && cc === c ? 'xl-sel' : 'xl-sel-range');
+            }
+        }
+        if (head) for (let cc = cMin; cc <= cMax; cc += 1) if (head.cells[cc + 1]) head.cells[cc + 1].classList.add('xl-active');
         const name = $('emp-xl-name');
-        if (name) name.textContent = empXlLetter(c) + (r + 2);
+        const a1 = empXlLetter(cMin) + (rMin + 2);
+        const a2 = empXlLetter(cMax) + (rMax + 2);
+        if (name) name.textContent = (rMin === rMax && cMin === cMax) ? a1 : `${a1}:${a2}`;
+        const td = body.rows[r] && body.rows[r].cells[c + 1];
         empSetFormula(empXlCellText(td));
-        if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        empPaintAgg(box, empXlSel);
+        if (scroll && td) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     function paintSheet(list) {
         const box = $('emp-sheet');
         if (!box) return;
-        const keepTop = box.scrollTop;
-        const keepLeft = box.scrollLeft;
         const mineCount = list.filter(canUpdateOrder).length;
         const cols = publishedSheetCols();
-        const letters = `<tr class="xl-letters"><th class="xl-corner" aria-hidden="true"></th>${cols.map((_, i) => `<th class="xl-col" data-c="${i}">${empXlLetter(i)}</th>`).join('')}</tr>`;
-        const heads = `<tr class="xl-heads"><th class="xl-corner">1</th>${cols.map((label) => `<th class="xl-h" data-label="${esc(label)}">${esc(sheetHeadLabel(label))}</th>`).join('')}</tr>`;
-        box.innerHTML = list.length
-            ? `<table class="xl-grid sheet-table"><thead>${letters}${heads}</thead><tbody>${list.map((order, i) => sheetRowHtml(order, cols, i + 2)).join('')}</tbody></table>`
+        let rows = list.slice();
+        if (empColFilter.label && empColFilter.value) {
+            rows = rows.filter((order) => String(empCellValue(order, empColFilter.label) || '').trim() === empColFilter.value);
+        }
+        if (empSheetSort.label && cols.includes(empSheetSort.label)) {
+            const dir = empSheetSort.dir === 'za' ? -1 : 1;
+            rows.sort((a, b) => String(empCellValue(a, empSheetSort.label)).localeCompare(String(empCellValue(b, empSheetSort.label)), undefined, { numeric: true, sensitivity: 'base' }) * dir);
+        }
+        const heads = `<tr class="xl-heads"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => {
+            const w = empWidth(label);
+            const sortCls = empSheetSort.label === label ? (empSheetSort.dir === 'za' ? ' is-desc' : ' is-asc') : '';
+            return `<th class="xl-h${empFreezeClass(label)}${sortCls}" data-label="${esc(label)}" data-c="${i}" style="width:${w}px;min-width:${w}px;max-width:${w}px" title="${esc(sheetHeadLabel(label))}"><small class="xl-let">${esc(empXlLetter(i))}</small><b>${esc(sheetHeadLabel(label))}</b><i class="xl-caret" data-sort="${esc(label)}"></i><span class="xl-resize" data-resize="${esc(label)}"></span></th>`;
+        }).join('')}</tr>`;
+        const colgroup = `<colgroup><col style="width:36px">${cols.map((label) => `<col style="width:${empWidth(label)}px">`).join('')}</colgroup>`;
+        box.innerHTML = rows.length
+            ? `<table class="xl-grid sheet-table${empFreezeOn ? '' : ' is-unfrozen'}${empCfOn ? ' is-cf' : ''}">${colgroup}<thead>${heads}</thead><tbody>${rows.map((order, i) => sheetRowHtml(order, cols, i + 2)).join('')}</tbody></table>`
             : '<div class="empty">No orders match this view. Clear the search or pick another filter.</div>';
-        box.scrollTop = 0;
-        box.scrollLeft = 0;
-        empXlSelect(box, empXlSel.r, empXlSel.c, false);
+        const grid = box.querySelector('.xl-grid');
+        if (grid) grid.style.zoom = String(empXlZoom / 100);
+        empXlSelect(box, empXlSel.r, empXlSel.c, false, empXlSel.r2, empXlSel.c2);
         scheduleFitSheet(box);
         const stat = $('emp-xl-stat');
-        if (stat) {
-            stat.innerHTML = `<span class="mono">${list.length.toLocaleString('en-GB')} rows · ${mineCount} yours · live</span>`
-                + '<span><span class="dot d-you"></span>Your car</span>'
-                + '<span><span class="tiers" aria-hidden="true"><span class="on"></span><span class="on"></span><span></span></span>Colour choices with a queue place</span>'
-                + '<span>Expiry bar shows the last 72 hours</span>';
-        }
+        if (stat) stat.textContent = `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} cols · ${mineCount} yours`;
+        if ($('emp-xl-freeze')) $('emp-xl-freeze').classList.toggle('is-on', empFreezeOn);
+        if ($('emp-xl-cf')) $('emp-xl-cf').classList.toggle('is-on', empCfOn);
+        if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`;
     }
     function paintViewMode() {
         const sheet = viewMode() === 'sheet';
@@ -1714,17 +1840,66 @@
     if ($('emp-sheet')) {
         $('emp-sheet').addEventListener('click', (event) => {
             const box = $('emp-sheet');
+            const caret = event.target.closest('.xl-caret');
+            if (caret) {
+                const label = caret.getAttribute('data-sort');
+                empSheetSort = { label, dir: empSheetSort.label === label && empSheetSort.dir === 'az' ? 'za' : 'az' };
+                render();
+                return;
+            }
             const td = event.target.closest('.xl-grid tbody td');
             if (td) {
                 const tr = td.parentElement;
-                empXlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
+                if (event.shiftKey) empXlSelect(box, empXlSel.r, empXlSel.c, false, tr.sectionRowIndex, td.cellIndex - 1);
+                else empXlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
                 if (!event.target.closest('select, textarea, input, button, a')) box.focus({ preventScroll: true });
                 return;
             }
             const rn = event.target.closest('.xl-grid tbody th.xl-rn');
             if (rn) empXlSelect(box, rn.parentElement.sectionRowIndex, empXlSel.c, false);
-            const col = event.target.closest('.xl-grid .xl-col');
+            const col = event.target.closest('.xl-grid thead th[data-c]');
             if (col) empXlSelect(box, empXlSel.r, Number(col.dataset.c) || 0, false);
+        });
+        $('emp-sheet').addEventListener('mousedown', (event) => {
+            if (event.button !== 0) return;
+            const box = $('emp-sheet');
+            const handle = event.target.closest('[data-resize]');
+            if (handle) {
+                event.preventDefault();
+                const label = handle.getAttribute('data-resize');
+                const startX = event.clientX;
+                const startW = empWidth(label);
+                const move = (ev) => {
+                    empXlWidths[label] = Math.max(28, Math.min(420, startW + (ev.clientX - startX)));
+                    box.querySelectorAll(`[data-label="${CSS.escape(label)}"]`).forEach((el) => {
+                        el.style.width = empXlWidths[label] + 'px';
+                        el.style.minWidth = empXlWidths[label] + 'px';
+                        el.style.maxWidth = empXlWidths[label] + 'px';
+                    });
+                };
+                const up = () => {
+                    document.removeEventListener('mousemove', move);
+                    document.removeEventListener('mouseup', up);
+                    try { localStorage.setItem('ro-sheet-colwidths', JSON.stringify(empXlWidths)); } catch (e) { /* blocked */ }
+                };
+                document.addEventListener('mousemove', move);
+                document.addEventListener('mouseup', up);
+                return;
+            }
+            const td = event.target.closest('.xl-grid tbody td');
+            if (!td) return;
+            const startR = td.parentElement.sectionRowIndex;
+            const startC = td.cellIndex - 1;
+            empXlSelect(box, startR, startC, false);
+            const drag = (ev) => {
+                const over = document.elementFromPoint(ev.clientX, ev.clientY);
+                const cell = over && over.closest && over.closest('#emp-sheet .xl-grid tbody td');
+                if (!cell) return;
+                empXlSelect(box, startR, startC, false, cell.parentElement.sectionRowIndex, cell.cellIndex - 1);
+            };
+            const stop = () => { document.removeEventListener('mousemove', drag); document.removeEventListener('mouseup', stop); };
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stop);
         });
         $('emp-sheet').addEventListener('dblclick', (event) => {
             const tr = event.target.closest('tbody tr[data-key]');
@@ -1747,7 +1922,9 @@
                 }[event.key];
                 if (move) {
                     event.preventDefault();
-                    empXlSelect(box, empXlSel.r + move[0], empXlSel.c + move[1], true);
+                    if (event.shiftKey && event.key.startsWith('Arrow')) {
+                        empXlSelect(box, empXlSel.r, empXlSel.c, true, (empXlSel.r2 != null ? empXlSel.r2 : empXlSel.r) + move[0], (empXlSel.c2 != null ? empXlSel.c2 : empXlSel.c) + move[1]);
+                    } else empXlSelect(box, empXlSel.r + move[0], empXlSel.c + move[1], true);
                     return;
                 }
             }
@@ -1760,6 +1937,74 @@
         });
     }
     if ($('emp-xl-copy-cell')) $('emp-xl-copy-cell').addEventListener('click', () => copySelectedEmpCell());
+    function empSelectedLabel() {
+        const cols = publishedSheetCols();
+        return cols[empXlSel.c] || cols[0] || '';
+    }
+    function empPushHist() {
+        empHist.splice(empHistI + 1);
+        empHist.push({ sort: Object.assign({}, empSheetSort), filter: Object.assign({}, empColFilter), freeze: empFreezeOn, cf: empCfOn, widths: Object.assign({}, empXlWidths) });
+        empHistI = empHist.length - 1;
+    }
+    function empApplyHist(state) {
+        if (!state) return;
+        empSheetSort = Object.assign({}, state.sort);
+        empColFilter = Object.assign({}, state.filter);
+        empFreezeOn = !!state.freeze;
+        empCfOn = !!state.cf;
+        empXlWidths = Object.assign({}, state.widths || {});
+        render();
+    }
+    if ($('emp-xl-undo')) $('emp-xl-undo').addEventListener('click', () => { if (empHistI > 0) { empHistI -= 1; empApplyHist(empHist[empHistI]); } });
+    if ($('emp-xl-redo')) $('emp-xl-redo').addEventListener('click', () => { if (empHistI < empHist.length - 1) { empHistI += 1; empApplyHist(empHist[empHistI]); } });
+    if ($('emp-xl-sort-az')) $('emp-xl-sort-az').addEventListener('click', () => { empPushHist(); empSheetSort = { label: empSelectedLabel(), dir: 'az' }; render(); });
+    if ($('emp-xl-sort-za')) $('emp-xl-sort-za').addEventListener('click', () => { empPushHist(); empSheetSort = { label: empSelectedLabel(), dir: 'za' }; render(); });
+    function empOpenFilter(label) {
+        const pop = $('emp-xl-filter-pop');
+        const list = $('emp-xl-filter-list');
+        if (!pop || !list) return;
+        pop.dataset.label = label;
+        if ($('emp-xl-filter-title')) $('emp-xl-filter-title').textContent = 'Filter · ' + sheetHeadLabel(label);
+        const q = ($('emp-xl-filter-q') && $('emp-xl-filter-q').value || '').toLowerCase();
+        const values = Array.from(new Set((orders || []).map((order) => String(empCellValue(order, label) || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        list.innerHTML = values.filter((v) => !q || v.toLowerCase().includes(q)).slice(0, 80).map((v) => `<li><button type="button" data-filter-val="${esc(v)}">${esc(v)}</button></li>`).join('') || '<li class="muted">No values</li>';
+        pop.classList.remove('hidden');
+        const tool = $('emp-xl-filter');
+        const rect = (tool || $('emp-xl-formula-bar')).getBoundingClientRect();
+        pop.style.top = (rect.bottom + 6) + 'px';
+        pop.style.left = Math.max(8, rect.right - 260) + 'px';
+    }
+    if ($('emp-xl-filter')) $('emp-xl-filter').addEventListener('click', () => empOpenFilter(empSelectedLabel()));
+    if ($('emp-xl-filter-list')) $('emp-xl-filter-list').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-filter-val]');
+        if (!btn) return;
+        empPushHist();
+        empColFilter = { label: $('emp-xl-filter-pop').dataset.label, value: btn.getAttribute('data-filter-val') };
+        $('emp-xl-filter-pop').classList.add('hidden');
+        render();
+    });
+    if ($('emp-xl-filter-clear')) $('emp-xl-filter-clear').addEventListener('click', () => { empPushHist(); empColFilter = { label: '', value: '' }; $('emp-xl-filter-pop').classList.add('hidden'); render(); });
+    if ($('emp-xl-filter-close')) $('emp-xl-filter-close').addEventListener('click', () => $('emp-xl-filter-pop').classList.add('hidden'));
+    if ($('emp-xl-filter-q')) $('emp-xl-filter-q').addEventListener('input', () => empOpenFilter($('emp-xl-filter-pop').dataset.label));
+    if ($('emp-xl-freeze')) $('emp-xl-freeze').addEventListener('click', () => { empPushHist(); empFreezeOn = !empFreezeOn; try { localStorage.setItem('ro-sheet-freeze', empFreezeOn ? '1' : '0'); } catch (e) {} render(); });
+    if ($('emp-xl-cf')) $('emp-xl-cf').addEventListener('click', () => { empPushHist(); empCfOn = !empCfOn; try { localStorage.setItem('ro-sheet-cf', empCfOn ? '1' : '0'); } catch (e) {} render(); });
+    if ($('emp-xl-find')) $('emp-xl-find').addEventListener('click', () => { const input = $('search'); if (input) { input.focus(); try { input.select(); } catch (e) {} } });
+    if ($('emp-xl-density')) $('emp-xl-density').addEventListener('click', () => {
+        applySheetDensity(document.documentElement.getAttribute('data-sheet-density') === 'comfy' ? 'compact' : 'comfy');
+    });
+    if ($('emp-xl-export')) $('emp-xl-export').addEventListener('click', () => {
+        const table = document.querySelector('#emp-sheet .xl-grid');
+        if (!table) return;
+        const go = () => { window.XLSX.writeFile(window.XLSX.utils.table_to_book(table, { sheet: 'Live sheet' }), 'reserved-orders.xlsx'); toast('Exported', 'reserved-orders.xlsx', 'd-ok'); };
+        if (window.XLSX) { go(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+        s.onload = go;
+        s.onerror = () => toast('Export failed', 'Could not load the Excel library.', 'd-bad');
+        document.head.appendChild(s);
+    });
+    if ($('emp-xl-zoom-out')) $('emp-xl-zoom-out').addEventListener('click', () => { empXlZoom = Math.max(60, empXlZoom - 10); const g = document.querySelector('#emp-sheet .xl-grid'); if (g) g.style.zoom = String(empXlZoom / 100); if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`; });
+    if ($('emp-xl-zoom-in')) $('emp-xl-zoom-in').addEventListener('click', () => { empXlZoom = Math.min(150, empXlZoom + 10); const g = document.querySelector('#emp-sheet .xl-grid'); if (g) g.style.zoom = String(empXlZoom / 100); if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`; });
     if ($('emp-xl-formula')) {
         $('emp-xl-formula').addEventListener('focus', () => { try { $('emp-xl-formula').select(); } catch (e) { /* ignore */ } });
         $('emp-xl-formula').addEventListener('click', () => { try { $('emp-xl-formula').select(); } catch (e) { /* ignore */ } });

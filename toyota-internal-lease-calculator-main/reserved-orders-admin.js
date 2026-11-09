@@ -182,7 +182,7 @@
             table.style.zoom = keep || '1';
         }
         if (tw < 8 || th < 8) return;
-        if (table.style.zoom !== '1') table.style.zoom = '1';
+        table.style.zoom = String((typeof xlZoom === 'number' ? xlZoom : 100) / 100);
         box.classList.remove('sheet-fit');
         if (!box._fitObs && typeof ResizeObserver === 'function') {
             box._fitObs = new ResizeObserver(() => fitSheet(box));
@@ -223,6 +223,31 @@
         const info = expInfo(parseLocal(deadline));
         if (!info) return '<span class="muted-text">No expiry date</span>';
         return `<div class="exp ${info.tone}${big ? ' exp-big' : ''}" data-deadline="${esc(deadline)}"><b>${esc(info.text)}</b><div class="track"><i style="width:${info.pct.toFixed(1)}%"></i></div>${dateLabel ? `<small>${dateLabel}</small>` : ''}</div>`;
+    }
+    function expiryCompactHtml(order, dateLabel) {
+        const deadline = expiryDeadlineOf(order);
+        const end = parseLocal(deadline);
+        const title = dateLabel || '';
+        if (!end) return `<span class="muted-text" title="${esc(title)}">—</span>`;
+        const hoursAgo = Math.floor((Date.now() - end.getTime()) / 3600000);
+        let pill; let tone;
+        if (hoursAgo >= 0) {
+            pill = hoursAgo + 'h ago';
+            tone = hoursAgo >= 100 ? 'is-old' : 'is-warn';
+        } else {
+            const left = Math.max(1, Math.ceil(-hoursAgo));
+            pill = left + 'h left';
+            tone = left < 24 ? 'is-warn' : 'is-ok';
+        }
+        const date = pad(end.getDate()) + '/' + pad(end.getMonth() + 1);
+        return `<span class="exp-line" title="${esc(title || date)}"><span class="exp-pill ${tone}">${esc(pill)}</span><span class="exp-date">${esc(date)}</span></span>`;
+    }
+    function applySheetDensity(mode) {
+        const next = mode === 'comfy' ? 'comfy' : 'compact';
+        document.documentElement.setAttribute('data-sheet-density', next);
+        try { localStorage.setItem('ro-sheet-density', next); } catch (e) { /* blocked */ }
+        const btn = $('xl-density');
+        if (btn) btn.classList.toggle('is-on', next === 'comfy');
     }
     function flashRow(key) {
         const row = document.querySelector(`#live-sheet-merged tr[data-key="${CSS.escape(key)}"], #st-detail tr[data-open="${CSS.escape(key)}"]`);
@@ -463,8 +488,39 @@
     // Live sheet columns. A-J come from the pushed Reserved Order File (A salesman, B customer, C order, D model year,
     // E product, F suffix, G exterior, H interior, I VIN, J expiry). The four RTL columns come from the pushed
     // RTL Stock row of the same VIN (M status, K allocation age, N area, H share level). Same columns as the employee page.
-    const MERGED_COL_ORDER = ['Salesman name', 'Customer name', 'Order number', 'Model year', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
-    const MERGED_META_COLS = ['Queue 1', 'Queue 2', 'Queue 3', 'Status', 'Note', 'Updated by'];
+    const MERGED_COL_ORDER = ['Salesman name', 'Queue 3', 'Model year', 'Customer name', 'Status', 'Note', 'Updated by', 'Order number', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
+    const MERGED_META_COLS = ['Queue 2', 'Queue 1'];
+    const MERGED_HEAD_SHORT = {
+        'Queue 1': 'Q1', 'Queue 2': 'Q2', 'Queue 3': 'Q3',
+        'Salesman name': 'Salesman', 'Customer name': 'Customer', 'Updated by': 'Updated',
+        'Order number': 'Order #', 'Model year': 'Year', 'ALJ suffix': 'Suffix',
+        'Exterior color': 'Ext', 'Interior color': 'Int', 'Expiry date': 'Expiry',
+        'Allocation age': 'Age', 'Share level': 'Share level', 'Leader note': 'Leader'
+    };
+    const XL_DEFAULT_WIDTHS = {
+        'Queue 2': 28, 'Queue 1': 28, 'Salesman name': 132, 'Queue 3': 28, 'Model year': 44,
+        'Customer name': 160, Status: 100, Note: 40, 'Updated by': 56, 'Order number': 92,
+        Product: 88, 'ALJ suffix': 44, 'Exterior color': 44, 'Interior color': 36, VIN: 148,
+        'Expiry date': 128, Usage: 44, 'Allocation age': 44, Area: 72, 'Share level': 110,
+        'Leader note': 72
+    };
+    const XL_MONO_COLS = new Set(['Order number', 'VIN', 'ALJ suffix', 'Exterior color', 'Interior color', 'Area', 'Model year', 'Queue 1', 'Queue 2', 'Queue 3', 'Allocation age']);
+    const XL_NUM_COLS = new Set(['Order number', 'Model year', 'Queue 1', 'Queue 2', 'Queue 3', 'Allocation age']);
+    const XL_WIDTHS_KEY = 'ro-sheet-colwidths';
+    const XL_DENSITY_KEY = 'ro-sheet-density';
+    const XL_FREEZE_KEY = 'ro-sheet-freeze';
+    const XL_CF_KEY = 'ro-sheet-cf';
+    let xlWidths = {};
+    try { xlWidths = JSON.parse(localStorage.getItem(XL_WIDTHS_KEY) || '{}') || {}; } catch (e) { xlWidths = {}; }
+    let sheetSort = { label: '', dir: '' };
+    let sheetColFilter = { label: '', value: '' };
+    let xlFreezeOn = true;
+    try { xlFreezeOn = localStorage.getItem(XL_FREEZE_KEY) !== '0'; } catch (e) { /* keep */ }
+    let xlCfOn = false;
+    try { xlCfOn = localStorage.getItem(XL_CF_KEY) === '1'; } catch (e) { /* keep */ }
+    const xlHist = [];
+    let xlHistI = -1;
+    try { applySheetDensity(localStorage.getItem(XL_DENSITY_KEY) === 'comfy' ? 'comfy' : 'compact'); } catch (e) { applySheetDensity('compact'); }
     function retailOk(value) {
         const text = String(value || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
         if (!text || text === '—' || text === '-') return false;
@@ -1119,9 +1175,9 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            // Only the columns the team asked for, in the same order as the employee page. Leader note is the admin-only extra.
-            const titles = { 'Updated by': 'Updated', 'Leader note': 'Leader note' };
-            MERGED_META_COLS.concat(MERGED_COL_ORDER).forEach((label) => { if (!titles[label]) titles[label] = label; });
+            const titles = { 'Updated by': 'Updated', 'Leader note': 'Leader' };
+            MERGED_META_COLS.concat(MERGED_COL_ORDER).forEach((label) => { if (!titles[label]) titles[label] = MERGED_HEAD_SHORT[label] || label; });
+            Object.keys(MERGED_HEAD_SHORT).forEach((label) => { titles[label] = MERGED_HEAD_SHORT[label]; });
             return { cols: MERGED_META_COLS.concat(MERGED_COL_ORDER, ['Leader note']), titles };
         }
         const meta = source === 'reserved'
@@ -1367,38 +1423,68 @@
         const visible = source === 'merged'
             ? (showNoVinRows ? list : list.filter((order) => hasVin(order) || orderInSheet(order, 'esales') || orderInSheet(order, 'reserved')))
             : (showNoVinRows ? list : list.filter(hasVin));
-        const rows = visible.filter((order) => {
+        let rows = visible.filter((order) => {
             if (!orderMatchesSheetFilter(order, source)) return false;
+            if (sheetColFilter.label && sheetColFilter.value) {
+                if (String(sheetValue(order, sheetColFilter.label, source) || '').trim() !== sheetColFilter.value) return false;
+            }
             if (!needle) return true;
             return cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle));
         });
-        const head = (label) => {
+        if (sheetSort.label && cols.includes(sheetSort.label)) {
+            const dir = sheetSort.dir === 'za' ? -1 : 1;
+            rows = rows.slice().sort((a, b) => {
+                const av = sheetValue(a, sheetSort.label, source);
+                const bv = sheetValue(b, sheetSort.label, source);
+                const an = Number(String(av).replace(/[^\d.-]/g, ''));
+                const bn = Number(String(bv).replace(/[^\d.-]/g, ''));
+                if (!Number.isNaN(an) && !Number.isNaN(bn) && String(av).search(/\d/) >= 0) return (an - bn) * dir;
+                return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * dir;
+            });
+        }
+        const freezeLabels = xlFreezeOn ? ['Queue 2', 'Queue 1', 'Salesman name'] : [];
+        const freezeClass = (label) => {
+            const i = freezeLabels.indexOf(label);
+            return i === 0 ? ' xl-fz1' : i === 1 ? ' xl-fz2' : i === 2 ? ' xl-fz3' : '';
+        };
+        const widthOf = (label) => Number(xlWidths[label]) || XL_DEFAULT_WIDTHS[label] || 88;
+        const head = (label, i) => {
             const named = colName(label);
-            if (/^[A-Z]{1,3}$/.test(label) && named && source !== 'merged') {
-                return `<th class="xl-h" draggable="true" data-label="${esc(label)}" title="Drag to reorder this column for everyone">${esc(named)}<span class="col-letter">${esc(label)}</span></th>`;
-            }
-            return `<th class="xl-h" draggable="true" data-label="${esc(label)}" title="Drag to reorder this column for everyone">${esc(named || label)}</th>`;
+            const letter = xlLetter(i);
+            const sortCls = sheetSort.label === label ? (sheetSort.dir === 'za' ? ' is-desc' : ' is-asc') : '';
+            const w = widthOf(label);
+            return `<th class="xl-h${freezeClass(label)}${sortCls}" draggable="true" data-label="${esc(label)}" data-c="${i}" style="width:${w}px;min-width:${w}px;max-width:${w}px" title="${esc(named || label)}"><small class="xl-let">${esc(letter)}</small><b>${esc(named || label)}</b><i class="xl-caret" data-sort="${esc(label)}"></i><span class="xl-resize" data-resize="${esc(label)}"></span></th>`;
+        };
+        const tdOpen = (label, extra, title) => {
+            const w = widthOf(label);
+            const cls = [
+                extra || '',
+                freezeClass(label).trim(),
+                XL_MONO_COLS.has(label) ? 'xl-mono' : '',
+                XL_NUM_COLS.has(label) ? 'xl-num' : ''
+            ].filter(Boolean).join(' ');
+            return `<td class="${esc(cls)}" style="width:${w}px;min-width:${w}px;max-width:${w}px"${title ? ` title="${esc(title)}"` : ''}>`;
         };
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
             if (label === 'Status') {
                 const pill = statusPill(order.status);
+                const title = String(order.status || 'Not updated');
                 if (source === 'merged' && order.key) {
-                    return `<td class="col-status"><span class="edit">${pill}${icon('chevron', 'chev')}</span></td>`;
+                    return `${tdOpen(label, 'col-status', title)}<span class="edit">${pill}${icon('chevron', 'chev')}</span></td>`;
                 }
-                return `<td class="col-status">${pill}</td>`;
+                return `${tdOpen(label, 'col-status', title)}${pill}</td>`;
             }
             if (label === 'Leader note') {
                 const key = order.key || '';
-                return `<td class="col-notes col-leader-note">
-                    <textarea class="sheet-leader-note" data-key="${esc(key)}" data-prev="${esc(order.leaderNote || '')}" rows="2" maxlength="2000" placeholder="Leader note for the team">${esc(order.leaderNote || '')}</textarea>
+                return `${tdOpen(label, 'col-notes col-leader-note', order.leaderNote || '')}
+                    <textarea class="sheet-leader-note" data-key="${esc(key)}" data-prev="${esc(order.leaderNote || '')}" rows="1" maxlength="2000" placeholder="Leader note">${esc(order.leaderNote || '')}</textarea>
                     <button type="button" class="btn sm sheet-leader-save" data-key="${esc(key)}">Save</button>
                     ${order.leaderNoteDisplay ? `<small>${esc(order.leaderNoteBy || 'Admin')} · ${esc(order.leaderNoteDisplay)}</small>` : ''}
                 </td>`;
             }
             if (label === 'Updated by' || label === 'Team notes' || label === 'Updated at') {
                 const who = order.statusChangedBy || '';
-                const id = order.statusChangedEmployeeNumber || '';
                 const when = order.statusChangedDisplay
                     || (parseLocal(order.statusChangedAt)
                         ? parseLocal(order.statusChangedAt).toLocaleString('en-GB', {
@@ -1411,60 +1497,64 @@
                             hour12: true
                         }) + ' (Saudi)'
                         : (order.statusChangedAt || ''));
-                if (!who && !when) return '<td class="col-updated-by"><span class="muted-text">—</span></td>';
-                return `<td class="col-updated-by upd">${who ? `<span>${esc(who)}</span>` : ''}${when ? `<small>${esc(when)}</small>` : ''}</td>`;
+                const at = parseLocal(order.statusChangedAt);
+                const short = at ? timeAgo(at) : (who || '—');
+                const title = [who, when].filter(Boolean).join(' · ');
+                if (!who && !when) return `${tdOpen(label, 'col-updated-by', '')}<span class="muted-text">—</span></td>`;
+                return `${tdOpen(label, 'col-updated-by upd', title)}<span>${esc(short)}</span>${when ? `<small>${esc(when)}</small>` : ''}</td>`;
             }
             const tierMatch = /^Queue ([123])$/.exec(label);
             if (tierMatch) {
                 const tier = Number(tierMatch[1]);
                 const q = (order.boTierQueues || [])[tier - 1];
-                if (!q) return `<td class="col-queue col-tier" title="No colour choice ${tier} for this order in the Toyota Back Order file"><span class="muted-text">—</span></td>`;
+                if (!q) return `${tdOpen(label, 'col-queue col-tier', 'No colour choice ' + tier)}<span class="muted-text">—</span></td>`;
                 const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-                return `<td class="col-queue col-tier" title="Colour choice ${tier}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><div class="q"><b>#${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div>${pair ? `<span class="q-pair">${esc(pair)}</span>` : ''}</td>`;
+                const title = `Colour choice ${tier}${pair ? ' (' + pair + ')' : ''}: position ${q.position} of ${q.size}`;
+                return `${tdOpen(label, 'col-queue col-tier', title)}<div class="q"><b>${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div></td>`;
             }
             if (label === 'Queue position') {
-                if (order.boQueuePosition == null) return '<td class="col-queue" title="Not found in the Toyota Back Order file"><span class="ahead-empty">—</span></td>';
+                if (order.boQueuePosition == null) return `${tdOpen(label, 'col-queue', 'Not found in the Toyota Back Order file')}<span class="ahead-empty">—</span></td>`;
                 const size = order.boQueueSize != null ? `<small class="q-of"> / ${esc(String(order.boQueueSize))}</small>` : '';
-                return `<td class="col-queue" title="Back Order queue position"><span class="q-pill">#${esc(String(order.boQueuePosition))}</span>${size}</td>`;
+                return `${tdOpen(label, 'col-queue', 'Back Order queue position')}<span class="q-pill">#${esc(String(order.boQueuePosition))}</span>${size}</td>`;
             }
             if (label === 'Note') {
-                return `<td class="col-note"><div class="note" title="${esc(value)}" dir="auto">${value ? esc(value) : '—'}</div></td>`;
+                return `${tdOpen(label, 'col-note', value)}<div class="note" dir="auto">${value ? esc(value) : '—'}</div></td>`;
             }
-            if (label === 'Salesman name') return `<td class="col-advisor">${value ? `<span class="person"><span class="av">${esc(initials(value))}</span>${esc(value)}</span>` : ''}</td>`;
-            if (label === 'Usage') return value ? `<td class="col-source"><span class="tag${retailOk(value) ? ' good' : ''}">${esc(value)}</span></td>` : '<td class="col-source"></td>';
+            if (label === 'Salesman name') return `${tdOpen(label, 'col-advisor', value)}${value ? `<span class="person"><span class="av">${esc(initials(value))}</span>${esc(value)}</span>` : ''}</td>`;
+            if (label === 'Usage') return value ? `${tdOpen(label, 'col-source', value)}<span class="tag${retailOk(value) ? ' good' : ''}">${esc(value)}</span></td>` : `${tdOpen(label, 'col-source', '')}</td>`;
             if (label === 'Expiry date') {
                 const deadline = value ? expiryDeadlineOf(order) : '';
-                if (!parseLocal(deadline)) return `<td class="col-expiry">${esc(value || '—')}</td>`;
-                return `<td class="col-expiry">${expHtml(deadline, esc(value), false)}</td>`;
+                if (!parseLocal(deadline)) return `${tdOpen(label, 'col-expiry', value)}${esc(value || '—')}</td>`;
+                return `${tdOpen(label, 'col-expiry', value)}${expiryCompactHtml(order, value)}</td>`;
             }
-            if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
-            if (label === 'Expiry') return `<td class="col-expiry">${esc(value || '—')}</td>`;
+            if (label === 'Queue') return `${tdOpen(label, 'col-queue', value)}${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
+            if (label === 'Expiry') return `${tdOpen(label, 'col-expiry', value)}${esc(value || '—')}</td>`;
             if (label === 'Time left') {
                 const ms = remainMs(order);
-                return `<td class="timer-cell ${timerTone(ms)}" data-deadline="${esc(orderDeadline(order) || '')}">${esc(value || '—')}</td>`;
+                return `${tdOpen(label, 'timer-cell ' + timerTone(ms), value)}<span data-deadline="${esc(orderDeadline(order) || '')}">${esc(value || '—')}</span></td>`;
             }
             if (label === 'BO ahead') return aheadCellHtml(order);
             if (label === 'Source') {
                 const tone = value === 'Both' ? 'is-both' : value === 'Reserved' ? 'is-reserved' : 'is-esales';
-                return `<td class="col-source"><span class="source-pill ${tone}">${esc(value || '—')}</span></td>`;
+                return `${tdOpen(label, 'col-source', value)}<span class="source-pill ${tone}">${esc(value || '—')}</span></td>`;
             }
             if (label === 'RTL stock') {
-                if (!value) return '<td class="col-source"></td>';
+                if (!value) return `${tdOpen(label, 'col-source', '')}</td>`;
                 const tone = value === 'In RTL stock' ? 'is-both' : 'is-reserved';
-                return `<td class="col-source"><span class="source-pill ${tone}">${esc(value)}</span></td>`;
+                return `${tdOpen(label, 'col-source', value)}<span class="source-pill ${tone}">${esc(value)}</span></td>`;
             }
             if (label === 'U' && value) {
                 const st = /^\d$/.test(value) ? '0' + value : value;
-                return `<td><span class="st-type">${esc(st)}</span></td>`;
+                return `${tdOpen(label, '', st)}<span class="st-type">${esc(st)}</span></td>`;
             }
             const title = (source === 'merged' ? label : (SHEET_NAMES[label] || titles[label] || label));
             if (source !== 'merged' && (isAreaOrShareLabel(label) || isAreaOrShareLabel(title))) {
-                if (!value) return `<td class="cell-retail cell-retail-empty"></td>`;
+                if (!value) return `${tdOpen(label, 'cell-retail cell-retail-empty', '')}</td>`;
                 const ok = retailOk(value);
-                return `<td class="cell-retail ${ok ? 'cell-retail-ok' : 'cell-retail-bad'}">${esc(value)}</td>`;
+                return `${tdOpen(label, 'cell-retail ' + (ok ? 'cell-retail-ok' : 'cell-retail-bad'), value)}${esc(value)}</td>`;
             }
             const plain = String(value == null ? '' : value).trim();
-            return `<td${/^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? ' class="xl-num"' : ''}>${esc(value)}</td>`;
+            return `${tdOpen(label, /^-?\d[\d,]*(\.\d+)?$/.test(plain) && plain.length < 12 ? 'xl-num' : '', plain)}${esc(value)}</td>`;
         };
         const emptyMsg = !list.length
             ? (source === 'merged'
@@ -1474,36 +1564,44 @@
                     : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.')
             : 'No rows match these filters. Clear search or pick another filter.';
         const note = noVin ? `${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} <button type="button" class="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button>` : '';
-        // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
-        const letters = `<tr class="xl-letters"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => `<th class="xl-col" data-c="${i}">${xlLetter(i)}</th>`).join('')}</tr>`;
-        const heads = `<tr class="xl-heads"><th class="xl-corner">1</th>${cols.map(head).join('')}</tr>`;
-        const sign = [source, rows.length, cols.join('\t'), rows.map((order) => [order.key, order.status, order.statusChangedAt, order.leaderNote].join(':')).join('|')].join('#');
+        const heads = `<tr class="xl-heads"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => head(label, i)).join('')}</tr>`;
+        const colgroup = `<colgroup><col style="width:36px">${cols.map((label) => `<col data-label="${esc(label)}" style="width:${widthOf(label)}px">`).join('')}</colgroup>`;
+        const sign = [source, rows.length, cols.join('\t'), sheetSort.label, sheetSort.dir, sheetColFilter.label, sheetColFilter.value, xlFreezeOn, xlCfOn, JSON.stringify(xlWidths), rows.map((order) => [order.key, order.status, order.statusChangedAt, order.leaderNote].join(':')).join('|')].join('#');
         if (box.dataset.sign === sign && box.querySelector('.xl-grid')) {
             xlRestoreSelection(box, source);
             return;
         }
         box.dataset.sign = sign;
         box.innerHTML = rows.length
-            ? `<table class="xl-grid"><thead>${letters}${heads}</thead><tbody>${rows.map((order, index) => {
+            ? `<table class="xl-grid${xlFreezeOn ? '' : ' is-unfrozen'}${xlCfOn ? ' is-cf' : ''}">${colgroup}<thead>${heads}</thead><tbody>${rows.map((order, index) => {
+                const bucket = statusBucket(order);
+                const expired = (sheetRemainMs(order) != null && sheetRemainMs(order) <= 0);
                 const classes = [
                     'rowlink',
                     hasVin(order) ? '' : 'is-novin',
-                    isCancelledStatus(order) ? 'row-cancelled' : ''
+                    isCancelledStatus(order) ? 'row-cancelled' : '',
+                    expired ? 'is-expired' : '',
+                    bucket === 'none' ? 'is-none' : '',
+                    bucket === 'Payment' ? 'is-ok' : ''
                 ].filter(Boolean).join(' ');
                 return `<tr class="${classes}" data-key="${esc(order.key || '')}" tabindex="0"><th class="xl-rn" scope="row">${index + 2}</th>${cols.map((label) => cell(order, label)).join('')}</tr>`;
             }).join('')}</tbody></table>`
             : `<p class="empty">${emptyMsg}</p>`;
         const grid = box.querySelector('.xl-grid');
-        if (grid) grid.style.zoom = '1';
+        if (grid) grid.style.zoom = String(xlZoom / 100);
         scheduleFitSheet(box);
         if (source === sheetSource) {
             const stat = $('xl-stat');
-            if (stat) stat.textContent = (rows.length ? `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} columns` : 'No data')
+            if (stat) stat.textContent = (rows.length ? `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} cols` : 'No data')
                 + (hiddenCount > 0 ? ` · ${hiddenCount} hidden` : '');
             xlRenderColsPop();
             xlPaintLayoutState();
             const novin = $('xl-novin');
             if (novin) novin.innerHTML = note;
+            const freezeBtn = $('xl-freeze');
+            if (freezeBtn) freezeBtn.classList.toggle('is-on', xlFreezeOn);
+            const cfBtn = $('xl-cf');
+            if (cfBtn) cfBtn.classList.toggle('is-on', xlCfOn);
         }
         xlRestoreSelection(box, source);
     }
@@ -1552,43 +1650,151 @@
         if (ok || (navigator.clipboard && navigator.clipboard.writeText)) toast('Copied', value || 'Empty cell', 'd-ok');
         else toast('Copy blocked', 'Select the cell and press Ctrl+C.', 'd-warn');
     }
+    function xlParseNum(text) {
+        const t = String(text || '').replace(/,/g, '').trim();
+        if (!t || !/^-?\d+(\.\d+)?$/.test(t)) return null;
+        const n = Number(t);
+        return Number.isFinite(n) ? n : null;
+    }
+    function xlRangeCells(box, sel) {
+        const body = box && box.querySelector('.xl-grid tbody');
+        if (!body || !sel) return [];
+        const r1 = Math.min(sel.r, sel.r2 != null ? sel.r2 : sel.r);
+        const r2 = Math.max(sel.r, sel.r2 != null ? sel.r2 : sel.r);
+        const c1 = Math.min(sel.c, sel.c2 != null ? sel.c2 : sel.c);
+        const c2 = Math.max(sel.c, sel.c2 != null ? sel.c2 : sel.c);
+        const out = [];
+        for (let r = r1; r <= r2; r += 1) {
+            const row = [];
+            for (let c = c1; c <= c2; c += 1) {
+                const td = body.rows[r] && body.rows[r].cells[c + 1];
+                row.push(td ? xlCellText(td) : '');
+            }
+            out.push(row);
+        }
+        return out;
+    }
+    function xlPaintAgg(box, sel) {
+        const agg = $('xl-agg');
+        if (!agg) return;
+        const cells = xlRangeCells(box, sel).flat();
+        const nums = cells.map(xlParseNum).filter((n) => n != null);
+        const count = cells.filter((t) => String(t || '').trim()).length;
+        const sum = nums.reduce((a, b) => a + b, 0);
+        const avg = nums.length ? (sum / nums.length) : 0;
+        agg.textContent = `Count ${count} · Sum ${nums.length ? sum.toLocaleString('en-GB') : '—'} · Avg ${nums.length ? avg.toLocaleString('en-GB', { maximumFractionDigits: 2 }) : '—'}`;
+    }
     function copySelectedSheetCell(box) {
-        const td = (box && box.querySelector('.xl-sel')) || document.querySelector('#panel-sheet .xl-sel');
-        if (!td) return false;
-        copySheetValue(xlCellText(td));
+        const wrap = box || document.querySelector('#live-sheet-merged');
+        const source = wrap && wrap.dataset.source;
+        const sel = source && xlSelected[source];
+        if (!wrap || !sel) {
+            const td = document.querySelector('#panel-sheet .xl-sel');
+            if (!td) return false;
+            copySheetValue(xlCellText(td));
+            return true;
+        }
+        const rows = xlRangeCells(wrap, sel);
+        const tsv = rows.map((row) => row.join('\t')).join('\n');
+        copySheetValue(tsv);
         return true;
     }
-    function xlSelect(box, r, c, scroll) {
+    function xlSelect(box, r, c, scroll, r2, c2) {
         const source = box && box.dataset.source;
         const body = box && box.querySelector('.xl-grid tbody');
+        const head = box && box.querySelector('.xl-grid thead tr');
         if (!body || !body.rows.length) return;
         const rowMax = body.rows.length - 1;
         const colMax = body.rows[0].cells.length - 2;
         r = Math.max(0, Math.min(rowMax, r));
         c = Math.max(0, Math.min(colMax, c));
-        xlSelected[source] = { r, c };
-        box.querySelectorAll('.xl-sel').forEach((el) => el.classList.remove('xl-sel'));
+        const endR = r2 == null ? r : Math.max(0, Math.min(rowMax, r2));
+        const endC = c2 == null ? c : Math.max(0, Math.min(colMax, c2));
+        xlSelected[source] = { r, c, r2: endR, c2: endC };
+        box.querySelectorAll('.xl-sel, .xl-sel-range').forEach((el) => el.classList.remove('xl-sel', 'xl-sel-range'));
         box.querySelectorAll('.xl-active').forEach((el) => el.classList.remove('xl-active'));
-        const tr = body.rows[r];
-        const td = tr && tr.cells[c + 1];
-        if (!td) return;
-        td.classList.add('xl-sel');
-        if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
-        const letters = box.querySelector('.xl-letters');
-        if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
+        const rMin = Math.min(r, endR);
+        const rMax = Math.max(r, endR);
+        const cMin = Math.min(c, endC);
+        const cMax = Math.max(c, endC);
+        for (let rr = rMin; rr <= rMax; rr += 1) {
+            const tr = body.rows[rr];
+            if (!tr) continue;
+            if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
+            for (let cc = cMin; cc <= cMax; cc += 1) {
+                const td = tr.cells[cc + 1];
+                if (!td) continue;
+                td.classList.add(rr === r && cc === c ? 'xl-sel' : 'xl-sel-range');
+            }
+        }
+        if (head) {
+            for (let cc = cMin; cc <= cMax; cc += 1) {
+                if (head.cells[cc + 1]) head.cells[cc + 1].classList.add('xl-active');
+            }
+        }
         const name = $('xl-name');
-        if (name) name.textContent = xlLetter(c) + (r + 2);
-        xlSetFormula(xlCellText(td));
-        if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const a1 = xlLetter(cMin) + (rMin + 2);
+        const a2 = xlLetter(cMax) + (rMax + 2);
+        if (name) name.textContent = (rMin === rMax && cMin === cMax) ? a1 : `${a1}:${a2}`;
+        const anchor = body.rows[r] && body.rows[r].cells[c + 1];
+        xlSetFormula(xlCellText(anchor));
+        xlPaintAgg(box, xlSelected[source]);
+        if (scroll && anchor) anchor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     function xlRestoreSelection(box, source) {
         const sel = xlSelected[source];
-        if (sel) xlSelect(box, sel.r, sel.c, false);
+        if (sel) xlSelect(box, sel.r, sel.c, false, sel.r2, sel.c2);
         else if (source === sheetSource) {
             const name = $('xl-name');
             if (name) name.textContent = 'A1';
             xlSetFormula('');
+            xlPaintAgg(box, null);
         }
+    }
+    function xlPushHist() {
+        xlHist.splice(xlHistI + 1);
+        xlHist.push({
+            sort: { label: sheetSort.label, dir: sheetSort.dir },
+            filter: { label: sheetColFilter.label, value: sheetColFilter.value },
+            freeze: xlFreezeOn,
+            cf: xlCfOn,
+            widths: Object.assign({}, xlWidths)
+        });
+        if (xlHist.length > 40) xlHist.shift();
+        xlHistI = xlHist.length - 1;
+    }
+    function xlApplyHist(state) {
+        if (!state) return;
+        sheetSort = { label: state.sort.label, dir: state.sort.dir };
+        sheetColFilter = { label: state.filter.label, value: state.filter.value };
+        xlFreezeOn = !!state.freeze;
+        xlCfOn = !!state.cf;
+        xlWidths = Object.assign({}, state.widths || {});
+        renderSheet();
+    }
+    function xlUndo() {
+        if (xlHistI <= 0) return;
+        xlHistI -= 1;
+        xlApplyHist(xlHist[xlHistI]);
+        toast('Undo', '', 'd-ok');
+    }
+    function xlRedo() {
+        if (xlHistI >= xlHist.length - 1) return;
+        xlHistI += 1;
+        xlApplyHist(xlHist[xlHistI]);
+        toast('Redo', '', 'd-ok');
+    }
+    function xlSetSort(label, dir) {
+        xlPushHist();
+        if (!label) {
+            const sel = xlSelected[sheetSource];
+            const info = xlInfo[sheetSource];
+            const cols = info ? xlVisibleCols(sheetSource, info.all) : [];
+            label = cols[sel ? sel.c : 0] || cols[0] || '';
+        }
+        sheetSort = { label, dir: dir || 'az' };
+        renderSheet();
+        toast('Sorted', (MERGED_HEAD_SHORT[label] || label) + (dir === 'za' ? ' Z→A' : ' A→Z'), 'd-ok');
     }
     // ---- Sheet layout: hide / reorder columns, then Save layout (kept in this browser) ----
     const XL_LAYOUT_KEY = 'ro-live-sheet-layout-v2'; // v2: the sheet now has the team's own column set
@@ -2365,18 +2571,78 @@
                 adminSaveLeaderNote(save.dataset.key, input ? input.value : '', save);
                 return;
             }
+            const caret = event.target.closest('.xl-caret');
+            if (caret) {
+                event.stopPropagation();
+                const label = caret.getAttribute('data-sort');
+                const next = sheetSort.label === label && sheetSort.dir === 'az' ? 'za' : 'az';
+                xlSetSort(label, next);
+                return;
+            }
             // Click a cell to select it (like Excel); controls inside cells keep working normally.
             const td = event.target.closest('.xl-grid tbody td');
             if (td) {
                 const tr = td.parentElement;
-                xlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
+                const r = tr.sectionRowIndex;
+                const c = td.cellIndex - 1;
+                const prev = xlSelected[box.dataset.source] || { r: 0, c: 0 };
+                if (event.shiftKey) xlSelect(box, prev.r, prev.c, false, r, c);
+                else xlSelect(box, r, c, false);
                 if (!event.target.closest('select, textarea, input, button, a')) box.focus({ preventScroll: true });
                 return;
             }
             const rn = event.target.closest('.xl-grid tbody th.xl-rn');
             if (rn) { xlSelect(box, rn.parentElement.sectionRowIndex, (xlSelected[box.dataset.source] || { c: 0 }).c, false); return; }
-            const col = event.target.closest('.xl-grid .xl-col');
+            const col = event.target.closest('.xl-grid thead th[data-c]');
             if (col) xlSelect(box, (xlSelected[box.dataset.source] || { r: 0 }).r, Number(col.dataset.c) || 0, false);
+        });
+        box.addEventListener('mousedown', (event) => {
+            if (event.button !== 0) return;
+            const handle = event.target.closest('[data-resize]');
+            if (handle) {
+                event.preventDefault();
+                event.stopPropagation();
+                const label = handle.getAttribute('data-resize');
+                const startX = event.clientX;
+                const startW = Number(xlWidths[label]) || XL_DEFAULT_WIDTHS[label] || 88;
+                const move = (ev) => {
+                    const next = Math.max(28, Math.min(420, startW + (ev.clientX - startX)));
+                    xlWidths[label] = next;
+                    box.querySelectorAll(`[data-label="${CSS.escape(label)}"]`).forEach((el) => {
+                        el.style.width = next + 'px';
+                        el.style.minWidth = next + 'px';
+                        el.style.maxWidth = next + 'px';
+                    });
+                };
+                const up = () => {
+                    document.removeEventListener('mousemove', move);
+                    document.removeEventListener('mouseup', up);
+                    try { localStorage.setItem(XL_WIDTHS_KEY, JSON.stringify(xlWidths)); } catch (e) { /* blocked */ }
+                    box.dataset.sign = '';
+                    renderSheet();
+                };
+                document.addEventListener('mousemove', move);
+                document.addEventListener('mouseup', up);
+                return;
+            }
+            const td = event.target.closest('.xl-grid tbody td');
+            if (!td || event.target.closest('select, textarea, input, button, a')) return;
+            const tr = td.parentElement;
+            const startR = tr.sectionRowIndex;
+            const startC = td.cellIndex - 1;
+            xlSelect(box, startR, startC, false);
+            const drag = (ev) => {
+                const over = document.elementFromPoint(ev.clientX, ev.clientY);
+                const cell = over && over.closest && over.closest('#live-sheet-merged .xl-grid tbody td');
+                if (!cell) return;
+                xlSelect(box, startR, startC, false, cell.parentElement.sectionRowIndex, cell.cellIndex - 1);
+            };
+            const stop = () => {
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('mouseup', stop);
+            };
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stop);
         });
         box.addEventListener('keydown', (event) => {
             if (event.target !== box) {
@@ -2392,7 +2658,9 @@
             }[event.key];
             if (move) {
                 event.preventDefault();
-                xlSelect(box, sel.r + move[0], sel.c + move[1], true);
+                if (event.shiftKey && (event.key.startsWith('Arrow') || event.key === 'PageUp' || event.key === 'PageDown')) {
+                    xlSelect(box, sel.r, sel.c, true, (sel.r2 != null ? sel.r2 : sel.r) + move[0], (sel.c2 != null ? sel.c2 : sel.c) + move[1]);
+                } else xlSelect(box, sel.r + move[0], sel.c + move[1], true);
             } else if (event.key === 'Home') {
                 event.preventDefault();
                 xlSelect(box, event.ctrlKey ? 0 : sel.r, 0, true);
@@ -2404,6 +2672,140 @@
         });
     });
     if ($('xl-copy-cell')) $('xl-copy-cell').addEventListener('click', () => copySelectedSheetCell());
+    if ($('admin-acct-btn')) {
+        $('admin-acct-btn').addEventListener('click', (event) => {
+            event.stopPropagation();
+            const menu = $('admin-acct-menu');
+            if (!menu) return;
+            const open = menu.classList.contains('hidden');
+            menu.classList.toggle('hidden', !open);
+            $('admin-acct-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('#admin-who')) return;
+            if ($('admin-acct-menu')) $('admin-acct-menu').classList.add('hidden');
+        });
+    }
+    function xlSelectedLabel() {
+        const sel = xlSelected[sheetSource];
+        const info = xlInfo[sheetSource];
+        const cols = info ? xlVisibleCols(sheetSource, info.all) : [];
+        return cols[sel ? sel.c : 0] || cols[0] || '';
+    }
+    function xlOpenFilter(label) {
+        const pop = $('xl-filter-pop');
+        const list = $('xl-filter-list');
+        const title = $('xl-filter-title');
+        if (!pop || !list) return;
+        const use = label || xlSelectedLabel();
+        pop.dataset.label = use;
+        if (title) title.textContent = 'Filter · ' + (MERGED_HEAD_SHORT[use] || use);
+        const values = Array.from(new Set((orders || []).map((order) => String(sheetValue(order, use, 'merged') || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        const q = ($('xl-filter-q') && $('xl-filter-q').value || '').toLowerCase();
+        list.innerHTML = values.filter((v) => !q || v.toLowerCase().includes(q)).slice(0, 80).map((v) => `<li><button type="button" data-filter-val="${esc(v)}">${esc(v)}</button></li>`).join('') || '<li class="muted">No values</li>';
+        pop.classList.remove('hidden');
+        const tool = $('xl-filter');
+        const rect = (tool || $('xl-formula-bar')).getBoundingClientRect();
+        pop.style.top = (rect.bottom + 6) + 'px';
+        pop.style.left = Math.max(8, rect.right - 260) + 'px';
+    }
+    if ($('xl-filter-list')) $('xl-filter-list').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-filter-val]');
+        if (!btn) return;
+        xlPushHist();
+        sheetColFilter = { label: $('xl-filter-pop').dataset.label, value: btn.getAttribute('data-filter-val') };
+        $('xl-filter-pop').classList.add('hidden');
+        renderSheet();
+        toast('Filtered', sheetColFilter.value, 'd-ok');
+    });
+    if ($('xl-filter-clear')) $('xl-filter-clear').addEventListener('click', () => {
+        xlPushHist();
+        sheetColFilter = { label: '', value: '' };
+        if ($('xl-filter-pop')) $('xl-filter-pop').classList.add('hidden');
+        renderSheet();
+    });
+    if ($('xl-filter-close')) $('xl-filter-close').addEventListener('click', () => $('xl-filter-pop').classList.add('hidden'));
+    if ($('xl-filter-q')) $('xl-filter-q').addEventListener('input', () => xlOpenFilter($('xl-filter-pop').dataset.label));
+    if ($('xl-undo')) $('xl-undo').addEventListener('click', xlUndo);
+    if ($('xl-redo')) $('xl-redo').addEventListener('click', xlRedo);
+    if ($('xl-sort-az')) $('xl-sort-az').addEventListener('click', () => xlSetSort(xlSelectedLabel(), 'az'));
+    if ($('xl-sort-za')) $('xl-sort-za').addEventListener('click', () => xlSetSort(xlSelectedLabel(), 'za'));
+    if ($('xl-filter')) $('xl-filter').addEventListener('click', () => xlOpenFilter(xlSelectedLabel()));
+    if ($('xl-freeze')) $('xl-freeze').addEventListener('click', () => {
+        xlPushHist();
+        xlFreezeOn = !xlFreezeOn;
+        try { localStorage.setItem(XL_FREEZE_KEY, xlFreezeOn ? '1' : '0'); } catch (e) { /* blocked */ }
+        renderSheet();
+    });
+    if ($('xl-cf')) $('xl-cf').addEventListener('click', () => {
+        xlPushHist();
+        xlCfOn = !xlCfOn;
+        try { localStorage.setItem(XL_CF_KEY, xlCfOn ? '1' : '0'); } catch (e) { /* blocked */ }
+        renderSheet();
+    });
+    if ($('xl-find')) $('xl-find').addEventListener('click', () => {
+        const input = $('sheet-search');
+        if (!input) return;
+        input.focus();
+        try { input.select(); } catch (e) { /* ignore */ }
+    });
+    if ($('xl-density')) $('xl-density').addEventListener('click', () => {
+        const now = document.documentElement.getAttribute('data-sheet-density') === 'comfy' ? 'compact' : 'comfy';
+        applySheetDensity(now);
+        toast(now === 'comfy' ? 'Comfortable rows' : 'Compact rows', '', 'd-ok');
+    });
+    function loadSheetJs(cb) {
+        if (window.XLSX) { cb(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+        s.onload = cb;
+        s.onerror = () => toast('Export failed', 'Could not load the Excel library.', 'd-bad');
+        document.head.appendChild(s);
+    }
+    function exportLiveSheet() {
+        const box = $('live-sheet-merged');
+        const table = box && box.querySelector('.xl-grid');
+        if (!table) { toast('Nothing to export', '', 'd-warn'); return; }
+        loadSheetJs(() => {
+            const wb = window.XLSX.utils.table_to_book(table, { sheet: 'Live sheet' });
+            window.XLSX.writeFile(wb, 'reserved-orders-live.xlsx');
+            toast('Exported', 'reserved-orders-live.xlsx', 'd-ok');
+        });
+    }
+    if ($('xl-export')) $('xl-export').addEventListener('click', exportLiveSheet);
+    function bumpZoom(delta) {
+        const input = $('xl-zoom');
+        const next = Math.max(60, Math.min(150, (Number(input && input.value) || 100) + delta));
+        if (input) {
+            input.value = String(next);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+            xlZoom = next;
+            document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = String(xlZoom / 100); });
+            if ($('xl-zoom-val')) $('xl-zoom-val').textContent = `${xlZoom}%`;
+        }
+    }
+    if ($('xl-zoom-out')) $('xl-zoom-out').addEventListener('click', () => bumpZoom(-10));
+    if ($('xl-zoom-in')) $('xl-zoom-in').addEventListener('click', () => bumpZoom(10));
+    document.addEventListener('click', (event) => {
+        if ($('xl-filter-pop') && !$('xl-filter-pop').classList.contains('hidden') && !event.target.closest('#xl-filter-pop, #xl-filter')) {
+            $('xl-filter-pop').classList.add('hidden');
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.target.closest('textarea, select, [contenteditable="true"], input:not(#xl-formula):not([readonly])')) return;
+        if (event.key.toLowerCase() === 'z' && !event.shiftKey) { event.preventDefault(); xlUndo(); }
+        if (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey)) { event.preventDefault(); xlRedo(); }
+        if (event.key.toLowerCase() === 'f') {
+            const input = $('sheet-search');
+            if (input && $('panel-sheet') && !$('panel-sheet').classList.contains('hidden')) {
+                event.preventDefault();
+                input.focus();
+                try { input.select(); } catch (e) { /* ignore */ }
+            }
+        }
+    });
     if ($('xl-formula')) {
         $('xl-formula').addEventListener('focus', () => { try { $('xl-formula').select(); } catch (e) { /* ignore */ } });
         $('xl-formula').addEventListener('click', () => { try { $('xl-formula').select(); } catch (e) { /* ignore */ } });
@@ -2502,6 +2904,7 @@
             xlOpenCtx(event, box.dataset.source, th.dataset.label);
         });
         box.addEventListener('dragstart', (event) => {
+            if (event.target.closest('[data-resize], .xl-caret')) { event.preventDefault(); return; }
             const th = event.target.closest('.xl-grid .xl-h[data-label]');
             if (!th) return;
             xlColDrag.label = th.dataset.label;
@@ -2546,6 +2949,9 @@
         else if (button.dataset.act === 'left') xlMove(source, label, -1);
         else if (button.dataset.act === 'right') xlMove(source, label, 1);
         else if (button.dataset.act === 'showall') { xlLayout(source).hidden = []; xlAfterLayoutChange(); }
+        else if (button.dataset.act === 'sort-az') xlSetSort(label, 'az');
+        else if (button.dataset.act === 'sort-za') xlSetSort(label, 'za');
+        else if (button.dataset.act === 'filter') xlOpenFilter(label);
     });
     window.addEventListener('beforeunload', (event) => {
         if (!xlDirty()) return;
@@ -2557,7 +2963,7 @@
         xlZoom = Number(xlZoomInput.value) || 100;
         const label = $('xl-zoom-val');
         if (label) label.textContent = `${xlZoom}%`;
-        document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = '1'; });
+        document.querySelectorAll('#panel-sheet .xl-grid').forEach((grid) => { grid.style.zoom = String(xlZoom / 100); });
         scheduleFitSheet();
     });
     // ---- Notify employees who have not updated their reserved orders on reserved-orders.html ----

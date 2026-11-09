@@ -7,8 +7,8 @@
     <title>Reserved Orders Admin</title>
     <script>(function(){try{var t=localStorage.getItem('ro-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}}catch(e){}})();</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109speed1">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109live1">
 </head>
 <body>
     <button class="btn theme-toggle theme-dock" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
@@ -37,36 +37,42 @@
         </form>
     </section>
     <div id="admin-app" class="hidden tower-app">
-        <header class="top" id="admin-top">
+        <header class="top top-nav-bar" id="admin-top">
             <div class="brand">
                 <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
-                <span><b>Reserved Orders</b><small id="admin-updated">Admin</small></span>
+                <b>Reserved Orders</b>
             </div>
+            <nav class="top-nav" id="admin-nav" aria-label="Sections">
+                <span class="rail-ind" id="admin-rail-ind"></span>
+                <button class="active" type="button" data-panel="overview">Overview</button>
+                <button type="button" data-panel="orders" hidden style="display:none">Orders</button>
+                <button type="button" data-panel="sold">Sold VINs</button>
+                <button type="button" data-panel="marketing" dir="rtl">طلبات التسويق</button>
+                <button type="button" data-panel="sheet">Live sheet</button>
+                <button type="button" data-panel="employees">Employees</button>
+                <button type="button" data-panel="push">Data push</button>
+                <button type="button" data-panel="archive">Archive</button>
+                <button type="button" data-panel="audit">Audit logs</button>
+                <button type="button" data-panel="reports" hidden style="display:none">Reports</button>
+                <button type="button" data-panel="settings">Settings</button>
+            </nav>
             <span class="spacer"></span>
-            <div class="who" id="admin-who"><span class="av" id="admin-who-av">AD</span><div><b id="admin-who-name">Admin</b><small id="admin-who-role">Full access</small></div></div>
-            <button class="btn theme-toggle" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
-            <a class="btn" href="hub.html">Hub</a>
-            <a class="btn" href="reserved-orders.html">Employee page</a>
-            <button class="btn" id="admin-out" type="button">Sign out</button>
+            <small class="top-push" id="admin-updated">Admin</small>
+            <button class="btn icon-btn theme-toggle" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
+            <div class="acct" id="admin-who">
+                <button class="btn acct-btn" id="admin-acct-btn" type="button" aria-haspopup="true" aria-expanded="false">
+                    <span class="av" id="admin-who-av">AD</span>
+                    <span id="admin-who-name">admin</span>
+                </button>
+                <div class="acct-menu hidden" id="admin-acct-menu" role="menu">
+                    <a href="hub.html" role="menuitem">Hub</a>
+                    <a href="reserved-orders.html" role="menuitem">Employee page</a>
+                    <button id="admin-out" type="button" role="menuitem">Sign out</button>
+                </div>
+            </div>
+            <small id="admin-who-role" hidden>Full access</small>
         </header>
-        <div class="shell">
-            <aside class="rail">
-                <div class="rlabel">Admin</div>
-                <nav class="rail-list" id="admin-nav" aria-label="Sections">
-                    <span class="rail-ind" id="admin-rail-ind"></span>
-                    <button class="active" type="button" data-panel="overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Overview</span></button>
-                    <button type="button" data-panel="orders" hidden style="display:none">Orders</button>
-                    <button type="button" data-panel="sold"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Sold VINs</span></button>
-                    <button type="button" data-panel="marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l15-6v14L3 13z"/><path d="M7 13v5h3"/></svg><span dir="rtl">طلبات التسويق</span></button>
-                    <button type="button" data-panel="sheet"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 4v16M15 4v16"/></svg><span>Live sheet</span></button>
-                    <button type="button" data-panel="employees"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a5 5 0 014 6"/></svg><span>Employees</span></button>
-                    <button type="button" data-panel="push"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg><span>Data push</span></button>
-                    <button type="button" data-panel="archive"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/></svg><span>Archive</span></button>
-                    <button type="button" data-panel="audit"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Audit logs</span></button>
-                    <button type="button" data-panel="reports" hidden style="display:none">Reports</button>
-                    <button type="button" data-panel="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Settings</span></button>
-                </nav>
-            </aside>
+        <div class="shell no-rail">
             <main class="wrap" id="admin-main">
             <section id="panel-overview" class="view">
                 <div class="head">
@@ -126,15 +132,14 @@
                 <section class="marketing-admin" id="marketing-rows"></section>
             </section>
             <section id="panel-sheet" class="hidden view xlw">
-                <div class="head">
+                <div class="head" hidden>
                     <div>
                         <h1>Live sheet</h1>
                         <p class="sheet-note" id="sheet-note">One row per VIN. Drag a column header to reorder the sheet for every employee. Hide columns in the list, then Submit for everyone.</p>
                     </div>
                 </div>
-                <div class="bar" id="sheet-filter-bar">
-                    <section class="chips" id="sheet-chips" aria-label="Filter by status"></section>
-                    <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="sheet-search" type="search" placeholder="Search VIN, order, customer, salesman" aria-label="Search this sheet"></label>
+                <div class="bar sheet-toolbar" id="sheet-filter-bar">
+                    <label class="search sheet-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="sheet-search" type="search" placeholder="Search VIN, order, customer, salesman" aria-label="Search this sheet"></label>
                     <select class="sel" id="sheet-filter-salesman" aria-label="Salesman"><option value="">All salesmen</option></select>
                     <select class="sel" id="sheet-filter-product" aria-label="Car"><option value="">All cars</option></select>
                     <select class="sel" id="sheet-filter-area" aria-label="Area"><option value="">All areas</option></select>
@@ -144,20 +149,11 @@
                         <option value="expired">Expired</option>
                     </select>
                     <button type="button" class="btn" id="sheet-filter-clear">Clear</button>
-                    <div class="rel">
-                        <button type="button" class="btn" id="xl-cols-btn" aria-haspopup="true" aria-expanded="false">Columns <span class="mono muted"></span></button>
-                        <div class="colpop hidden" id="xl-cols-pop" role="dialog" aria-label="Show, hide or reorder columns">
-                            <div class="xl-colspop-head"><b id="xl-cols-title">Columns</b><button type="button" class="x" id="xl-cols-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-                            <p class="muted xl-cols-hint">Drag a header on the sheet, or drag here. Uncheck to hide. Submit for everyone so employees see the same columns.</p>
-                            <div class="bar"><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="xl-cols-q" type="search" placeholder="Find a column" aria-label="Find a column"></label><button type="button" class="btn sm" id="xl-cols-showall">Show all</button></div>
-                            <ul id="xl-cols-list" class="xl-cols-list"></ul>
-                        </div>
-                    </div>
-                    <button type="button" class="btn primary" id="xl-save-layout" disabled>Submit for everyone</button>
-                    <button type="button" class="btn" id="xl-reset-layout">Reset</button>
-                    <small class="muted" id="xl-layout-state">Layout saved</small>
                     <span class="spacer"></span>
-                    <button type="button" class="btn" data-notify-pending title="Send a reminder right away to every employee whose reserved orders have no status update"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20h4"/></svg>Notify all not updated</button>
+                    <small class="live-flag" id="xl-layout-state">Live for everyone</small>
+                    <button type="button" class="btn" id="xl-reset-layout">Reset</button>
+                    <button type="button" class="btn" data-notify-pending title="Send a reminder right away to every employee whose reserved orders have no status update">Notify all not updated</button>
+                    <button type="button" class="btn primary" id="xl-save-layout" disabled>Submit for everyone</button>
                 </div>
                 <div class="colpop hidden" id="xl-ctx" role="menu">
                     <div class="xl-ctx-title"></div>
@@ -165,6 +161,15 @@
                     <button type="button" role="menuitem" data-act="left">Move left</button>
                     <button type="button" role="menuitem" data-act="right">Move right</button>
                     <button type="button" role="menuitem" data-act="showall">Show all columns</button>
+                    <button type="button" role="menuitem" data-act="sort-az">Sort A→Z</button>
+                    <button type="button" role="menuitem" data-act="sort-za">Sort Z→A</button>
+                    <button type="button" role="menuitem" data-act="filter">Filter…</button>
+                </div>
+                <div class="colpop hidden" id="xl-filter-pop" role="dialog" aria-label="Filter column">
+                    <div class="xl-colspop-head"><b id="xl-filter-title">Filter</b><button type="button" class="x" id="xl-filter-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+                    <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="xl-filter-q" type="search" placeholder="Find a value" aria-label="Find a value"></label>
+                    <button type="button" class="btn sm" id="xl-filter-clear">Clear filter</button>
+                    <ul id="xl-filter-list" class="xl-cols-list"></ul>
                 </div>
                 <span id="xl-filename" hidden></span>
                 <span class="sheet-source-count" id="sheet-count-merged" hidden>0</span>
@@ -173,10 +178,44 @@
                         <span class="xl-namebox" id="xl-name">A1</span>
                         <span class="xl-fx">fx</span>
                         <input class="xl-fxval" id="xl-formula" type="text" readonly aria-label="Selected cell">
-                        <button class="btn ghost sm" id="xl-copy-cell" type="button">Copy</button>
+                        <button class="btn ghost sm" id="xl-copy-cell" type="button" hidden>Copy</button>
+                        <div class="xl-tools" role="toolbar" aria-label="Spreadsheet tools">
+                            <button type="button" class="xl-tool" id="xl-undo" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M8 7H5a4 4 0 000 8h12M8 7l-3-3M8 7l-3 3"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-redo" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="M16 7h3a4 4 0 010 8H7M16 7l3-3M16 7l3 3"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-sort-az" aria-label="Sort A to Z"><svg viewBox="0 0 24 24"><path d="M8 5v14M8 19l-3-3M8 19l3-3M13 6h8M13 12h6M13 18h4"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-sort-za" aria-label="Sort Z to A"><svg viewBox="0 0 24 24"><path d="M8 19V5M8 5l-3 3M8 5l3 3M13 6h4M13 12h6M13 18h8"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-filter" aria-label="Filter"><svg viewBox="0 0 24 24"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-freeze" aria-label="Freeze panes"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M7 3l5 5 5-5M7 21l5-5 5 5"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-cf" aria-label="Conditional formatting"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-find" aria-label="Find"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
+                            <div class="rel">
+                                <button type="button" class="xl-tool" id="xl-cols-btn" aria-label="Show/hide columns" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 4h4v16h-4z"/></svg><span class="mono muted" hidden></span></button>
+                                <div class="colpop hidden" id="xl-cols-pop" role="dialog" aria-label="Show, hide or reorder columns">
+                                    <div class="xl-colspop-head"><b id="xl-cols-title">Columns</b><button type="button" class="x" id="xl-cols-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+                                    <p class="muted xl-cols-hint">Drag a header on the sheet, or drag here. Uncheck to hide. Submit for everyone so employees see the same columns.</p>
+                                    <div class="bar"><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="xl-cols-q" type="search" placeholder="Find a column" aria-label="Find a column"></label><button type="button" class="btn sm" id="xl-cols-showall">Show all</button></div>
+                                    <ul id="xl-cols-list" class="xl-cols-list"></ul>
+                                </div>
+                            </div>
+                            <button type="button" class="xl-tool" id="xl-export" aria-label="Export to xlsx"><svg viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 20h14"/></svg></button>
+                            <button type="button" class="xl-tool" id="xl-density" aria-label="Density toggle"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                        </div>
                     </div>
-                    <div class="card"><div class="tbl-wrap sheet-wrap" id="live-sheet-merged" data-source="merged" tabindex="0"></div></div>
-                    <p class="legend"><span id="xl-stat"></span><span id="xl-novin"></span><span class="xl-zoom"><label for="xl-zoom">Zoom</label><input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom"><b id="xl-zoom-val">100%</b></span></p>
+                    <div class="card sheet-card"><div class="tbl-wrap sheet-wrap" id="live-sheet-merged" data-source="merged" tabindex="0"></div></div>
+                    <div class="sheet-foot">
+                        <section class="chips sheet-tabs" id="sheet-chips" aria-label="Filter by status"></section>
+                        <div class="xl-status">
+                            <span id="xl-agg">Count — · Sum — · Avg —</span>
+                            <span id="xl-stat"></span>
+                            <span id="xl-novin"></span>
+                            <span class="xl-zoom">
+                                <button type="button" id="xl-zoom-out" aria-label="Zoom out">−</button>
+                                <b id="xl-zoom-val">100%</b>
+                                <input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom" hidden>
+                                <button type="button" id="xl-zoom-in" aria-label="Zoom in">+</button>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </section>
             <section id="panel-employees" class="hidden view">
@@ -280,6 +319,6 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261109speed1"></script>
+    <script src="reserved-orders-admin.js?v=20261109live1"></script>
 </body>
 </html>
