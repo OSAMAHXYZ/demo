@@ -108,6 +108,32 @@
         setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 240); }, 3200);
         return t;
     }
+    let dataLoadHide;
+    function setDataLoad(pct, hint) {
+        const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+        const bar = $('data-load-bar');
+        const label = $('data-load-pct');
+        if (bar) bar.style.width = n + '%';
+        if (label) label.textContent = n + '%';
+        if (hint && $('data-load-hint')) $('data-load-hint').textContent = hint;
+    }
+    function showDataLoad(title, hint) {
+        const box = $('data-load');
+        if (!box) return;
+        clearTimeout(dataLoadHide);
+        if ($('data-load-title')) $('data-load-title').textContent = title || 'Downloading data';
+        setDataLoad(8, hint || 'Getting the live reserved cars…');
+        box.classList.remove('hidden');
+        requestAnimationFrame(() => box.classList.add('on'));
+    }
+    function hideDataLoad() {
+        const box = $('data-load');
+        if (!box) return;
+        setDataLoad(100, 'Ready');
+        box.classList.remove('on');
+        clearTimeout(dataLoadHide);
+        dataLoadHide = setTimeout(() => box.classList.add('hidden'), 260);
+    }
     const THEME_KEY = 'ro-theme';
     function currentTheme() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
     function applyTheme(mode) {
@@ -385,11 +411,36 @@
     }
     function showGate(message) { $('gate').classList.remove('hidden'); $('admin-app').classList.add('hidden'); $('gate-error').textContent = message || ''; }
     function showApp() { $('gate').classList.add('hidden'); $('admin-app').classList.remove('hidden'); paintAdminWho(); requestAnimationFrame(paintAdminRail); scheduleFitSheet(); }
+    function currentPanelName() {
+        const on = document.querySelector('#admin-nav button.active');
+        return (on && on.dataset.panel) || 'overview';
+    }
+    let panelStamp = 0;
+    const panelPainted = {};
+    function paintPanel(name, force) {
+        const key = name || 'overview';
+        if (!force && panelPainted[key] === panelStamp) {
+            if (key === 'sheet') scheduleFitSheet($('live-sheet-merged'));
+            return;
+        }
+        panelPainted[key] = panelStamp;
+        if (key === 'overview') renderOverview();
+        else if (key === 'orders') renderOrders();
+        else if (key === 'sold') renderSold();
+        else if (key === 'sheet') renderSheet();
+        else if (key === 'employees') renderStaff();
+        else if (key === 'archive') renderArchive();
+        else if (key === 'audit') renderAudit();
+        else if (key === 'reports') renderReport();
+        else if (key === 'settings') renderStatusSettings();
+        else if (key === 'marketing') { renderMarketing(); renderAlerts(); }
+    }
     function showPanel(name) {
         document.querySelectorAll('[id^="panel-"]').forEach((panel) => panel.classList.toggle('hidden', panel.id !== 'panel-' + name));
         document.querySelectorAll('#admin-nav button').forEach((button) => button.classList.toggle('active', button.dataset.panel === name));
         requestAnimationFrame(() => requestAnimationFrame(paintAdminRail));
         replayView($('panel-' + name));
+        paintPanel(name);
         if (name === 'sheet') scheduleFitSheet($('live-sheet-merged'));
     }
 
@@ -692,7 +743,7 @@
                     const name = sheetValue(item.order, 'Product', 'merged') || item.order.vehicle || 'Car';
                     const who = sheetValue(item.order, 'Salesman name', 'merged') || item.order.salesAdvisor || '—';
                     const num = sheetValue(item.order, 'Order number', 'merged') || item.order.orderNumber || '';
-                    return `<button type="button" class="salesman" data-open="${esc(item.order.key)}"><span class="person"><span class="av">${esc(initials(who))}</span><span dir="auto">${esc(name)} · ${esc(who)}${num ? ' · ' + esc(num) : ''}</span></span>${expHtml(item.deadline, '', false)}</button>`;
+                    return `<button type="button" class="soon-row" data-open="${esc(item.order.key)}"><span class="person"><span class="av">${esc(initials(who))}</span><span><b dir="auto">${esc(name)} · ${esc(who)}</b>${num ? `<small class="mono">${esc(num)}</small>` : ''}</span></span>${expHtml(item.deadline, '', false)}</button>`;
                 }).join('')
                 : '<p class="muted">None in the next 24 hours.</p>';
         }
@@ -764,7 +815,7 @@
         const list = Array.from(bySales.entries()).sort((a, b) => (a[1].done / a[1].total) - (b[1].done / b[1].total) || b[1].total - a[1].total);
         $('pay-bars').innerHTML = list.map(([name, entry]) => {
             const pct = entry.total ? Math.round(entry.done / entry.total * 100) : 0;
-            return `<div class="salesman"><span class="person"><span class="av">${esc(initials(name))}</span>${esc(name)}</span><span class="meter"><i class="${pct === 100 ? 'full' : ''}" data-w="${pct}"></i></span><b>${entry.done}/${entry.total}</b></div>`;
+            return `<div class="salesman"><span class="person"><span class="av">${esc(initials(name))}</span><span>${esc(name)}</span></span><span class="meter"><i class="${pct === 100 ? 'full' : ''}" data-w="${pct}"></i></span><b>${entry.done}/${entry.total}</b></div>`;
         }).join('') || '<div class="salesman"><span>No cars</span><span class="meter"><i data-w="0"></i></span><b>0</b></div>';
         growBars($('pay-bars'));
         renderSalesTypes();
@@ -1426,6 +1477,12 @@
         // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
         const letters = `<tr class="xl-letters"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => `<th class="xl-col" data-c="${i}">${xlLetter(i)}</th>`).join('')}</tr>`;
         const heads = `<tr class="xl-heads"><th class="xl-corner">1</th>${cols.map(head).join('')}</tr>`;
+        const sign = [source, rows.length, cols.join('\t'), rows.map((order) => [order.key, order.status, order.statusChangedAt, order.leaderNote].join(':')).join('|')].join('#');
+        if (box.dataset.sign === sign && box.querySelector('.xl-grid')) {
+            xlRestoreSelection(box, source);
+            return;
+        }
+        box.dataset.sign = sign;
         box.innerHTML = rows.length
             ? `<table class="xl-grid"><thead>${letters}${heads}</thead><tbody>${rows.map((order, index) => {
                 const classes = [
@@ -1466,10 +1523,40 @@
     function xlCellText(td) {
         if (!td) return '';
         const select = td.querySelector('select');
-        if (select) return select.value || '';
+        if (select) return (select.selectedOptions[0] && select.selectedOptions[0].text) || select.value || '';
         const area = td.querySelector('textarea');
         if (area) return area.value || '';
-        return String(td.textContent || '').replace(/\s+/g, ' ').trim();
+        const clone = td.cloneNode(true);
+        clone.querySelectorAll('.av, .sw, .dot, .track, button, svg').forEach((el) => el.remove());
+        return String(clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    function xlSetFormula(text) {
+        const formula = $('xl-formula');
+        if (!formula) return;
+        if ('value' in formula) formula.value = text;
+        else formula.textContent = text;
+    }
+    function copySheetValue(text) {
+        const value = String(text || '');
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).catch(() => {});
+        if (ok || (navigator.clipboard && navigator.clipboard.writeText)) toast('Copied', value || 'Empty cell', 'd-ok');
+        else toast('Copy blocked', 'Select the cell and press Ctrl+C.', 'd-warn');
+    }
+    function copySelectedSheetCell(box) {
+        const td = (box && box.querySelector('.xl-sel')) || document.querySelector('#panel-sheet .xl-sel');
+        if (!td) return false;
+        copySheetValue(xlCellText(td));
+        return true;
     }
     function xlSelect(box, r, c, scroll) {
         const source = box && box.dataset.source;
@@ -1491,8 +1578,7 @@
         if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
         const name = $('xl-name');
         if (name) name.textContent = xlLetter(c) + (r + 2);
-        const formula = $('xl-formula');
-        if (formula) formula.textContent = xlCellText(td);
+        xlSetFormula(xlCellText(td));
         if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     function xlRestoreSelection(box, source) {
@@ -1500,9 +1586,8 @@
         if (sel) xlSelect(box, sel.r, sel.c, false);
         else if (source === sheetSource) {
             const name = $('xl-name');
-            const formula = $('xl-formula');
             if (name) name.textContent = 'A1';
-            if (formula) formula.textContent = '';
+            xlSetFormula('');
         }
     }
     // ---- Sheet layout: hide / reorder columns, then Save layout (kept in this browser) ----
@@ -1719,19 +1804,23 @@
         ctx.style.top = Math.max(4, Math.min(event.clientY, window.innerHeight - height - 8)) + 'px';
     }
     function renderSheet() {
-        const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
-        const reservedList = orders.filter((order) => orderInSheet(order, 'reserved'));
         const mergedList = buildMergedList(orders);
-        const esalesCount = $('sheet-count-esales');
-        const reservedCount = $('sheet-count-reserved');
         const mergedCount = $('sheet-count-merged');
-        if (esalesCount) esalesCount.textContent = String(esalesList.filter(hasVin).length);
-        if (reservedCount) reservedCount.textContent = String(reservedList.filter(hasVin).length);
         if (mergedCount) mergedCount.textContent = String(mergedList.length);
         fillSheetFilters(mergedList);
-        renderOneSheet($('live-sheet-esales'), 'esales', esalesList);
-        renderOneSheet($('live-sheet-reserved'), 'reserved', reservedList);
         renderOneSheet($('live-sheet-merged'), 'merged', mergedList);
+        if ($('live-sheet-esales')) {
+            const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
+            const esalesCount = $('sheet-count-esales');
+            if (esalesCount) esalesCount.textContent = String(esalesList.filter(hasVin).length);
+            renderOneSheet($('live-sheet-esales'), 'esales', esalesList);
+        }
+        if ($('live-sheet-reserved')) {
+            const reservedList = orders.filter((order) => orderInSheet(order, 'reserved'));
+            const reservedCount = $('sheet-count-reserved');
+            if (reservedCount) reservedCount.textContent = String(reservedList.filter(hasVin).length);
+            renderOneSheet($('live-sheet-reserved'), 'reserved', reservedList);
+        }
     }
     function renderMarketing() {
         const body = $('marketing-rows');
@@ -1823,60 +1912,69 @@
             </li>`;
         }).join('');
     }
-    function renderAll() { renderOverview(); renderOrders(); renderSold(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); renderStatusSettings(); }
+    function renderAll() { panelStamp += 1; paintPanel(currentPanelName(), true); }
 
-    async function refresh() {
-        const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
-        orders = data.orders || [];
-        sold = data.sold || [];
-        staff = data.staff || [];
-        archive = data.archive || [];
-        report = data.report || {};
-        if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
-        if (data.sheetLayout) {
-            const published = (data.sheetLayout.order && data.sheetLayout.order.length)
-                || (data.sheetLayout.hidden && data.sheetLayout.hidden.length)
-                || data.sheetLayout.updatedAt;
-            if (published && !xlDirty()) applyServerLayout(data.sheetLayout, true);
-            else xlServer = { hidden: data.sheetLayout.hidden || [], order: data.sheetLayout.order || [] };
-        }
-        $('admin-updated').textContent = data.updatedAt ? `Last push ${new Date(data.updatedAt).toLocaleString()}` : 'No live push yet';
-        const source = $('push-source');
-        if (source) {
-            const rep = data.report || {};
-            const rtlCheck = rep.rtlRows != null
-                ? ` · VINs found in RTL Stock ${rep.rtlMatched || 0} of ${(rep.rtlMatched || 0) + (rep.rtlMissing || 0)}`
-                : '';
-            source.textContent = data.rtlName || data.boName
-                ? `Live files: RTL Stock ${data.rtlName || '—'} · Back Order ${data.boName || '—'}${rtlCheck}`
-                : 'No RTL Stock or Back Order pushed yet.';
-        }
-        const status = $('admin-status');
-        const current = status.value;
-        status.innerHTML = '<option value="">Status</option>' + STATUSES.map((item) => `<option>${esc(item)}</option>`).join('');
-        status.value = current;
-        const events = await api('/api/reserved-orders/audit?password=' + encodeURIComponent(password()));
-        audit = events.events || [];
-        const actions = Array.from(new Set(audit.map((event) => event.action))).sort();
-        const selected = $('audit-action').value;
-        $('audit-action').innerHTML = '<option value="">Action</option>' + actions.map((item) => `<option>${esc(item)}</option>`).join('');
-        $('audit-action').value = selected;
+    async function refresh(opts) {
+        const busy = !!(opts && (opts.first || opts.busy));
+        if (busy) showDataLoad('Downloading reserved data', 'Pulling the live sheet…');
         try {
-            const marketing = await api('/api/reserved-orders/marketing?password=' + encodeURIComponent(password()));
-            marketingRequests = marketing.requests || [];
-        } catch (e) {
-            if (e.message === 'unauthorized') throw e;
-            marketingRequests = [];
-        }
-        try {
-            const alertData = await api('/api/reserved-orders/alerts?password=' + encodeURIComponent(password()));
+            setDataLoad(18, 'Reading reserved cars…');
+            const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
+            setDataLoad(46, 'Reading audit and messages…');
+            const passQ = '?password=' + encodeURIComponent(password());
+            const extra = await Promise.all([
+                api('/api/reserved-orders/audit' + passQ).catch((e) => { if (e.message === 'unauthorized') throw e; return { events: [] }; }),
+                api('/api/reserved-orders/marketing' + passQ).catch((e) => { if (e.message === 'unauthorized') throw e; return { requests: [] }; }),
+                api('/api/reserved-orders/alerts' + passQ).catch((e) => { if (e.message === 'unauthorized') throw e; return { alerts: [], fields: [], products: [] }; })
+            ]);
+            orders = data.orders || [];
+            sold = data.sold || [];
+            staff = data.staff || [];
+            archive = data.archive || [];
+            report = data.report || {};
+            if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
+            if (data.sheetLayout) {
+                const published = (data.sheetLayout.order && data.sheetLayout.order.length)
+                    || (data.sheetLayout.hidden && data.sheetLayout.hidden.length)
+                    || data.sheetLayout.updatedAt;
+                if (published && !xlDirty()) applyServerLayout(data.sheetLayout, true);
+                else xlServer = { hidden: data.sheetLayout.hidden || [], order: data.sheetLayout.order || [] };
+            }
+            $('admin-updated').textContent = data.updatedAt ? `Last push ${new Date(data.updatedAt).toLocaleString()}` : 'No live push yet';
+            const source = $('push-source');
+            if (source) {
+                const rep = data.report || {};
+                const rtlCheck = rep.rtlRows != null
+                    ? ` · VINs found in RTL Stock ${rep.rtlMatched || 0} of ${(rep.rtlMatched || 0) + (rep.rtlMissing || 0)}`
+                    : '';
+                source.textContent = data.rtlName || data.boName
+                    ? `Live files: RTL Stock ${data.rtlName || '—'} · Back Order ${data.boName || '—'}${rtlCheck}`
+                    : 'No RTL Stock or Back Order pushed yet.';
+            }
+            const status = $('admin-status');
+            const current = status.value;
+            status.innerHTML = '<option value="">Status</option>' + STATUSES.map((item) => `<option>${esc(item)}</option>`).join('');
+            status.value = current;
+            audit = extra[0].events || [];
+            const actions = Array.from(new Set(audit.map((event) => event.action))).sort();
+            const selected = $('audit-action').value;
+            $('audit-action').innerHTML = '<option value="">Action</option>' + actions.map((item) => `<option>${esc(item)}</option>`).join('');
+            $('audit-action').value = selected;
+            marketingRequests = extra[1].requests || [];
+            const alertData = extra[2] || {};
             alerts = alertData.alerts || [];
             alertFields = alertData.fields || [];
             alertProducts = alertData.products || [];
-            fillAlertFields();
-            if ($('error-alert-type')) fillErrorAlertForm();
-        } catch (e) { alerts = []; alertFields = []; }
-        renderAll();
+            try {
+                fillAlertFields();
+                if ($('error-alert-type')) fillErrorAlertForm();
+            } catch (e) { /* alerts stay empty until that panel is opened */ }
+            setDataLoad(82, 'Drawing this page…');
+            renderAll();
+            setDataLoad(100, 'Ready');
+        } finally {
+            if (busy) hideDataLoad();
+        }
     }
 
     async function fillGateStaff() {
@@ -1901,9 +1999,10 @@
             sessionStorage.removeItem(passKey);
             sessionStorage.setItem(tokenKey, data.token);
             sessionStorage.setItem(whoKey, JSON.stringify({ name: data.name, recordId: data.recordId }));
-            await refresh();
+            await refresh({ first: true });
             showApp();
         } catch (e) {
+            hideDataLoad();
             if (e.message !== 'unauthorized') $('gate-error').textContent = e.message;
         }
     });
@@ -2108,11 +2207,19 @@
         button.disabled = true;
         let step = 0;
         markPushSteps(0, 'run');
-        const tick = setInterval(() => { if (step < 2) { step += 1; markPushSteps(step, 'run'); } }, 700);
+        showDataLoad('Downloading files', 'Reading the Excel files…');
+        const tick = setInterval(() => {
+            if (step < 2) {
+                step += 1;
+                markPushSteps(step, 'run');
+                setDataLoad(20 + step * 22, step === 1 ? 'Matching VINs in RTL Stock…' : 'Ranking Back Order queues…');
+            }
+        }, 700);
         try {
             const body = { password: password() };
             if (rtl) { body.rtlBase64 = await fileToBase64(rtl); body.rtlName = rtl.name; }
             if (reserved) { body.reservedBase64 = await fileToBase64(reserved); body.reservedName = reserved.name; }
+            setDataLoad(72, 'Publishing to employees…');
             const pushed = await api('/api/reserved-orders/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             clearInterval(tick);
             document.querySelectorAll('#push-steps li').forEach((li) => { li.classList.remove('run', 'fail'); li.classList.add('done'); });
@@ -2134,12 +2241,13 @@
                 </section>`;
             }
             toast('Live sheet updated', (report.reservedVinCount || 0) + ' VINs published.', 'd-ok');
-            await refresh();
+            await refresh({ busy: true });
         } catch (e) {
             clearInterval(tick);
             const running = document.querySelector('#push-steps li.run') || document.querySelector('#push-steps li:last-child');
             if (running) { running.classList.remove('run'); running.classList.add('fail'); }
             if (e.message !== 'unauthorized') $('push-error').textContent = e.message;
+            hideDataLoad();
         } finally { button.disabled = false; }
     });
     setInterval(() => {
@@ -2181,7 +2289,11 @@
             cell.textContent = `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
         });
     }, 1000);
-    if ($('sheet-search')) $('sheet-search').addEventListener('input', renderSheet);
+    let sheetSearchTimer = 0;
+    if ($('sheet-search')) $('sheet-search').addEventListener('input', () => {
+        clearTimeout(sheetSearchTimer);
+        sheetSearchTimer = setTimeout(renderSheet, 120);
+    });
     ['sheet-filter-salesman', 'sheet-filter-product', 'sheet-filter-area', 'sheet-filter-expiry'].forEach((id) => {
         if (!$(id)) return;
         $(id).addEventListener('change', () => {
@@ -2288,11 +2400,22 @@
                 event.preventDefault();
                 const body = box.querySelector('.xl-grid tbody');
                 xlSelect(box, event.ctrlKey && body ? body.rows.length - 1 : sel.r, 9999, true);
-            } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
-                const td = box.querySelector('.xl-sel');
-                if (td && navigator.clipboard) navigator.clipboard.writeText(xlCellText(td)).catch(() => {});
             }
         });
+    });
+    if ($('xl-copy-cell')) $('xl-copy-cell').addEventListener('click', () => copySelectedSheetCell());
+    if ($('xl-formula')) {
+        $('xl-formula').addEventListener('focus', () => { try { $('xl-formula').select(); } catch (e) { /* ignore */ } });
+        $('xl-formula').addEventListener('click', () => { try { $('xl-formula').select(); } catch (e) { /* ignore */ } });
+    }
+    document.addEventListener('keydown', (event) => {
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.key.toLowerCase() !== 'c' && event.key !== 'Insert') return;
+        const typing = event.target.closest('textarea, select, [contenteditable="true"], input:not(#xl-formula):not([readonly])');
+        if (typing) return;
+        if (!document.querySelector('#panel-sheet .xl-sel')) return;
+        event.preventDefault();
+        copySelectedSheetCell();
     });
     // No-VIN toggle now lives in the Excel status bar.
     const xlPanel = $('panel-sheet');
@@ -2365,6 +2488,14 @@
         const box = $(id);
         if (!box) return;
         box.addEventListener('contextmenu', (event) => {
+            const td = event.target.closest('.xl-grid tbody td');
+            if (td) {
+                event.preventDefault();
+                const tr = td.parentElement;
+                xlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
+                copySelectedSheetCell(box);
+                return;
+            }
             const th = event.target.closest('.xl-grid thead th[data-label]');
             if (!th) return;
             event.preventDefault();
@@ -2434,6 +2565,49 @@
     function advisorKey(value) {
         return String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     }
+    function advisorTokens(value) {
+        return advisorKey(value).replace(/[-_/]/g, ' ').split(' ').map((tok) => {
+            if (tok === 'mansoor') return 'mansuor';
+            if (tok === 'mutab' || tok === 'mutib') return 'muteb';
+            if (tok === 'muhammad' || tok === 'mohamed') return 'mohammed';
+            if (tok === 'ahmad') return 'ahmed';
+            if (tok === 'shahri') return 'shehri';
+            if (tok === 'almutairi') return 'almutairy';
+            return tok;
+        }).filter((tok) => tok && tok !== 'al' && tok !== 'bin' && tok !== 'ibn' && tok !== 'bint');
+    }
+    function advisorTokenMatch(a, b) {
+        if (!a || !b) return false;
+        if (a === b) return true;
+        return a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a));
+    }
+    function advisorNamesMatch(sheetName, staffName) {
+        const sheet = advisorTokens(sheetName);
+        const person = advisorTokens(staffName);
+        if (!sheet.length || !person.length) return false;
+        if (advisorKey(sheetName) === advisorKey(staffName)) return true;
+        if (!advisorTokenMatch(sheet[0], person[0])) return false;
+        if (advisorTokenMatch(sheet[sheet.length - 1], person[person.length - 1])) return true;
+        const [short, long] = sheet.length <= person.length ? [sheet, person] : [person, sheet];
+        return short.every((tok) => long.some((other) => advisorTokenMatch(tok, other)));
+    }
+    function advisorSharedScore(sheetName, staffName) {
+        const sheet = advisorTokens(sheetName);
+        const person = advisorTokens(staffName);
+        return sheet.filter((tok) => person.some((other) => advisorTokenMatch(tok, other))).length;
+    }
+    function findStaffForAdvisor(advisor) {
+        const key = advisorKey(advisor);
+        if (!key || key === 'unassigned' || key === 'api-batch' || key === 'api batch') return null;
+        const people = staff.filter((person) => person.active !== false && person.role !== 'admin' && person.name && person.recordId);
+        const exact = people.find((person) => advisorKey(person.name) === key);
+        if (exact) return exact;
+        const hits = people.filter((person) => advisorNamesMatch(advisor, person.name));
+        if (!hits.length) return null;
+        if (hits.length === 1) return hits[0];
+        hits.sort((a, b) => advisorSharedScore(advisor, b.name) - advisorSharedScore(advisor, a.name) || a.name.length - b.name.length);
+        return hits[0];
+    }
     function isPendingUpdate(order) {
         if (!isRealVin(order)) return false;
         const status = String(order.status || '').trim();
@@ -2442,9 +2616,6 @@
         return !String(order.statusChangedAt || '').trim() && !String(order.statusChangedBy || '').trim();
     }
     function pendingGroups(expiredOnly) {
-        const people = new Map();
-        staff.filter((person) => person.active !== false && person.name && person.recordId)
-            .forEach((person) => people.set(advisorKey(person.name), person));
         const groups = new Map();
         orders.filter(isPendingUpdate).forEach((order) => {
             const advisor = String(order.salesAdvisor || '').trim();
@@ -2453,7 +2624,7 @@
             const expired = remain(order) === 'EXPIRED';
             if (expiredOnly && !expired) return;
             if (!groups.has(key)) {
-                const person = people.get(key) || null;
+                const person = findStaffForAdvisor(advisor);
                 groups.set(key, { key, name: person ? person.name : advisor, recordId: person ? person.recordId : '', orders: [], expired: 0 });
             }
             const group = groups.get(key);
@@ -2684,5 +2855,5 @@
         });
     } catch (e) { /* the sheet still refreshes on the next manual open */ }
     fillGateStaff();
-    if (password() || adminToken()) refresh().then(showApp).catch(() => { fillGateStaff(); });
+    if (password() || adminToken()) refresh({ first: true }).then(showApp).catch(() => { hideDataLoad(); fillGateStaff(); });
 })();

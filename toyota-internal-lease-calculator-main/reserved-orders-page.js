@@ -89,6 +89,32 @@
         setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 240); }, 3200);
         return t;
     }
+    let dataLoadHide;
+    function setDataLoad(pct, hint) {
+        const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+        const bar = $('data-load-bar');
+        const label = $('data-load-pct');
+        if (bar) bar.style.width = n + '%';
+        if (label) label.textContent = n + '%';
+        if (hint && $('data-load-hint')) $('data-load-hint').textContent = hint;
+    }
+    function showDataLoad(title, hint) {
+        const box = $('data-load');
+        if (!box) return;
+        clearTimeout(dataLoadHide);
+        if ($('data-load-title')) $('data-load-title').textContent = title || 'Downloading data';
+        setDataLoad(8, hint || 'Getting the live reserved cars…');
+        box.classList.remove('hidden');
+        requestAnimationFrame(() => box.classList.add('on'));
+    }
+    function hideDataLoad() {
+        const box = $('data-load');
+        if (!box) return;
+        setDataLoad(100, 'Ready');
+        box.classList.remove('on');
+        clearTimeout(dataLoadHide);
+        dataLoadHide = setTimeout(() => box.classList.add('hidden'), 260);
+    }
     const THEME_KEY = 'ro-theme';
     function currentTheme() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
     function applyTheme(mode) {
@@ -302,9 +328,12 @@
         const wanted = value && Array.from(select.options).some((opt) => opt.value === value) ? value : '';
         select.value = wanted;
     }
-    async function loadLive() {
+    async function loadLive(opts) {
+        const first = !!(opts && opts.first);
+        if (first) showDataLoad('Downloading reserved cars', 'Getting your live sheet…');
         let data;
         try {
+            if (first) setDataLoad(22, 'Reading the live cars…');
             const res = await fetch('/api/reserved-orders/live');
             data = await res.json();
             if (!res.ok) throw new Error(data.error || ('Live data request failed (' + res.status + ')'));
@@ -313,6 +342,7 @@
             orders = [];
             $('cards').innerHTML = '<div class="empty card">Reserved orders could not be loaded.</div>';
             if ($('emp-sheet')) $('emp-sheet').innerHTML = '<div class="empty">Reserved orders could not be loaded. Press Refresh to try again.</div>';
+            if (first) hideDataLoad();
             return;
         }
         const next = Array.isArray(data.orders) ? data.orders : [];
@@ -322,10 +352,15 @@
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         if (data.sheetLayout) sheetLayout = data.sheetLayout;
         const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|'), JSON.stringify(sheetLayout || {})].join('|');
-        if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet table')) return tickTimers();
+        if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet table')) {
+            if (first) hideDataLoad();
+            return tickTimers();
+        }
         loadLive.last = payload;
+        if (first) setDataLoad(70, 'Building your sheet…');
         fillFilters();
         render();
+        if (first) hideDataLoad();
     }
     function fillFilters() {
         const status = $('filter-status');
@@ -847,7 +882,37 @@
     const empXlSel = { r: 0, c: 0 };
     function empXlCellText(td) {
         if (!td) return '';
-        return String(td.textContent || '').replace(/\s+/g, ' ').trim();
+        const clone = td.cloneNode(true);
+        clone.querySelectorAll('.av, .sw, .dot, .track, button, svg').forEach((el) => el.remove());
+        return String(clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    function empSetFormula(text) {
+        const formula = $('emp-xl-formula');
+        if (!formula) return;
+        if ('value' in formula) formula.value = text;
+        else formula.textContent = text;
+    }
+    function copySheetValue(text) {
+        const value = String(text || '');
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).catch(() => {});
+        if (ok || (navigator.clipboard && navigator.clipboard.writeText)) toast('Copied', value || 'Empty cell', 'd-ok');
+        else toast('Copy blocked', 'Select the cell and press Ctrl+C.', 'd-warn');
+    }
+    function copySelectedEmpCell() {
+        const td = document.querySelector('#emp-sheet .xl-sel');
+        if (!td) return false;
+        copySheetValue(empXlCellText(td));
+        return true;
     }
     function empXlSelect(box, r, c, scroll) {
         const body = box && box.querySelector('.xl-grid tbody');
@@ -869,8 +934,7 @@
         if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
         const name = $('emp-xl-name');
         if (name) name.textContent = empXlLetter(c) + (r + 2);
-        const formula = $('emp-xl-formula');
-        if (formula) formula.textContent = empXlCellText(td);
+        empSetFormula(empXlCellText(td));
         if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     function paintSheet(list) {
@@ -1638,7 +1702,7 @@
         paintMessageCenter();
     });
     $('filter-clear').addEventListener('click', () => { clearFilters(); render(); });
-    $('filter-refresh').addEventListener('click', () => { loadLive.last = ''; loadLive(); });
+    $('filter-refresh').addEventListener('click', () => { loadLive.last = ''; loadLive({ first: true }); });
     $('kpis').addEventListener('click', (event) => {
         const button = event.target.closest('[data-kpi]');
         if (button) applyKpi(button.dataset.kpi);
@@ -1654,14 +1718,25 @@
             if (td) {
                 const tr = td.parentElement;
                 empXlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
-            } else {
-                const rn = event.target.closest('.xl-grid tbody th.xl-rn');
-                if (rn) empXlSelect(box, rn.parentElement.sectionRowIndex, empXlSel.c, false);
-                const col = event.target.closest('.xl-grid .xl-col');
-                if (col) empXlSelect(box, empXlSel.r, Number(col.dataset.c) || 0, false);
+                if (!event.target.closest('select, textarea, input, button, a')) box.focus({ preventScroll: true });
+                return;
             }
+            const rn = event.target.closest('.xl-grid tbody th.xl-rn');
+            if (rn) empXlSelect(box, rn.parentElement.sectionRowIndex, empXlSel.c, false);
+            const col = event.target.closest('.xl-grid .xl-col');
+            if (col) empXlSelect(box, empXlSel.r, Number(col.dataset.c) || 0, false);
+        });
+        $('emp-sheet').addEventListener('dblclick', (event) => {
             const tr = event.target.closest('tbody tr[data-key]');
-            if (tr && !event.target.closest('.xl-letters, .xl-heads')) openOrderModal(tr.dataset.key);
+            if (tr) openOrderModal(tr.dataset.key);
+        });
+        $('emp-sheet').addEventListener('contextmenu', (event) => {
+            const td = event.target.closest('.xl-grid tbody td');
+            if (!td) return;
+            event.preventDefault();
+            const tr = td.parentElement;
+            empXlSelect($('emp-sheet'), tr.sectionRowIndex, td.cellIndex - 1, false);
+            copySelectedEmpCell();
         });
         $('emp-sheet').addEventListener('keydown', (event) => {
             const box = $('emp-sheet');
@@ -1684,6 +1759,20 @@
             openOrderModal(row.dataset.key);
         });
     }
+    if ($('emp-xl-copy-cell')) $('emp-xl-copy-cell').addEventListener('click', () => copySelectedEmpCell());
+    if ($('emp-xl-formula')) {
+        $('emp-xl-formula').addEventListener('focus', () => { try { $('emp-xl-formula').select(); } catch (e) { /* ignore */ } });
+        $('emp-xl-formula').addEventListener('click', () => { try { $('emp-xl-formula').select(); } catch (e) { /* ignore */ } });
+    }
+    document.addEventListener('keydown', (event) => {
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.key.toLowerCase() !== 'c' && event.key !== 'Insert') return;
+        const typing = event.target.closest('textarea, select, [contenteditable="true"], input:not(#emp-xl-formula):not([readonly])');
+        if (typing) return;
+        if (!document.querySelector('#emp-sheet .xl-sel')) return;
+        event.preventDefault();
+        copySelectedEmpCell();
+    });
     if ($('next-pending')) $('next-pending').addEventListener('click', () => {
         const next = pendingMine()[0];
         if (next) openOrderModal(next.key);
@@ -2148,7 +2237,7 @@
         $('who-av').textContent = initials(session.name);
         showView('inbox');
         $('msg-advisor').value = session.name;
-        loadLive();
+        loadLive({ first: true });
         loadVehicles();
         paintMyAlerts();
         paintDesktopButton();
@@ -2164,7 +2253,7 @@
             if (msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') { loadLive(); paintMyAlerts(); }
         });
     } catch (e) { /* polling remains */ }
-    setInterval(() => { if (readSession()) loadLive(); }, 8000);
+    setInterval(() => { if (readSession()) loadLive(); }, 20000);
     // Safety net when the live socket is down: re-check admin messages every 30 s, repaint only if something changed.
     let lastMessagesStamp = '';
     setInterval(async () => {

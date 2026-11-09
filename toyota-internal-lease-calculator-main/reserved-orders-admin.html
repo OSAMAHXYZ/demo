@@ -8,10 +8,22 @@
     <script>(function(){try{var t=localStorage.getItem('ro-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}}catch(e){}})();</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109type1">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109speed1">
 </head>
 <body>
     <button class="btn theme-toggle theme-dock" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
+    <div id="data-load" class="data-load hidden" role="status" aria-live="polite">
+        <div class="data-load-card">
+            <div class="dl-scene" aria-hidden="true">
+                <div class="dl-road"><i></i></div>
+                <span class="dl-car"><svg viewBox="0 0 120 48" fill="none"><path d="M10 33v-6l12-3 9-11h38l16 11 17 3v6" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M32 16h36l12 9H22l10-9z" fill="currentColor" opacity=".16" stroke="currentColor" stroke-width="1.7"/><circle cx="34" cy="35" r="7" stroke="currentColor" stroke-width="2.2"/><circle cx="90" cy="35" r="7" stroke="currentColor" stroke-width="2.2"/><circle cx="34" cy="35" r="2.6" fill="currentColor"/><circle cx="90" cy="35" r="2.6" fill="currentColor"/><path d="M8 33h16M50 33h24M98 33h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            </div>
+            <h2 id="data-load-title">Downloading data</h2>
+            <p id="data-load-hint">Getting the live reserved cars…</p>
+            <div class="dl-bar"><i id="data-load-bar"></i></div>
+            <small id="data-load-pct">0%</small>
+        </div>
+    </div>
     <section id="gate" class="login-screen">
         <form class="login-card" id="gate-form">
             <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
@@ -160,7 +172,8 @@
                     <div class="xl-formula" id="xl-formula-bar">
                         <span class="xl-namebox" id="xl-name">A1</span>
                         <span class="xl-fx">fx</span>
-                        <span class="xl-fxval" id="xl-formula"></span>
+                        <input class="xl-fxval" id="xl-formula" type="text" readonly aria-label="Selected cell">
+                        <button class="btn ghost sm" id="xl-copy-cell" type="button">Copy</button>
                     </div>
                     <div class="card"><div class="tbl-wrap sheet-wrap" id="live-sheet-merged" data-source="merged" tabindex="0"></div></div>
                     <p class="legend"><span id="xl-stat"></span><span id="xl-novin"></span><span class="xl-zoom"><label for="xl-zoom">Zoom</label><input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom"><b id="xl-zoom-val">100%</b></span></p>
@@ -267,6 +280,6 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261109type1"></script>
+    <script src="reserved-orders-admin.js?v=20261109speed1"></script>
 </body>
 </html>

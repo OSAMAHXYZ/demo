@@ -284,12 +284,24 @@ textarea:focus{outline:0;border-color:var(--you);box-shadow:0 0 0 4px var(--you-
 .stack{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--sunk);gap:2px}
 .stack i{display:block;height:100%;width:0;transition:width 700ms var(--ease)}
 .stack .s-ok{background:var(--ok)}.stack .s-warn{background:var(--warn)}.stack .s-bad{background:var(--bad)}.stack .s-none{background:var(--line-2)}
-.salesman{display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;gap:12px;align-items:center;padding:7px 0}
+.salesman{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(36px,1fr) 52px;gap:12px;align-items:center;padding:7px 0;min-width:0}
 .salesman+.salesman{border-top:1px solid var(--line)}
+.salesman .person{min-width:0}
+.salesman .person>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .salesman .meter{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
 .salesman .meter i{display:block;height:100%;width:0;border-radius:4px;background:var(--ink-2);transition:width 700ms var(--ease)}
 .salesman .meter i.full{background:var(--ok)}
 .salesman b{font:600 12.5px var(--f-mono);text-align:right}
+#st-expiring{display:flex;flex-direction:column;gap:2px;min-width:0}
+.soon-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;margin:0;border:0;background:none;padding:8px 4px;text-align:left;border-radius:10px;color:inherit;min-width:0;cursor:pointer;font:inherit}
+.soon-row+.soon-row{border-top:1px solid var(--line);border-radius:0}
+.soon-row:hover{background:var(--raise)}
+.soon-row .person{min-width:0}
+.soon-row .person>span:last-child{display:flex;flex-direction:column;gap:1px;min-width:0;overflow:hidden}
+.soon-row .person b{display:block;font-weight:600;font-size:14px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.soon-row .person small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.soon-row .exp{flex:none;min-width:118px;text-align:right}
+.soon-row .exp b{white-space:nowrap}
 .alertline{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--warn-soft);color:var(--warn);flex-wrap:wrap}
 .alertline p{margin:0;flex:1 1 240px;color:var(--ink)}
 
@@ -594,7 +606,9 @@ table{font-size:16px}
 .xl-formula{display:flex;align-items:stretch;height:32px;flex:none;border:1px solid var(--line);border-radius:10px;background:var(--sunk);overflow:hidden}
 .xl-namebox{flex:none;min-width:64px;display:grid;place-items:center;padding:0 10px;border-right:1px solid var(--line);font:600 12px var(--f-mono);color:var(--ink)}
 .xl-fx{flex:none;display:grid;place-items:center;padding:0 10px;border-right:1px solid var(--line);font:700 12px var(--f-display);color:var(--muted)}
-.xl-fxval{flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;font:500 13px var(--f-body);color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xl-fxval{flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;font:500 13px var(--f-body);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;outline:0;cursor:text;user-select:text}
+.xl-formula .btn{flex:none;margin:3px 6px;height:26px;padding:0 10px}
+.xl-grid tbody td{user-select:text;-webkit-user-select:text}
 .xl-grid{border-collapse:separate;border-spacing:0;font-size:16px;min-width:100%;width:max-content}
 .xl-grid th,.xl-grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 12px;background:var(--surface);vertical-align:middle}
 .xl-grid thead th{position:sticky;z-index:3;background:var(--raise);font:600 13px var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
@@ -747,4 +761,25 @@ body:has(.tower-app:not(.hidden)){
   .tower-app:not(.hidden) .rail a span{display:none}
   html,body{overflow-x:hidden}
   html:has(.tower-app:not(.hidden)),body:has(.tower-app:not(.hidden)){overflow:hidden}
+}
+
+/* Download overlay: car on the road while live data is pulled */
+.data-load{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:16px;background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;pointer-events:none;transition:opacity 240ms var(--ease)}
+.data-load.on{opacity:1;pointer-events:auto}
+.data-load-card{width:min(420px,100%);padding:26px 24px 20px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);text-align:center}
+.dl-scene{position:relative;height:78px;margin:0 0 14px;border-radius:12px;overflow:hidden;background:linear-gradient(180deg,var(--sunk),var(--raise))}
+.dl-road{position:absolute;left:0;right:0;bottom:0;height:28px;background:var(--sunk);border-top:1px solid var(--line-2)}
+.dl-road i{position:absolute;top:12px;left:0;right:0;height:3px;background:repeating-linear-gradient(90deg,var(--ink-2) 0 18px,transparent 18px 34px);opacity:.45;animation:dlLane 700ms linear infinite}
+.dl-car{position:absolute;bottom:14px;left:0;width:96px;color:var(--ink);filter:drop-shadow(0 8px 10px rgba(0,0,0,.28));animation:dlDrive 2.2s var(--ease) infinite}
+.dl-car svg{display:block;width:96px;height:38px}
+.data-load-card h2{margin:0 0 4px;font:700 18px var(--f-display)}
+.data-load-card p{margin:0 0 14px;color:var(--muted);font-size:13.5px}
+.dl-bar{height:6px;border-radius:999px;background:var(--sunk);overflow:hidden}
+.dl-bar i{display:block;height:100%;width:0;border-radius:999px;background:var(--you);box-shadow:0 0 12px color-mix(in srgb,var(--you) 50%,transparent);transition:width 400ms var(--ease)}
+.data-load-card small{display:block;margin-top:8px;font:600 12px var(--f-mono);color:var(--muted)}
+@keyframes dlDrive{0%{left:-10%}50%{left:76%}100%{left:-10%}}
+@keyframes dlLane{to{background-position:34px 0}}
+@media (prefers-reduced-motion:reduce){
+  .dl-car{left:50%;transform:translateX(-50%);animation:none}
+  .dl-road i{animation:none}
 }
