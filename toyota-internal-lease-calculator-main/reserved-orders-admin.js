@@ -1264,9 +1264,9 @@
         const head = (label) => {
             const named = colName(label);
             if (/^[A-Z]{1,3}$/.test(label) && named && source !== 'merged') {
-                return `<th class="xl-h" data-label="${esc(label)}" title="Source column ${esc(label)}">${esc(named)}<span class="col-letter">${esc(label)}</span></th>`;
+                return `<th class="xl-h" draggable="true" data-label="${esc(label)}" title="Drag to reorder this column for everyone">${esc(named)}<span class="col-letter">${esc(label)}</span></th>`;
             }
-            return `<th class="xl-h" data-label="${esc(label)}">${esc(named || label)}</th>`;
+            return `<th class="xl-h" draggable="true" data-label="${esc(label)}" title="Drag to reorder this column for everyone">${esc(named || label)}</th>`;
         };
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
@@ -1364,14 +1364,16 @@
             : 'No rows match these filters. Clear search or pick another filter.';
         const note = noVin ? `${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} <button type="button" class="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button>` : '';
         // Virtual Excel grid: column letters (A, B, C…), row 1 = the header row, numbered rows below.
+        const letters = `<tr class="xl-letters"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => `<th class="xl-col" data-c="${i}">${xlLetter(i)}</th>`).join('')}</tr>`;
+        const heads = `<tr class="xl-heads"><th class="xl-corner">1</th>${cols.map(head).join('')}</tr>`;
         box.innerHTML = rows.length
-            ? `<table class="xl-grid"><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => {
+            ? `<table class="xl-grid"><thead>${letters}${heads}</thead><tbody>${rows.map((order, index) => {
                 const classes = [
                     'rowlink',
                     hasVin(order) ? '' : 'is-novin',
                     isCancelledStatus(order) ? 'row-cancelled' : ''
                 ].filter(Boolean).join(' ');
-                return `<tr class="${classes}" data-key="${esc(order.key || '')}" tabindex="0">${cols.map((label) => cell(order, label)).join('')}</tr>`;
+                return `<tr class="${classes}" data-key="${esc(order.key || '')}" tabindex="0"><th class="xl-rn" scope="row">${index + 2}</th>${cols.map((label) => cell(order, label)).join('')}</tr>`;
             }).join('')}</tbody></table>`
             : `<p class="empty">${emptyMsg}</p>`;
         const grid = box.querySelector('.xl-grid');
@@ -1449,6 +1451,7 @@
     let xlDraft = {};
     let xlFlash = '';
     let xlServer = {};
+    const xlColDrag = { label: '', moved: false };
     function xlCopy(value) { return JSON.parse(JSON.stringify(value || {})); }
     function xlNorm(all) {
         const out = {};
@@ -2306,6 +2309,39 @@
             event.preventDefault();
             xlOpenCtx(event, box.dataset.source, th.dataset.label);
         });
+        box.addEventListener('dragstart', (event) => {
+            const th = event.target.closest('.xl-grid .xl-h[data-label]');
+            if (!th) return;
+            xlColDrag.label = th.dataset.label;
+            xlColDrag.moved = false;
+            th.classList.add('is-drag');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', xlColDrag.label);
+        });
+        box.addEventListener('dragend', () => {
+            xlColDrag.label = '';
+            box.querySelectorAll('.is-drag, .is-over').forEach((el) => el.classList.remove('is-drag', 'is-over'));
+            setTimeout(() => { xlColDrag.moved = false; }, 50);
+        });
+        box.addEventListener('dragover', (event) => {
+            const th = event.target.closest('.xl-grid .xl-h[data-label]');
+            if (!th || !xlColDrag.label) return;
+            event.preventDefault();
+            box.querySelectorAll('.xl-h.is-over').forEach((el) => el.classList.remove('is-over'));
+            th.classList.add('is-over');
+        });
+        box.addEventListener('drop', (event) => {
+            const th = event.target.closest('.xl-grid .xl-h[data-label]');
+            event.preventDefault();
+            if (!th || !xlColDrag.label) return;
+            const from = xlColDrag.label;
+            const to = th.dataset.label;
+            xlColDrag.label = '';
+            if (from === to) return;
+            xlColDrag.moved = true;
+            xlReorderTo(box.dataset.source, from, to);
+            if (xlDirty()) xlSaveLayout();
+        });
     });
     if ($('xl-ctx')) $('xl-ctx').addEventListener('click', (event) => {
         const button = event.target.closest('[data-act]');
@@ -2522,7 +2558,8 @@
             adminSetStatus(select.dataset.key, select.value, select);
         });
         mergedBox.addEventListener('click', (event) => {
-            if (event.target.closest('textarea, button, input, select, a')) return;
+            if (xlColDrag.moved) { xlColDrag.moved = false; return; }
+            if (event.target.closest('textarea, button, input, select, a, .xl-h, .xl-letters')) return;
             const row = event.target.closest('tr[data-key]');
             if (row && row.dataset.key) openOrder(row.dataset.key);
         });

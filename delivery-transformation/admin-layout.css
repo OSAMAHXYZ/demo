@@ -483,3 +483,31 @@ body.vsnd-screen .pdf-win { top: auto; right: 16px; }
   .vsnd-top-row, .vsnd-bottom-row { grid-template-columns: 1fr; }
   .vsnd-top-row > * { grid-column: auto; }
 }
+
+/* Report Sheet embed (?view=1): hide collector chrome so VSND uses the full iframe */
+html.dt-embed,
+html.dt-embed body {
+  height: 100%;
+  overflow: hidden;
+}
+html.dt-embed #collector-gate { display: none !important; }
+html.dt-embed .dt-side { display: none !important; }
+html.dt-embed .collector-app,
+html.dt-embed body.vsnd-screen .collector-app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+html.dt-embed .admin-wrap,
+html.dt-embed body.vsnd-screen .admin-wrap {
+  max-width: none !important;
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px !important;
+  overflow: hidden;
+}
+html.dt-embed body.vsnd-screen #tab-dash.vsnd-board {
+  height: 100%;
+}

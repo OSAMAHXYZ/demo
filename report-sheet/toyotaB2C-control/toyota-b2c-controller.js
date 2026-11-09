@@ -21,6 +21,7 @@
   const FILTERS = [
     { id: "all", label: "All" },
     { id: "progress", label: "In progress" },
+    { id: "payment", label: "Payment" },
     { id: "due", label: "Follow-up due", due: true },
     { id: "delivered", label: "Delivered" },
     { id: "cancelled", label: "Cancelled" },
@@ -205,7 +206,7 @@
 
   function renderFilters() {
     const s = state.model && state.model.ready ? state.model.summary : null;
-    const counts = s ? { all: s.total, progress: s.progress, due: s.due, delivered: s.delivered, cancelled: s.cancelled } : {};
+    const counts = s ? { all: s.total, progress: s.progress, payment: s.payment, due: s.due, delivered: s.delivered, cancelled: s.cancelled } : {};
     const extra = FILTERS.some((f) => f.id === state.filter) ? "" : state.filter;
     $("tbc-filter").innerHTML = FILTERS.map((f) => `<button type="button" role="tab" class="${state.filter === f.id ? "is-on" : ""}${f.due ? " is-due" : ""}" data-filter="${f.id}">${esc(f.label)}<b class="num">${s ? n(counts[f.id]) : ""}</b></button>`).join("")
       + (extra ? `<button type="button" class="is-on" data-filter="all" title="Clear filter">${esc(kpiLabel(extra))} ✕</button>` : "");
@@ -248,7 +249,9 @@
 
   function lastText(o) {
     if (!o.lastFollowUpAt) return "—";
-    return `${Core.fmtAt(o.lastFollowUpAt)}${o.lastFollowUpBy ? ` · ${o.lastFollowUpBy}` : ""}${o.followUps.length > 1 ? ` (${o.followUps.length}×)` : ""}`;
+    const last = o.followUps[o.followUps.length - 1] || {};
+    const status = last.status ? ` · ${last.status}` : (o.logStatus ? ` · ${o.logStatus}` : "");
+    return `${Core.fmtAt(o.lastFollowUpAt)}${o.lastFollowUpBy ? ` · ${o.lastFollowUpBy}` : ""}${status}${o.followUps.length > 1 ? ` (${o.followUps.length}×)` : ""}`;
   }
 
   function followUpHtml(o) {
@@ -628,17 +631,18 @@
 
   // ---------- Saving (optimistic, then server) ----------
 
+  function paintWho() {
+    const session = Core.getSession();
+    const who = $("tbc-user");
+    if (who) who.textContent = session ? session.name : "—";
+  }
   function ensureUser() {
-    let name = Core.getUser();
-    if (!name) {
-      name = (window.prompt("Your name (saved with your edits and follow-ups):") || "").trim();
-      if (name) {
-        Core.setUser(name);
-        $("tbc-user").value = name;
-      }
+    const session = Core.getSession();
+    if (!session) {
+      toast("Sign in to save", true);
+      return "";
     }
-    $("tbc-user").closest(".tbc-user").classList.toggle("is-missing", !name);
-    return name;
+    return session.name;
   }
 
   function applyLocal(key, patch) {
@@ -651,13 +655,19 @@
       Object.entries(patch.edits).forEach(([h, v]) => { if (v === null) delete entry.edits[h]; else entry.edits[h] = v; });
     }
     if (patch.note !== undefined) entry.note = patch.note;
-    if (patch.followUp) entry.followUps = (entry.followUps || []).concat([{ at, by: Core.getUser(), note: entry.note || "" }]);
+    if (patch.status) entry.logStatus = patch.status;
+    if (patch.followUp) entry.followUps = (entry.followUps || []).concat([{ at, by: Core.getUser(), note: entry.note || "", status: entry.logStatus || patch.status || "" }]);
     entry.updatedAt = at;
     entry.updatedBy = Core.getUser();
   }
 
+  function statusHeader() {
+    const b2c = state.model && state.model.b2c;
+    if (!b2c || b2c.statusCol < 0) return "Status";
+    return (state.model.headers && state.model.headers[b2c.statusCol]) || "Status";
+  }
   async function saveEdit(key, patch) {
-    ensureUser();
+    if (!ensureUser()) return;
     applyLocal(key, patch);
     rebuild();
     render();
@@ -680,7 +690,8 @@
     const note = $("tbc-fu-note");
     note.value = prev;
     $("tbc-fu-sub").textContent = `Order ${o.orderNo} · ${followUpText(o)}`;
-    state.fuDialog = { key, prev: prev.trim() };
+    state.fuDialog = { key, prev: prev.trim(), status: "" };
+    document.querySelectorAll("#tbc-fu-picks [data-fu-status]").forEach((btn) => btn.setAttribute("aria-pressed", "false"));
     syncFollowUpDialog();
     $("tbc-fu-dialog").hidden = false;
     note.focus();
@@ -691,11 +702,16 @@
     const d = state.fuDialog;
     if (!d) return;
     const v = $("tbc-fu-note").value.trim();
-    const ok = !!v && v !== d.prev;
+    const status = d.status || "";
+    const last = (((state.model && state.model.orders) || []).find((x) => x.key === d.key) || {}).followUps || [];
+    const prevLog = last[last.length - 1] || {};
+    const unchanged = v && status && v === (prevLog.note || d.prev) && status === (prevLog.status || "");
+    const ok = !!status && !!v && !unchanged;
     $("tbc-fu-save").disabled = !ok;
     const hint = $("tbc-fu-hint");
-    hint.textContent = !v ? "Write a note about this follow-up to continue."
-      : v === d.prev ? "Update the notes — they must change with every follow-up."
+    hint.textContent = !status ? "Choose Payment, Cancelled, or In progress."
+      : !v ? "Write a note about this order to continue."
+      : unchanged ? "Change the status or the note before saving again."
       : "Ctrl + Enter to save";
     hint.classList.toggle("is-warn", !ok);
   }
@@ -710,11 +726,12 @@
     const d = state.fuDialog;
     if (!d) return;
     const note = $("tbc-fu-note").value.trim();
-    if (!note || note === d.prev) { syncFollowUpDialog(); $("tbc-fu-note").focus(); return; }
+    const status = d.status || "";
+    if (!status || !note) { syncFollowUpDialog(); if (!status) return; $("tbc-fu-note").focus(); return; }
     const o = state.model && state.model.orders.find((x) => x.key === d.key);
     closeFollowUpDialog();
-    saveEdit(d.key, { followUp: true, note });
-    if (o) toast(`Follow-up and notes saved for order ${o.orderNo} · next one due in 24 h`);
+    saveEdit(d.key, { followUp: true, note, status, edits: { [statusHeader()]: status } });
+    if (o) toast(`Saved ${status} and note for order ${o.orderNo}`);
   }
 
   // ---------- Loading ----------
@@ -860,14 +877,8 @@
   // ---------- Events ----------
 
   function bind() {
-    const user = $("tbc-user");
-    user.value = Core.getUser();
-    user.addEventListener("change", () => {
-      Core.setUser(user.value);
-      user.closest(".tbc-user").classList.toggle("is-missing", !user.value.trim());
-      loadColFilters();
-      render();
-    });
+    paintWho();
+    if ($("tbc-out")) $("tbc-out").addEventListener("click", () => { Core.clearSession(); location.reload(); });
 
     document.addEventListener("click", (e) => {
       const menu = $("tbc-menu");
@@ -1026,6 +1037,13 @@
     fuNote.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitFollowUp(); }
     });
+    if ($("tbc-fu-picks")) $("tbc-fu-picks").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-fu-status]");
+      if (!btn || !state.fuDialog) return;
+      state.fuDialog.status = btn.dataset.fuStatus;
+      $("tbc-fu-picks").querySelectorAll("[data-fu-status]").forEach((el) => el.setAttribute("aria-pressed", el === btn ? "true" : "false"));
+      syncFollowUpDialog();
+    });
     $("tbc-fu-form").addEventListener("submit", (e) => { e.preventDefault(); submitFollowUp(); });
     $("tbc-fu-cancel").addEventListener("click", closeFollowUpDialog);
     $("tbc-fu-dialog").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); closeFollowUpDialog(); } });
@@ -1034,18 +1052,37 @@
 
   // ---------- Start ----------
 
-  loadColFilters();
-  bind();
-  setupNotifyButton();
-  render();
-  loadAll(false).then(() => {
-    Store.startLiveSync(() => loadAll(true), { initialAt: state.data ? state.data.at : 0 });
-  });
-  Core.startStateSync(() => { if (!state.loading) refreshState(); }, 30000);
-  setInterval(() => {
-    if (!state.data) return;
-    rebuild();
+  function startApp() {
+    $("tbc-gate").hidden = true;
+    $("tbc-app").hidden = false;
+    loadColFilters();
+    bind();
+    setupNotifyButton();
     render();
-    checkNotify();
-  }, 60000);
+    loadAll(false).then(() => {
+      Store.startLiveSync(() => loadAll(true), { initialAt: state.data ? state.data.at : 0 });
+    });
+    Core.startStateSync(() => { if (!state.loading) refreshState(); }, 30000);
+    setInterval(() => {
+      if (!state.data) return;
+      rebuild();
+      render();
+      checkNotify();
+    }, 60000);
+  }
+
+  $("tbc-gate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $("tbc-gate-error");
+    err.textContent = "";
+    try {
+      await Core.login($("tbc-gate-user").value, $("tbc-gate-pass").value);
+      $("tbc-gate-pass").value = "";
+      startApp();
+    } catch (ex) {
+      err.textContent = ex.message || "Could not sign in";
+    }
+  });
+
+  if (Core.getSession()) startApp();
 })();

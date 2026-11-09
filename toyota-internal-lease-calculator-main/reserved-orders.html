@@ -7,7 +7,7 @@
     <title>Reserved Orders</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261107e">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109xl">
 </head>
 <body>
     <section id="login" class="login-split">
@@ -103,7 +103,7 @@
                     <div class="head">
                         <div>
                             <h1>Reserved orders</h1>
-                            <p id="emp-sheet-msg">Everyone sees every car in the live sheet. Your cars are highlighted in blue; open one to set its status and write the note.</p>
+                            <p id="emp-sheet-msg">Everyone sees the same live sheet. Your cars are highlighted in blue. Open a row or a card to set its status and write the note.</p>
                         </div>
                         <button class="btn primary" id="next-pending" type="button" hidden>Update next car <span class="mono" id="next-pending-count"></span></button>
                     </div>
@@ -134,8 +134,11 @@
                     <div id="admin-app" class="emp-xl-shell">
                         <section id="panel-sheet">
                             <div id="emp-sheet-shell">
-                                <span id="emp-xl-name" hidden></span>
-                                <span id="emp-xl-formula" hidden></span>
+                                <div class="xl-formula" id="emp-xl-formula-bar">
+                                    <span class="xl-namebox" id="emp-xl-name">A1</span>
+                                    <span class="xl-fx">fx</span>
+                                    <span class="xl-fxval" id="emp-xl-formula"></span>
+                                </div>
                                 <div class="card"><div class="tbl-wrap sheet-wrap" id="emp-sheet" tabindex="0"></div></div>
                                 <p class="legend" id="emp-xl-stat"></p>
                             </div>
@@ -227,5 +230,5 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-page.js?v=20261107om1"></script>
+    <script src="reserved-orders-page.js?v=20261109xl"></script>
 </body></html>

@@ -2513,6 +2513,7 @@ function attachReservedOrders(app, options) {
             source: 'admin-merged',
             details: `${(saved.order || []).length} columns · ${(saved.hidden || []).length} hidden`
         });
+        notify();
         res.json(saved);
     });
     app.get('/api/reserved-orders/statuses', (req, res) => {

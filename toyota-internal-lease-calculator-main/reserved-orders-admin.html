@@ -7,7 +7,7 @@
     <title>Reserved Orders Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261107c">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109xl">
 </head>
 <body>
     <section id="gate" class="login-screen">
@@ -114,7 +114,7 @@
                 <div class="head">
                     <div>
                         <h1>Live sheet</h1>
-                        <p class="sheet-note" id="sheet-note">One row per VIN. Filter, then click a row to change its status. Redesign the columns and submit so employees see the same sheet.</p>
+                        <p class="sheet-note" id="sheet-note">One row per VIN. Drag a column header to reorder the sheet for every employee. Hide columns in the list, then Submit for everyone.</p>
                     </div>
                 </div>
                 <div class="bar" id="sheet-filter-bar">
@@ -133,7 +133,7 @@
                         <button type="button" class="btn" id="xl-cols-btn" aria-haspopup="true" aria-expanded="false">Columns <span class="mono muted"></span></button>
                         <div class="colpop hidden" id="xl-cols-pop" role="dialog" aria-label="Show, hide or reorder columns">
                             <div class="xl-colspop-head"><b id="xl-cols-title">Columns</b><button type="button" class="x" id="xl-cols-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-                            <p class="muted xl-cols-hint">Drag to reorder. Uncheck to hide. Submit for everyone so employees see the same columns.</p>
+                            <p class="muted xl-cols-hint">Drag a header on the sheet, or drag here. Uncheck to hide. Submit for everyone so employees see the same columns.</p>
                             <div class="bar"><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="xl-cols-q" type="search" placeholder="Find a column" aria-label="Find a column"></label><button type="button" class="btn sm" id="xl-cols-showall">Show all</button></div>
                             <ul id="xl-cols-list" class="xl-cols-list"></ul>
                         </div>
@@ -151,11 +151,14 @@
                     <button type="button" role="menuitem" data-act="right">Move right</button>
                     <button type="button" role="menuitem" data-act="showall">Show all columns</button>
                 </div>
-                <span id="xl-name" hidden></span>
-                <span id="xl-formula" hidden></span>
                 <span id="xl-filename" hidden></span>
                 <span class="sheet-source-count" id="sheet-count-merged" hidden>0</span>
                 <div class="sheet-stage">
+                    <div class="xl-formula" id="xl-formula-bar">
+                        <span class="xl-namebox" id="xl-name">A1</span>
+                        <span class="xl-fx">fx</span>
+                        <span class="xl-fxval" id="xl-formula"></span>
+                    </div>
                     <div class="card"><div class="tbl-wrap sheet-wrap" id="live-sheet-merged" data-source="merged" tabindex="0"></div></div>
                     <p class="legend"><span id="xl-stat"></span><span id="xl-novin"></span><span class="xl-zoom"><label for="xl-zoom">Zoom</label><input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom"><b id="xl-zoom-val">100%</b></span></p>
                 </div>
@@ -261,6 +264,6 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261107admin1"></script>
+    <script src="reserved-orders-admin.js?v=20261109xl"></script>
 </body>
 </html>

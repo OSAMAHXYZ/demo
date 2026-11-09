@@ -45,7 +45,6 @@
     { id: "allocation", label: "Push · Allocation Plan", kind: "section" },
     { id: "gec", label: "Push · GEC Control", kind: "section" },
     { id: "bonotifications", label: "Push · BO Error Condition", kind: "section" },
-    { id: "notifications", label: "Push · Notifications", kind: "section" },
   ];
 
   const USERS = [

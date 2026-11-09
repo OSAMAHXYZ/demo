@@ -59,11 +59,12 @@ body.cp-mode.live-app #dashboard.show {
 body.cp-mode #panel-contact {
   position: fixed;
   top: 0;
-  left: var(--sidebar-w);
+  left: var(--eu-sidebar-w, var(--sidebar-w, 232px));
   right: 0;
   bottom: 0;
   z-index: 20;
-  display: block !important;
+  display: flex !important;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -74,8 +75,15 @@ body.cp-mode #panel-contact {
     #050912;
 }
 body.live-app.toyota-theme.cp-mode.sidebar-collapsed .app-sidebar { width: var(--sidebar-w-collapsed) !important; }
-body.cp-mode.sidebar-collapsed #panel-contact { left: var(--sidebar-w-collapsed); }
-body.cp-mode #contact-performance-host { display: block; width: 100%; height: 100%; }
+body.cp-mode.sidebar-collapsed #panel-contact { left: var(--sidebar-w-collapsed, 84px); }
+body.cp-mode #contact-performance-host {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
 
 .cp-app {
   position: relative;
@@ -84,8 +92,8 @@ body.cp-mode #contact-performance-host { display: block; width: 100%; height: 10
   gap: 12px;
   width: 100%;
   height: 100%;
-  max-width: 1880px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: 14px 18px 16px;
   min-height: 0;
 }
@@ -735,16 +743,17 @@ body.live-app.cp-mode .cp-table tbody tr.is-focus td { background-color: rgba(96
   .cp-kpi .val .name { font-size: 13.5px; }
 }
 @media (max-width: 1180px) {
-  body.cp-mode #panel-contact { overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.32) transparent; }
-  .cp-app { height: auto; min-height: 100%; grid-template-rows: auto auto auto; }
-  .cp-main { grid-template-columns: 1fr; }
-  .cp-board .cp-table-wrap { max-height: 560px; }
-  .cp-side { grid-template-rows: 210px 230px auto; }
-  .cp-src-row { flex: 0 0 26px; }
+  body.cp-mode #panel-contact { overflow: hidden; }
+  .cp-app { height: 100%; min-height: 0; grid-template-rows: auto auto minmax(0, 1fr); }
+  .cp-main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr); min-height: 0; overflow: hidden; }
+  .cp-board { min-height: 0; }
+  .cp-board .cp-table-wrap { max-height: none; }
+  .cp-side { grid-template-rows: minmax(140px, 0.7fr) minmax(150px, 0.8fr) minmax(0, 1fr); min-height: 0; overflow: hidden; }
+  .cp-src-row { flex: 1 1 0; }
   body.live-app.cp-mode .cp-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-  .cp-leads { min-height: 70vh; }
-  .cp-leads .cp-table-wrap { max-height: 70vh; }
-  .cp-empty-state { min-height: 60vh; }
+  .cp-leads { min-height: 0; }
+  .cp-leads .cp-table-wrap { max-height: none; }
+  .cp-empty-state { min-height: 0; }
   .cp-sub { white-space: normal; }
 }
 @media (max-width: 900px) {

@@ -13,6 +13,9 @@
   const API = "/api/toyota-b2c-tracker";
   const FOLLOW_UP_MS = 24 * 60 * 60 * 1000;
   const USER_KEY = "toyota_b2c_controller_user_v1";
+  const SESSION_KEY = "toyota_b2c_controller_session_v1";
+  const LOGIN_API = "/api/report-sheet/controller-login";
+  const SLOT_LOGIN = "toyotaB2c";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const HEADER_MARKERS = [
     "product", "vin", "vehicle identification number", "alj suffix", "exterior color",
@@ -135,9 +138,21 @@
     const s = str(text).toLowerCase();
     if (!s) return "progress";
     if (/cancel/.test(s)) return "cancelled";
+    if (/\bpayment\b|\bpaid\b/.test(s)) return "payment";
+    if (/\bin\s*progress\b/.test(s)) return "progress";
     if (/\b(not|un|non)[\s-]*deliver/.test(s)) return "progress";
     if (/deliver/.test(s)) return "delivered";
     return "progress";
+  }
+
+  function trackerEntry(state, row) {
+    if (!state || !row) return {};
+    if (state[row.key]) return state[row.key];
+    if (row.orderKey && state[row.orderKey]) return state[row.orderKey];
+    const base = String(row.orderKey || row.key || "").replace(/#\d+$/, "");
+    if (!base) return {};
+    const hit = Object.keys(state).find((key) => String(key).replace(/#\d+$/, "") === base);
+    return hit ? state[hit] : {};
   }
 
   function pickDetailsSheet(workbook) {
@@ -291,7 +306,7 @@
 
   // ---------- Model ----------
 
-  const CATEGORY_LABEL = { delivered: "Delivered", cancelled: "Cancelled", progress: "In progress" };
+  const CATEGORY_LABEL = { delivered: "Delivered", cancelled: "Cancelled", progress: "In progress", payment: "Payment" };
   const TRACK_LABEL = {
     queue: "In BO queue",
     delivered: "Delivered · Sales Raw",
@@ -336,10 +351,11 @@
     const queueCache = lookups.queue;
 
     const orders = b2c.rows.map((row) => {
-      const st = state[row.key] || {};
+      const st = trackerEntry(state, row);
       const edits = st.edits && typeof st.edits === "object" ? st.edits : {};
       const cells = headers.map((h, c) => (Object.prototype.hasOwnProperty.call(edits, h) ? str(edits[h]) : row.cells[c]));
-      const statusText = b2c.statusCol >= 0 ? cells[b2c.statusCol] : "";
+      const logStatus = str(st.logStatus);
+      const statusText = logStatus || (b2c.statusCol >= 0 ? cells[b2c.statusCol] : "");
       const category = classifyStatus(statusText);
 
       let track = { kind: engine || hasSales ? "notFound" : "noData" };
@@ -386,6 +402,7 @@
         category,
         track,
         note: str(st.note),
+        logStatus,
         followUps,
         lastFollowUpAt,
         lastFollowUpBy: followUps.length ? str(followUps[followUps.length - 1].by) : "",
@@ -397,7 +414,7 @@
         sinceMs: baseAt ? now - baseAt : 0,
         updatedAt: Number(st.updatedAt) || 0,
         updatedBy: str(st.updatedBy),
-        known: !!state[row.key],
+        known: !!(state[row.key] || (row.orderKey && state[row.orderKey]) || st.note || st.logStatus || (st.followUps && st.followUps.length)),
       };
     });
 
@@ -405,7 +422,7 @@
   }
 
   function emptySummary() {
-    return { total: 0, delivered: 0, cancelled: 0, progress: 0, due: 0, onTime: 0, neverFollowed: 0, followUps: 0, edited: 0,
+    return { total: 0, delivered: 0, cancelled: 0, progress: 0, payment: 0, due: 0, onTime: 0, neverFollowed: 0, followUps: 0, edited: 0,
       track: { queue: 0, delivered: 0, proforma: 0, salesNoDate: 0, notFound: 0, noData: 0 }, statuses: [] };
   }
 
@@ -498,10 +515,42 @@
   const saveOrder = (key, patch) => api("/order", { key, by: getUser(), ...patch });
 
   function getUser() {
+    const session = getSession();
+    if (session && session.name) return session.name;
     try { return str(localStorage.getItem(USER_KEY)); } catch { return ""; }
   }
   function setUser(name) {
     try { localStorage.setItem(USER_KEY, str(name).slice(0, 60)); } catch { /* ignore */ }
+  }
+  function getSession() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || !parsed.name) return null;
+      return parsed;
+    } catch { return null; }
+  }
+  function setSession(user) {
+    const next = user && user.name ? { id: str(user.id).slice(0, 80), name: str(user.name).slice(0, 80), at: Date.now() } : null;
+    try {
+      if (next) localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+      else localStorage.removeItem(SESSION_KEY);
+    } catch { /* ignore */ }
+    setUser(next ? next.name : "");
+    return next;
+  }
+  function clearSession() {
+    setSession(null);
+  }
+  async function login(username, password) {
+    const res = await fetch(LOGIN_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slot: SLOT_LOGIN, username, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Could not sign in");
+    return setSession(data.user);
   }
 
   /** Re-render when another user edits / follows up (WebSocket, with a poll as fallback). */
@@ -607,6 +656,10 @@
     saveOrder,
     getUser,
     setUser,
+    getSession,
+    setSession,
+    clearSession,
+    login,
     startStateSync,
     vinColumn,
     liveStatusOf,

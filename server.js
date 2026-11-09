@@ -415,7 +415,7 @@ const REPORT_VIEWER_DASHBOARDS = [
 const REPORT_VIEWER_PUSH_AREAS = [
   'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec-file', 'gecVisitors',
   'lexusB2c', 'toyotaB2c', 'reserved', 'contact', 'ytd', 'targets', 'allocation', 'gec',
-  'bonotifications', 'notifications'
+  'bonotifications'
 ];
 
 function uniqueAllowedList(list, allowed) {
@@ -4872,6 +4872,35 @@ app.post('/api/report-sheet/viewer-access', (req, res) => {
   }
 });
 
+app.get('/api/report-sheet/controller-users', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const users = loadControllerUsers();
+  res.json({ users, public: publicControllerUsers(users) });
+});
+
+app.post('/api/report-sheet/controller-users', (req, res) => {
+  try {
+    const saved = saveControllerUsers((req.body && req.body.users) || req.body || {});
+    return res.json({ ok: true, users: saved, public: publicControllerUsers(saved) });
+  } catch (err) {
+    console.error('[report-sheet/controller-users]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
+app.post('/api/report-sheet/controller-login', (req, res) => {
+  const slot = String((req.body && req.body.slot) || '').trim();
+  if (!B2C_SLOTS[slot]) return res.status(400).json({ error: 'Unknown controller' });
+  const name = controllerNormName(req.body && req.body.username);
+  const password = String((req.body && req.body.password) || '');
+  const users = loadControllerUsers()[slot] || [];
+  const user = users.find((item) => item.active !== false && controllerNormName(item.name) === name);
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: 'Name or password is wrong' });
+  }
+  return res.json({ ok: true, slot, user: { id: user.id, name: user.name } });
+});
+
 /** Admin → GEC CONTROL: saves status rules only (pushed files and other settings stay untouched). */
 app.post('/api/report-sheet/gec-control', (req, res) => {
   try {
@@ -5335,9 +5364,121 @@ function lexusCategory(text) {
   const s = lexusStr(text).toLowerCase();
   if (!s) return 'progress';
   if (/cancel/.test(s)) return 'cancelled';
+  if (/\bpayment\b|\bpaid\b/.test(s)) return 'delivered';
   if (/\b(not|un|non)[\s-]*deliver/.test(s)) return 'progress';
   if (/deliver/.test(s)) return 'delivered';
   return 'progress';
+}
+
+const CONTROLLER_USERS_FILE = path.join(PERSISTENT_ROOT, 'controller-users.json');
+const CONTROLLER_LOG_STATUSES = Object.freeze(['Payment', 'Cancelled', 'In progress']);
+const DEFAULT_CONTROLLER_USERS = {
+  toyotaB2c: [
+    { id: 'mohammed-alfadul', name: 'Mohammed Alfadul', password: '1234', active: true },
+    { id: 'mohannad-alyoubi', name: 'Mohannad Alyoubi', password: '1234', active: true }
+  ],
+  lexusB2c: [
+    { id: 'hamid-saeed', name: 'Hamid Saeed', password: '1234', active: true }
+  ]
+};
+
+function controllerNormName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function controllerUserId(name, used) {
+  let base = controllerNormName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'user';
+  let id = base;
+  let n = 2;
+  while (used.has(id)) {
+    id = `${base}-${n}`;
+    n += 1;
+  }
+  used.add(id);
+  return id;
+}
+function sanitizeControllerUser(raw, used, fallback) {
+  const name = String((raw && raw.name) || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!name) return null;
+  const prevPass = fallback && fallback.password ? String(fallback.password) : '';
+  const password = String((raw && raw.password) || prevPass || '').slice(0, 80);
+  if (!password) return null;
+  const id = String((raw && raw.id) || '').trim().slice(0, 80);
+  return {
+    id: id && !used.has(id) ? (used.add(id), id) : controllerUserId(name, used),
+    name,
+    password,
+    active: raw && raw.active === false ? false : true
+  };
+}
+function sanitizeControllerUsers(raw) {
+  const out = { toyotaB2c: [], lexusB2c: [] };
+  ['toyotaB2c', 'lexusB2c'].forEach((slot) => {
+    const used = new Set();
+    const list = Array.isArray(raw && raw[slot]) ? raw[slot] : [];
+    const defaults = DEFAULT_CONTROLLER_USERS[slot] || [];
+    list.forEach((item, i) => {
+      const user = sanitizeControllerUser(item, used, defaults[i]);
+      if (user) out[slot].push(user);
+    });
+  });
+  return out;
+}
+function loadControllerUsers() {
+  try {
+    if (fs.existsSync(CONTROLLER_USERS_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(CONTROLLER_USERS_FILE, 'utf8'));
+      const next = sanitizeControllerUsers(parsed);
+      if (next.toyotaB2c.length || next.lexusB2c.length) return next;
+    }
+  } catch { /* seed defaults */ }
+  return saveControllerUsers(DEFAULT_CONTROLLER_USERS);
+}
+function saveControllerUsers(data) {
+  fs.mkdirSync(path.dirname(CONTROLLER_USERS_FILE), { recursive: true });
+  const next = sanitizeControllerUsers(data);
+  const tmp = `${CONTROLLER_USERS_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
+  fs.renameSync(tmp, CONTROLLER_USERS_FILE);
+  return next;
+}
+function publicControllerUsers(data) {
+  const map = (list) => (list || []).filter((u) => u.active !== false).map((u) => ({ id: u.id, name: u.name }));
+  return { toyotaB2c: map(data.toyotaB2c), lexusB2c: map(data.lexusB2c) };
+}
+function normalizeLogStatus(value) {
+  const s = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (s === 'payment' || s === 'paid') return 'Payment';
+  if (s === 'cancelled' || s === 'canceled' || s === 'cancel') return 'Cancelled';
+  if (s === 'in progress' || s === 'progress' || s === 'in-progress') return 'In progress';
+  return '';
+}
+function orderKeyBase(key) {
+  return String(key || '').replace(/#\d+$/, '');
+}
+function rehomeB2cTracker(slot, buf) {
+  let book = null;
+  try { book = buf ? readLexusB2c(buf) : null; } catch { book = null; }
+  if (!book || !book.rows.length) return;
+  const data = loadB2cTracker(slot);
+  const fileKeys = new Set(book.rows.map((row) => row.key));
+  let changed = false;
+  book.rows.forEach((row) => {
+    if (data.orders[row.key]) return;
+    const base = orderKeyBase(row.key);
+    const oldKey = Object.keys(data.orders).find((key) => (
+      key !== row.key
+      && orderKeyBase(key) === base
+      && !fileKeys.has(key)
+    ));
+    if (!oldKey) return;
+    data.orders[row.key] = data.orders[oldKey];
+    delete data.orders[oldKey];
+    changed = true;
+  });
+  if (!changed) return;
+  data.at = Date.now();
+  saveB2cTracker(slot, data);
+  broadcastB2cTracker(slot, data.at, book.rows.map((row) => row.key).slice(0, 50));
 }
 
 function readLexusB2c(buf) {
@@ -5532,6 +5673,7 @@ app.post('/api/report-sheet/push', async (req, res) => {
       fs.writeFileSync(fp, buf);
       fileNames[id] = name;
       slots.push(id);
+      if (B2C_SLOTS[id]) rehomeB2cTracker(id, buf);
 
       if (id === 'sales') {
         try {
@@ -5769,8 +5911,8 @@ app.post(`${api}/seen`, (req, res) => {
 });
 
 /**
- * body: { key, by, edits?: { [header]: string|null }, note?: string, followUp?: true }
- * A follow-up must come with an updated note (non-empty and different from the saved one).
+ * body: { key, by, edits?: { [header]: string|null }, note?: string, status?: string, followUp?: true }
+ * A follow-up must come with a status (Payment / Cancelled / In progress) and a note.
  */
 app.post(`${api}/order`, (req, res) => {
   try {
@@ -5780,11 +5922,14 @@ app.post(`${api}/order`, (req, res) => {
     const by = lexusText(body.by, 60).trim();
     const data = loadB2cTracker(slot);
     const existing = data.orders[key] || {};
+    const logStatus = normalizeLogStatus(body.status);
     if (body.followUp === true) {
       const next = body.note === undefined ? '' : lexusText(body.note, 4000).trim();
-      if (!next) return res.status(400).json({ error: 'Update the notes before recording a follow-up' });
-      if (next === lexusText(existing.note, 4000).trim()) {
-        return res.status(400).json({ error: 'The notes were not changed — update them before recording a follow-up' });
+      if (!logStatus) return res.status(400).json({ error: 'Choose Payment, Cancelled, or In progress' });
+      if (!next) return res.status(400).json({ error: 'Write a note before recording a follow-up' });
+      const last = Array.isArray(existing.followUps) ? existing.followUps[existing.followUps.length - 1] : null;
+      if (last && lexusText(last.note, 4000).trim() === next && normalizeLogStatus(last.status) === logStatus) {
+        return res.status(400).json({ error: 'Change the status or the note before saving again' });
       }
     }
     const at = Date.now();
@@ -5802,9 +5947,10 @@ app.post(`${api}/order`, (req, res) => {
       entry.edits = edits;
     }
     if (body.note !== undefined) entry.note = lexusText(body.note, 4000);
+    if (logStatus) entry.logStatus = logStatus;
     if (body.followUp === true) {
       const list = Array.isArray(entry.followUps) ? entry.followUps : [];
-      list.push({ at, by, note: entry.note || '' });
+      list.push({ at, by, note: entry.note || '', status: entry.logStatus || logStatus || '' });
       entry.followUps = list.slice(-200);
     }
     entry.updatedAt = at;

@@ -1,4 +1,4 @@
-/* BO Error Condition + Notifications — same BO error-condition UI as Reserved Orders admin (bo-rules-ui.js),
+/* BO Error Condition — same BO error-condition UI as Reserved Orders admin (bo-rules-ui.js),
    scoped to the Report Sheet admin panel so it does not restyle the rest of Admin. */
 #panel-bonotifications {
   --red: #eb0a1e;
@@ -14,16 +14,6 @@
 #panel-bonotifications .muted { color: var(--muted); font-size: 12px; }
 #panel-bonotifications .err { color: #9b1c1c; font-size: 0.88rem; }
 #panel-bonotifications .solid { background: var(--red); color: #fff; border-color: var(--red); font-weight: 800; }
-#panel-notifications .notif-form { display: grid; gap: 12px; max-width: 760px; margin-top: 12px; }
-#panel-notifications .notif-form > label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: #667085; }
-#panel-notifications .notif-form input[type="text"], #panel-notifications .notif-form textarea { border: 1px solid #e6e8ee; border-radius: 8px; padding: 9px 10px; background: #fff; color: #172033; font: inherit; }
-#panel-notifications .notif-audience { border: 1px solid #e6e8ee; border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
-#panel-notifications .notif-audience legend { font-size: 12px; font-weight: 700; color: #667085; padding: 0 4px; }
-#panel-notifications .notif-radio { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 13px; }
-#panel-notifications .notif-bo { border-top: 1px solid #e6e8ee; margin-top: 20px; padding-top: 4px; max-width: 760px; }
-#panel-notifications .notif-bo select { border: 1px solid #e6e8ee; border-radius: 8px; padding: 9px 10px; background: #fff; color: #172033; font: inherit; width: 100%; }
-#panel-notifications #notif-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#panel-notifications #notif-list th, #panel-notifications #notif-list td { border-bottom: 1px solid #e6e8ee; text-align: left; padding: 7px 6px; vertical-align: top; }
 .ytd-tg-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 12px 0 6px; }
 .ytd-tg-bar label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .ytd-tg-bar input { height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: #fff; color: var(--ink); font: inherit; }
@@ -70,14 +60,6 @@
 .br-rule { display: grid; gap: 2px; text-align: left; border: 0; background: transparent; padding: 2px 4px; color: var(--ink); cursor: pointer; }
 .br-rule b { font-size: 13px; }
 .br-rule span { color: var(--muted); font-size: 12px; }
-#panel-notifications .notif-gen [hidden] { display: none !important; }
-#panel-notifications .gen-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-#panel-notifications .gen-chips button { border: 1px solid #e6e8ee; border-radius: 999px; background: #f8fafc; padding: 3px 10px; font-size: 12px; cursor: pointer; }
-#panel-notifications .gen-step { display: grid; gap: 10px; border: 1px solid #e6e8ee; border-radius: 10px; padding: 12px; background: #fafbfc; }
-#panel-notifications .gen-step select, #panel-notifications .gen-step input[type="date"] { border: 1px solid #e6e8ee; border-radius: 8px; padding: 7px 9px; background: #fff; font: inherit; max-width: 320px; }
-#panel-notifications .gen-step > label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: #667085; }
-#panel-notifications .gen-preview-card { border: 1px solid #e6e8ee; border-radius: 8px; background: #fff; padding: 10px; }
-#panel-notifications .gen-preview-card pre { margin: 6px 0 0; white-space: pre-wrap; font: inherit; font-size: 13px; color: #172033; }
 .br-rule-conds { margin: 2px 0; padding-left: 16px; font-size: 12px; color: var(--ink); }
 .br-rule-conds li { margin: 1px 0; }
 .br-rule-actions { display: grid; gap: 4px; }

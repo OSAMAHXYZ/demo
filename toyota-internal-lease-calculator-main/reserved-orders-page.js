@@ -768,13 +768,52 @@
         if (label === 'Share level') return `<span dir="auto">${esc(values['Share level'] || '—')}</span>`;
         return esc(values[label] || '—');
     }
-    function sheetRowHtml(order, cols) {
+    function sheetRowHtml(order, cols, rowNum) {
         const mine = canUpdateOrder(order);
         const values = sheetValues(order);
         const key = statusKey(order.status);
         const cancelled = key === 'Cancelled' || isCancelled(order);
         const classes = ['rowlink', mine ? 'mine' : '', cancelled ? 'row-cancelled' : ''].filter(Boolean).join(' ');
-        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0">${cols.map((label) => `<td>${sheetCellHtml(order, label, values, mine)}</td>`).join('')}</tr>`;
+        return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0"><th class="xl-rn" scope="row">${rowNum}</th>${cols.map((label) => `<td>${sheetCellHtml(order, label, values, mine)}</td>`).join('')}</tr>`;
+    }
+    function empXlLetter(index) {
+        let n = index + 1;
+        let out = '';
+        while (n > 0) {
+            const rem = (n - 1) % 26;
+            out = String.fromCharCode(65 + rem) + out;
+            n = Math.floor((n - 1) / 26);
+        }
+        return out;
+    }
+    const empXlSel = { r: 0, c: 0 };
+    function empXlCellText(td) {
+        if (!td) return '';
+        return String(td.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    function empXlSelect(box, r, c, scroll) {
+        const body = box && box.querySelector('.xl-grid tbody');
+        if (!body || !body.rows.length) return;
+        const rowMax = body.rows.length - 1;
+        const colMax = Math.max(0, body.rows[0].cells.length - 2);
+        r = Math.max(0, Math.min(rowMax, r));
+        c = Math.max(0, Math.min(colMax, c));
+        empXlSel.r = r;
+        empXlSel.c = c;
+        box.querySelectorAll('.xl-sel').forEach((el) => el.classList.remove('xl-sel'));
+        box.querySelectorAll('.xl-active').forEach((el) => el.classList.remove('xl-active'));
+        const tr = body.rows[r];
+        const td = tr && tr.cells[c + 1];
+        if (!td) return;
+        td.classList.add('xl-sel');
+        if (tr.cells[0]) tr.cells[0].classList.add('xl-active');
+        const letters = box.querySelector('.xl-letters');
+        if (letters && letters.cells[c + 1]) letters.cells[c + 1].classList.add('xl-active');
+        const name = $('emp-xl-name');
+        if (name) name.textContent = empXlLetter(c) + (r + 2);
+        const formula = $('emp-xl-formula');
+        if (formula) formula.textContent = empXlCellText(td);
+        if (scroll) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     function paintSheet(list) {
         const box = $('emp-sheet');
@@ -783,15 +822,17 @@
         const keepLeft = box.scrollLeft;
         const mineCount = list.filter(canUpdateOrder).length;
         const cols = publishedSheetCols();
-        const heads = cols.map(sheetHeadLabel);
+        const letters = `<tr class="xl-letters"><th class="xl-corner" aria-hidden="true"></th>${cols.map((_, i) => `<th class="xl-col" data-c="${i}">${empXlLetter(i)}</th>`).join('')}</tr>`;
+        const heads = `<tr class="xl-heads"><th class="xl-corner">1</th>${cols.map((label) => `<th class="xl-h" data-label="${esc(label)}">${esc(sheetHeadLabel(label))}</th>`).join('')}</tr>`;
         box.innerHTML = list.length
-            ? `<table class="sheet-table"><thead><tr>${heads.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${list.map((order) => sheetRowHtml(order, cols)).join('')}</tbody></table>`
+            ? `<table class="xl-grid sheet-table"><thead>${letters}${heads}</thead><tbody>${list.map((order, i) => sheetRowHtml(order, cols, i + 2)).join('')}</tbody></table>`
             : '<div class="empty">No orders match this view. Clear the search or pick another filter.</div>';
         box.scrollTop = keepTop;
         box.scrollLeft = keepLeft;
+        empXlSelect(box, empXlSel.r, empXlSel.c, false);
         const stat = $('emp-xl-stat');
         if (stat) {
-            stat.innerHTML = `<span class="mono">${list.length.toLocaleString('en-GB')} rows · ${mineCount} yours</span>`
+            stat.innerHTML = `<span class="mono">${list.length.toLocaleString('en-GB')} rows · ${mineCount} yours · live</span>`
                 + '<span><span class="dot d-you"></span>Your car</span>'
                 + '<span><span class="tiers" aria-hidden="true"><span class="on"></span><span class="on"></span><span></span></span>Colour choices with a queue place</span>'
                 + '<span>Expiry bar shows the last 72 hours</span>';
@@ -802,6 +843,7 @@
         const shell = $('admin-app');
         if (shell) shell.classList.toggle('hidden', !sheet);
         $('cards').classList.toggle('hidden', sheet);
+        document.body.classList.toggle('cards-on', !sheet);
         const a = $('view-sheet');
         const b = $('view-cards');
         if (a) a.setAttribute('aria-pressed', sheet ? 'true' : 'false');
@@ -1293,6 +1335,7 @@
         if (name === 'errors') paintMyAlerts();
         if (name === 'marketing') loadMyMarketing();
         paintRail();
+        document.body.classList.toggle('orders-on', name === 'orders');
         if (shown) {
             replayView(shown);
             window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
@@ -1548,15 +1591,39 @@
     });
     if ($('emp-sheet')) {
         $('emp-sheet').addEventListener('click', (event) => {
+            const box = $('emp-sheet');
+            const td = event.target.closest('.xl-grid tbody td');
+            if (td) {
+                const tr = td.parentElement;
+                empXlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
+            } else {
+                const rn = event.target.closest('.xl-grid tbody th.xl-rn');
+                if (rn) empXlSelect(box, rn.parentElement.sectionRowIndex, empXlSel.c, false);
+                const col = event.target.closest('.xl-grid .xl-col');
+                if (col) empXlSelect(box, empXlSel.r, Number(col.dataset.c) || 0, false);
+            }
             const tr = event.target.closest('tbody tr[data-key]');
-            if (tr) openOrderModal(tr.dataset.key);
+            if (tr && !event.target.closest('.xl-letters, .xl-heads')) openOrderModal(tr.dataset.key);
         });
         $('emp-sheet').addEventListener('keydown', (event) => {
+            const box = $('emp-sheet');
+            if (event.target === box) {
+                const move = {
+                    ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+                    Tab: [0, event.shiftKey ? -1 : 1]
+                }[event.key];
+                if (move) {
+                    event.preventDefault();
+                    empXlSelect(box, empXlSel.r + move[0], empXlSel.c + move[1], true);
+                    return;
+                }
+            }
             if (event.key !== 'Enter') return;
             const tr = event.target.closest('tbody tr[data-key]');
-            if (!tr) return;
+            const row = tr || box.querySelector('.xl-grid tbody')?.rows[empXlSel.r];
+            if (!row || !row.dataset.key) return;
             event.preventDefault();
-            openOrderModal(tr.dataset.key);
+            openOrderModal(row.dataset.key);
         });
     }
     if ($('next-pending')) $('next-pending').addEventListener('click', () => {

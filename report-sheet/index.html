@@ -45,7 +45,7 @@
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261105ytd1" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261019alloc7" />
-  <link rel="stylesheet" href="contact-performance.css?v=20261106cp2" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261109cpfs1" />
   <link rel="stylesheet" href="evaluation.css?v=20261031ev2" />
   <style id="executive-skin">
 /* =====================================================================
@@ -1569,58 +1569,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
 }
 
   </style>
-  <style>
-    body.delivery-mode .app-frame {
-      display: flex !important;
-      height: 100vh !important;
-      min-height: 100vh !important;
-      max-height: 100vh !important;
-      overflow: hidden !important;
-    }
-    body.delivery-mode .app-main {
-      height: 100vh !important;
-      max-height: 100vh !important;
-      min-height: 0 !important;
-      overflow: hidden !important;
-    }
-    body.delivery-mode .app-content {
-      flex: 1 1 auto !important;
-      min-height: 0 !important;
-      height: auto !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      display: flex !important;
-      flex-direction: column !important;
-    }
-    body.delivery-mode .app-content > .page-foot { display: none !important; }
-    body.delivery-mode #dashboard,
-    body.delivery-mode #dashboard.show {
-      flex: 1 1 auto !important;
-      height: 100% !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      display: flex !important;
-      flex-direction: column !important;
-      animation: none !important;
-      overflow: hidden !important;
-    }
-    body.delivery-mode #panel-delivery {
-      flex: 1 1 auto !important;
-      height: 100% !important;
-      min-height: 0 !important;
-      display: flex !important;
-      padding: 0 !important;
-      background: #f4f7fb;
-    }
-    body.delivery-mode .delivery-view-frame {
-      flex: 1 1 auto;
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      border: 0;
-      background: #f4f7fb;
-    }
-  </style>
+  <!-- Delivery full-screen rules load last (after unified-design) -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <link rel="stylesheet" href="rv-redesign.css?v=20261031rv3" />
   <link rel="stylesheet" href="unified-layout.css?v=20261031u2" />
@@ -1628,6 +1577,155 @@ body.live-app #panel-salesreport .sr-emp-sum {
   <link rel="stylesheet" href="bo-dashboard-fit.css?v=20261103bf1" />
   <link rel="stylesheet" href="matched-vehicles.css?v=20261105mv1" />
   <link rel="stylesheet" href="zone-tracker.css?v=20261105zt2" />
+  <style>
+    /* Delivery report · one full-viewport dashboard beside the report-sheet nav */
+    html body.live-app.toyota-theme.delivery-mode {
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .app-frame {
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .app-main {
+      min-height: 0 !important;
+      height: 100% !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .app-topbar {
+      display: none !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .app-content,
+    html body.live-app.toyota-theme.delivery-mode #panel-delivery {
+      padding: 0 !important;
+      padding-inline: 0 !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .app-content {
+      height: 100% !important;
+      max-height: 100% !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .app-content > .page-foot,
+    html body.live-app.toyota-theme.delivery-mode #wait-section {
+      display: none !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode #dashboard,
+    html body.live-app.toyota-theme.delivery-mode #dashboard.show {
+      margin: 0 !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      animation: none !important;
+      display: block !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode #panel-delivery {
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      left: var(--eu-sidebar-w, var(--sidebar-w, 232px)) !important;
+      z-index: 20;
+      margin: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      background: #070d18;
+    }
+    html body.live-app.toyota-theme.delivery-mode.sidebar-collapsed #panel-delivery {
+      left: var(--sidebar-w-collapsed, 76px) !important;
+    }
+    html body.live-app.toyota-theme.delivery-mode .delivery-view-frame {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      background: #f4f7fb;
+    }
+    @media (max-width: 900px) {
+      html body.live-app.toyota-theme.delivery-mode .app-topbar {
+        display: flex !important;
+      }
+      html body.live-app.toyota-theme.delivery-mode #panel-delivery {
+        top: var(--eu-topbar-h, var(--topbar-h, 56px)) !important;
+        left: 0 !important;
+      }
+    }
+
+    /* Contact Performance · one full-viewport dashboard beside the report-sheet nav */
+    html body.live-app.toyota-theme.cp-mode {
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.cp-mode .app-frame {
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.cp-mode .app-main {
+      min-height: 0 !important;
+      height: 100% !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.cp-mode .app-topbar {
+      display: none !important;
+    }
+    html body.live-app.toyota-theme.cp-mode .app-content,
+    html body.live-app.toyota-theme.cp-mode #panel-contact {
+      padding: 0 !important;
+      padding-inline: 0 !important;
+    }
+    html body.live-app.toyota-theme.cp-mode .app-content {
+      height: 100% !important;
+      max-height: 100% !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.cp-mode .app-content > .page-foot,
+    html body.live-app.toyota-theme.cp-mode #wait-section {
+      display: none !important;
+    }
+    html body.live-app.toyota-theme.cp-mode #dashboard,
+    html body.live-app.toyota-theme.cp-mode #dashboard.show {
+      margin: 0 !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      animation: none !important;
+      display: block !important;
+    }
+    html body.live-app.toyota-theme.cp-mode #panel-contact {
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      left: var(--eu-sidebar-w, var(--sidebar-w, 232px)) !important;
+      z-index: 20;
+      margin: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+    }
+    html body.live-app.toyota-theme.cp-mode.sidebar-collapsed #panel-contact {
+      left: var(--sidebar-w-collapsed, 76px) !important;
+    }
+    html body.live-app.toyota-theme.cp-mode #contact-performance-host,
+    html body.live-app.toyota-theme.cp-mode .cp-app {
+      flex: 1 1 auto;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      min-height: 0 !important;
+    }
+    @media (max-width: 900px) {
+      html body.live-app.toyota-theme.cp-mode .app-topbar {
+        display: flex !important;
+      }
+      html body.live-app.toyota-theme.cp-mode #panel-contact {
+        top: var(--eu-topbar-h, var(--topbar-h, 56px)) !important;
+        left: 0 !important;
+      }
+    }
+  </style>
 
 </head>
 <body class="live-app toyota-theme">
@@ -1721,7 +1819,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
 
       <!-- PANEL: Delivery · view of delivery-transformation/admin.html -->
       <div class="panel-section" id="panel-delivery" style="display:none">
-        <iframe id="delivery-view-frame" class="delivery-view-frame" title="Delivery" src="about:blank"></iframe>
+        <iframe id="delivery-view-frame" class="delivery-view-frame" title="Delivery" src="about:blank" allowfullscreen></iframe>
       </div>
 
       <!-- PANEL: Lexus Tracker (lexus-control/lexus-tracker.js) -->
@@ -9569,7 +9667,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (wait) wait.style.display = "none";
       const frame = document.getElementById("delivery-view-frame");
       if (frame && (!frame.getAttribute("src") || frame.getAttribute("src") === "about:blank")) {
-        frame.setAttribute("src", "https://delivery-operation-production.up.railway.app/delivery-transformation/admin.html?view=1");
+        frame.setAttribute("src", "../delivery-transformation/admin.html?view=1&v=20261109emb2");
       }
     } else if (leavingDelivery && !window._data) {
       const dash = $("#dashboard");
