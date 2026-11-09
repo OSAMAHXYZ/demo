@@ -9,19 +9,33 @@
   --bad:#f07189; --bad-soft:rgba(240,113,137,.14); --none:#8b93a7; --none-soft:rgba(139,147,167,.12);
   --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 16px 40px -20px rgba(0,0,0,.75);
   --scrim:rgba(4,6,12,.62);
+  --glow-tr:rgba(255,45,66,.18); --glow-bl:rgba(122,162,255,.12);
   --f-display:"Archivo","Segoe UI",system-ui,sans-serif;
   --f-body:"IBM Plex Sans Arabic","Segoe UI",Tahoma,system-ui,sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
   --ease:cubic-bezier(.2,.75,.2,1); --dur:240ms;
   color-scheme:dark;
 }
+:root[data-theme="light"]{
+  --bg:#f3f5fa; --surface:#ffffff; --surface-2:#eef1f7; --sunk:#e7ebf4; --raise:#f7f8fc;
+  --ink:#121826; --ink-2:#3d4658; --muted:#6b7385;
+  --line:rgba(18,28,48,.10); --line-2:rgba(18,28,48,.18);
+  --accent:#ff2d42; --accent-ink:#ffffff; --accent-soft:rgba(255,45,66,.10);
+  --you:#3d6fd9; --you-soft:rgba(61,111,217,.12);
+  --ok:#1ea36a; --ok-soft:rgba(30,163,106,.12); --warn:#c98a08; --warn-soft:rgba(201,138,8,.12);
+  --bad:#d4526a; --bad-soft:rgba(212,82,106,.12); --none:#7a8294; --none-soft:rgba(122,130,148,.12);
+  --shadow:0 1px 0 rgba(255,255,255,.9) inset,0 12px 28px -18px rgba(18,28,48,.28);
+  --scrim:rgba(16,22,36,.42);
+  --glow-tr:rgba(255,45,66,.10); --glow-bl:rgba(61,111,217,.10);
+  color-scheme:light;
+}
 *{box-sizing:border-box}
 html{background:var(--bg)}
 body{
   margin:0;color:var(--ink);font:14.5px/1.5 var(--f-body);-webkit-font-smoothing:antialiased;
   background:
-    radial-gradient(900px 480px at 100% -8%, rgba(255,45,66,.18), transparent 58%),
-    radial-gradient(820px 500px at -8% 108%, rgba(122,162,255,.12), transparent 55%),
+    radial-gradient(900px 480px at 100% -8%, var(--glow-tr), transparent 58%),
+    radial-gradient(820px 500px at -8% 108%, var(--glow-bl), transparent 55%),
     var(--bg);
 }
 .hidden{display:none!important}
@@ -613,19 +627,124 @@ body.dash.orders-on #admin-app.emp-xl-shell #panel-sheet,
 body.dash.orders-on #emp-sheet-shell{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;gap:8px;max-width:none}
 body.dash.orders-on #emp-sheet-shell > .xl-formula{flex:none}
 body.dash.orders-on #emp-sheet-shell > .card{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-body.dash.orders-on #emp-sheet.sheet-wrap{flex:1;min-height:0;overflow:auto}
+body.dash.orders-on #emp-sheet.sheet-wrap{flex:1;min-height:0;overflow:hidden}
 body.dash.orders-on #emp-xl-stat{flex:none;margin:0}
 body.dash.orders-on.cards-on #app .cards.rc-grid,
-body.dash.orders-on.cards-on #cards.rc-grid{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;align-content:start;padding-bottom:20px;-webkit-overflow-scrolling:touch}
-@media (max-width:820px){
-  body.dash.orders-on{height:auto;min-height:100vh;overflow:auto}
-  body.dash.orders-on #app.tower-app{height:auto;overflow:visible}
+body.dash.orders-on.cards-on #cards.rc-grid{flex:1 1 auto;min-height:0;overflow:auto;align-content:start}
+
+/* Day / Night toggle */
+.theme-toggle{gap:6px;flex:none;padding:6px 10px}
+.theme-toggle svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.theme-toggle .ico-night{display:none}
+:root[data-theme="light"] .theme-toggle .ico-day{display:none}
+:root[data-theme="light"] .theme-toggle .ico-night{display:block}
+.theme-dock{position:fixed;z-index:45;top:max(10px,env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px))}
+body:has(.tower-app:not(.hidden)) .theme-dock{display:none}
+
+/* One working page: chrome stays put, Excel scales to the leftover box */
+html:has(.tower-app:not(.hidden)),
+body:has(.tower-app:not(.hidden)){
+  height:100%;
+  overflow:hidden;
+}
+body:has(.tower-app:not(.hidden)){
+  height:100vh;height:100dvh;
+}
+.tower-app:not(.hidden){
+  height:100vh;height:100dvh;
+  display:flex;flex-direction:column;
+  overflow:hidden;min-height:0;
+}
+.tower-app:not(.hidden) .top{
+  flex:none;flex-wrap:nowrap;gap:10px;
+  padding-block:6px;
+}
+.tower-app:not(.hidden) .top .btn{padding:6px 10px}
+.tower-app:not(.hidden) .shell{
+  flex:1;min-height:0;height:auto;overflow:hidden;
+}
+.tower-app:not(.hidden) .rail{
+  overflow:auto;max-height:100%;align-self:stretch;
+}
+.tower-app:not(.hidden) .wrap,
+.tower-app:not(.hidden) #admin-main,
+.tower-app:not(.hidden) .tower{
+  min-height:0;overflow:hidden;
+  display:flex;flex-direction:column;
+  padding-block:8px 8px;
+}
+.tower-app:not(.hidden) #admin-main > .view:not(.hidden),
+.tower-app:not(.hidden) .tower > .view:not(.hidden),
+.tower-app:not(.hidden) #order-board:not(.hidden){
+  flex:1;min-height:0;max-width:none;overflow:hidden;gap:8px;
+}
+.tower-app:not(.hidden) #admin-main > .view:not(.hidden):not(#panel-sheet){
+  overflow:auto;
+}
+.tower-app:not(.hidden) .head h1{font-size:20px}
+.tower-app:not(.hidden) #panel-sheet .head p,
+.tower-app:not(.hidden) #order-board .head p{display:none}
+.tower-app:not(.hidden) .bar{flex-wrap:nowrap;gap:8px}
+.tower-app:not(.hidden) .bar .search{flex:1 1 160px;min-width:140px}
+.tower-app:not(.hidden) .chips{flex-wrap:nowrap}
+.tower-app:not(.hidden) select.sel{max-width:148px}
+.mc-workspace{flex:1;min-height:0;overflow:hidden;display:grid}
+.mc-scroll{flex:1;min-height:0;overflow:auto}
+.oe-list{flex:1;min-height:0;overflow:auto}
+#panel-overview .split{flex:1;min-height:0;overflow:hidden}
+#panel-overview .split > .card{min-height:0;overflow:auto}
+#panel-sheet.xlw .sheet-wrap,
+#emp-sheet.sheet-wrap{overflow:hidden}
+#panel-sheet.xlw table,
+#emp-sheet .xl-grid{width:max-content}
+.sheet-wrap.sheet-fit{overflow:hidden}
+.legend span.xl-zoom,.xl-zoom{display:none}
+#mc-center,#order-errors,#marketing-board{display:flex;flex-direction:column}
+
+@media (max-width:860px){
+  .tower-app:not(.hidden) .shell{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+  .tower-app:not(.hidden) .bar{flex-wrap:wrap}
+  .tower-app:not(.hidden) .rail{
+    position:relative;top:auto;z-index:40;
+    overflow:hidden;max-height:none;
+    flex-direction:row;padding:4px 8px;
+    background:var(--bg);border-bottom:1px solid var(--line);
+  }
+  .tower-app:not(.hidden) .rail-list{flex-direction:row;flex:1;justify-content:space-between;gap:0}
+  .tower-app:not(.hidden) .rail button,
+  .tower-app:not(.hidden) .rail a{padding:7px 8px;font-size:12px;gap:6px;white-space:nowrap}
+  .tower-app:not(.hidden) .rail .rlabel,
+  .tower-app:not(.hidden) .rail-foot{display:none}
+  html:has(.tower-app:not(.hidden)),
+  body:has(.tower-app:not(.hidden)),
+  .tower-app:not(.hidden),
+  body.dash.orders-on,
+  body.dash.orders-on #app.tower-app{
+    height:100vh;height:100dvh;overflow:hidden;
+  }
+  #admin-app.tower-app:has(#panel-sheet:not(.hidden)),
+  #admin-app.tower-app:has(#panel-sheet:not(.hidden)) .shell,
+  #admin-app.tower-app:has(#panel-sheet:not(.hidden)) .wrap,
   body.dash.orders-on #app.tower-app .shell,
-  body.dash.orders-on #app .tower{height:auto;overflow:visible}
-  body.dash.orders-on #order-board{flex:none;min-height:70vh;overflow:visible}
+  body.dash.orders-on #app .tower,
+  body.dash.orders-on #order-board{
+    height:auto;min-height:0;overflow:hidden;flex:1;
+  }
+  #panel-sheet.xlw{flex:1;min-height:0}
   body.dash.orders-on #admin-app.emp-xl-shell,
-  body.dash.orders-on #emp-sheet-shell{flex:none;min-height:50vh}
-  body.dash.orders-on #emp-sheet.sheet-wrap{min-height:50vh}
-  body.dash.orders-on.cards-on #app .cards.rc-grid,
-  body.dash.orders-on.cards-on #cards.rc-grid{flex:none;max-height:none;min-height:0;overflow-y:visible;padding-bottom:48px}
+  body.dash.orders-on #emp-sheet-shell{flex:1;min-height:0}
+  body.dash.orders-on #emp-sheet.sheet-wrap{min-height:0;overflow:hidden}
+  body.dash.orders-on.cards-on #cards.rc-grid{flex:1;overflow:hidden}
+}
+@media (max-width:400px){
+  .tower-app:not(.hidden) .bar{flex-wrap:wrap}
+  .tower-app:not(.hidden) .top{flex-wrap:nowrap;gap:4px}
+  .tower-app:not(.hidden) .who,
+  .tower-app:not(.hidden) .notif-toggle,
+  .tower-app:not(.hidden) .brand small,
+  .tower-app:not(.hidden) .theme-toggle [data-theme-label]{display:none}
+  .tower-app:not(.hidden) .rail button span,
+  .tower-app:not(.hidden) .rail a span{display:none}
+  html,body{overflow-x:hidden}
+  html:has(.tower-app:not(.hidden)),body:has(.tower-app:not(.hidden)){overflow:hidden}
 }

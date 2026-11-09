@@ -15,12 +15,12 @@
   <script>/* unified-design: default tick text + grid colour for any chart that does not set its own (no chart data / options change) */
     if (window.Chart && Chart.defaults) { Chart.defaults.color = "#8d9bb0"; Chart.defaults.borderColor = "rgba(148,163,184,.10)"; }
   </script>
-  <script src="employee-roster.js?v=20260928id1"></script>
+  <script src="employee-roster.js?v=20261109cons1"></script>
   <script src="auth.js?v=20261105zt1"></script>
   <script src="data-store.js?v=20261107mod1"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
-  <script src="sales-control.js?v=20261018acc1"></script>
+  <script src="sales-control.js?v=20261109cons1"></script>
   <script src="allocation-plan-data.js?v=20261107mod1"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
@@ -3631,6 +3631,14 @@ body.live-app #panel-salesreport .sr-emp-sum {
       "Ali Muharraq Alharbi",
       "Ali Al Harbi",
     ],
+    "Hamid Saeed Mohamed Saeed": ["Hamid Saeed", "Hamed Saeed", "Hamid Saeed Mohamed", "حامد سعيد"],
+    "Muhannad Hamid Al Youbi": [
+      "Mohannad Alyoubi",
+      "Muhannad Alyoubi",
+      "Mohannad Al Youbi",
+      "Muhannad Al Youbi",
+      "Mohannad Hamid Al Youbi",
+    ],
   };
 
   const EMPLOYEE_COUNT = DEFAULT_EMPLOYEE_NAMES.length;
@@ -3688,7 +3696,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
       .replace(/\bwaseem\b/g, "wasim")
       .replace(/\balawiya\b/g, "alawiyyah")
       .replace(/\bsamkary\b/g, "samkari")
-      .replace(/\bhjouj\b/g, "hjoouj");
+      .replace(/\bhjouj\b/g, "hjoouj")
+      .replace(/\bhamed\b/g, "hamid")
+      .replace(/\bmohannad\b/g, "muhannad");
     // "Al Harbi" / "Al-Harbi" / "AlHarbi" → alharbi (stable last-name key)
     s = s.replace(/\b(al|el)\s+/g, "al");
     return s.replace(/\s+/g, " ").trim();
@@ -21781,31 +21791,150 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return /e\s*-?\s*commerce|ecommerce|\beb2c\b|\bb2c\b|online\s*sales|digital\s*sales|e\s*-?\s*sales/.test(plant);
   }
 
-  /** B2C channel: Sales Raw Col A is Not Assigned or API-PATCH / API-BATCH only. */
+  /** Summary channel boxes are by Col A consultant, not product. */
+  const DVP_LEXUS_CONSULTANT_DEFAULTS = ["Hamid Saeed", "Hamed Saeed", "Hamid Saeed Mohamed Saeed", "حامد سعيد"];
+  const DVP_B2C_CONSULTANT_DEFAULTS = ["Mohammed Alfadul", "Mohannad Alyoubi"];
+  const DVP_B2C_CONSULTANT_ALIASES = ["Muhannad Hamid Al Youbi", "Mohannad Al Youbi", "Muhannad Al Youbi", "Muhannad Alyoubi"];
+  let DVP_CONTROLLER_USERS = {
+    toyotaB2c: DVP_B2C_CONSULTANT_DEFAULTS.slice(),
+    lexusB2c: ["Hamid Saeed"],
+  };
+
+  function dvpNameList(list, fallback) {
+    const names = (Array.isArray(list) ? list : [])
+      .map((u) => String((u && u.name) || u || "").trim())
+      .filter(Boolean);
+    return names.length ? names : (fallback || []).slice();
+  }
+
+  function dvpLexusConsultantNames() {
+    const fromApi = dvpNameList(DVP_CONTROLLER_USERS.lexusB2c, []);
+    const seen = new Set();
+    const out = [];
+    DVP_LEXUS_CONSULTANT_DEFAULTS.concat(fromApi).forEach((name) => {
+      const key = normalizeNameLoose(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(name);
+    });
+    return out;
+  }
+
+  function dvpB2cConsultantNames() {
+    return dvpNameList(DVP_CONTROLLER_USERS.toyotaB2c, DVP_B2C_CONSULTANT_DEFAULTS);
+  }
+
+  function dvpB2cMatchNames() {
+    const seen = new Set();
+    const out = [];
+    dvpB2cConsultantNames().concat(DVP_B2C_CONSULTANT_ALIASES).forEach((name) => {
+      const key = normalizeNameLoose(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(name);
+    });
+    return out;
+  }
+
+  function dvpControllerSig() {
+    return `${dvpLexusConsultantNames().join("|")}/${dvpB2cConsultantNames().join("|")}`;
+  }
+
+  function dvpConsultantIdentity(r) {
+    const raw = String((r && (r._salesmanRaw || r.salesman)) || "").trim();
+    if (!raw) return null;
+    const roster = rosterSalesmanName(raw) || raw;
+    const keys = new Set();
+    const tokens = new Set();
+    [raw, roster].forEach((n) => {
+      const loose = normalizeNameLoose(n);
+      if (loose) {
+        keys.add(loose);
+        loose.split(" ").filter(Boolean).forEach((t) => tokens.add(t));
+      }
+      const nk = nameKey(n);
+      if (nk) {
+        keys.add(nk);
+        nk.split(" ").filter(Boolean).forEach((t) => tokens.add(t));
+      }
+    });
+    return { keys, tokens };
+  }
+
+  function dvpConsultantHits(identity, targetName) {
+    if (!identity) return false;
+    const target = String(targetName || "").trim();
+    if (!target) return false;
+    const loose = normalizeNameLoose(target);
+    const keyed = nameKey(target) || loose;
+    if (!loose) return false;
+    if (identity.keys.has(loose) || (keyed && identity.keys.has(keyed))) return true;
+    const tParts = loose.split(" ").filter(Boolean);
+    if (tParts.length < 2) return false;
+    for (const k of identity.keys) {
+      const kParts = k.split(" ").filter(Boolean);
+      if (kParts.length < 2) continue;
+      if (k.includes(loose) || loose.includes(k)) return true;
+    }
+    const first = tParts[0];
+    const last = tParts[tParts.length - 1];
+    return identity.tokens.has(first) && identity.tokens.has(last);
+  }
+
+  function dvpConsultantInList(r, names) {
+    const identity = dvpConsultantIdentity(r);
+    if (!identity) return false;
+    return (names || []).some((name) => dvpConsultantHits(identity, name));
+  }
+
+  function isLexusConsultantSaleRow(r) {
+    return dvpConsultantInList(r, dvpLexusConsultantNames());
+  }
+
+  /** B2C channel: Sales Raw Col A matches Toyota B2C controller users. */
   function isB2cSaleRow(r) {
-    if (!r) return false;
-    const raw = String(r._salesmanRaw || r.salesman || "").trim();
-    if (!raw) return false;
-    const rawTok = upperTrim(raw).replace(/[^A-Z0-9]/g, "");
-    const loose = normalizeNameLoose(raw);
-    // Strict Col A placeholders — do not use plant / EB2C / eCommerce
-    if (/^(NOTASSIGNED|UNASSIGNED|APIPATCH|APIBATCH)$/i.test(rawTok)) return true;
-    if (/^not\s*assigned$|^unassigned$|^api[\s\-_]*patch$|^api[\s\-_]*batch$/i.test(loose)) return true;
-    if (/غير\s*(مسند|معين|مخصص)/.test(loose)) return true;
-    return false;
+    return dvpConsultantInList(r, dvpB2cMatchNames());
   }
 
   function dvpBucketForSaleRow(r, guestKeys) {
-    // 1) Lexus by product/plant
-    // 2) B2C = Not Assigned / API-PATCH only (Col A)
+    // 1) Lexus = Hamid Saeed (Col A) + Lexus controller users
+    // 2) B2C = Toyota B2C controller users (Col A)
     // 3) Guest Exp = Admin Push selected employees
     // 4) Telesales = everyone else
-    if (isLexusSaleRow(r)) return "lexus";
+    if (isLexusConsultantSaleRow(r)) return "lexus";
     if (isB2cSaleRow(r)) return "b2c";
     const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
     const key = nameKey(salesmanName);
     if (key && guestKeys.has(key)) return "guest";
     return "telesales";
+  }
+
+  function applyDvpChannelSubs() {
+    if (!window.SalesControl || typeof window.SalesControl.setChannelSubs !== "function") return;
+    window.SalesControl.setChannelSubs({
+      lexus: dvpLexusConsultantNames()[0] || "Hamid Saeed",
+      b2c: dvpB2cConsultantNames().join(" · ") || "Controller users",
+    });
+  }
+
+  function refreshDvpControllerUsers() {
+    applyDvpChannelSubs();
+    return fetch("/api/report-sheet/controller-users", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const pub = data && data.public;
+        if (pub) {
+          DVP_CONTROLLER_USERS = {
+            toyotaB2c: dvpNameList(pub.toyotaB2c, DVP_B2C_CONSULTANT_DEFAULTS),
+            lexusB2c: dvpNameList(pub.lexusB2c, ["Hamid Saeed"]),
+          };
+        }
+        applyDvpChannelSubs();
+        salesControlSrc = null;
+        if (typeof renderSummaryDashboard === "function") renderSummaryDashboard();
+        else if (hasSalesRaw() && window.SalesControl) window.SalesControl.prepare(salesControlSource());
+      })
+      .catch(() => {});
   }
 
   function dvpVinRecord(r) {
@@ -21861,9 +21990,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
     };
     if (delivered <= 0 && proforma <= 0) {
       const emptyTip = id === "lexus"
-        ? "No ESH/IS/LC/LX/NX/RX (etc.) or Lexus plant rows in this period — other channels may hold those VINs."
+        ? "No Col A Hamid Saeed rows in this period."
         : id === "b2c"
-          ? "No Col A Not Assigned / API-PATCH rows in this period."
+          ? "No Col A Toyota B2C user rows in this period."
           : id === "guest"
             ? "No deliveries/proforma for Admin Guest Exp advisors in this period."
             : "No delivered or proforma activity in this period.";
@@ -21994,7 +22123,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       {
         id: "lexus",
         title: "Lexus Sales",
-        subtitle: "ESH · IS · LC · LSH · LX · LXH · NX · NXH · RX · RXH",
+        subtitle: dvpLexusConsultantNames()[0] || "Hamid Saeed",
         brand: "LEXUS",
         theme: "lexus",
         image: "../images/cars/lexus.jpg",
@@ -22018,7 +22147,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       {
         id: "b2c",
         title: "B2C Sales",
-        subtitle: "Not Assigned · API-PATCH",
+        subtitle: dvpB2cConsultantNames().join(" · ") || "Controller users",
         brand: "TOYOTA",
         theme: "b2c",
         image: "../images/cars/fortuner.png",
@@ -22090,7 +22219,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       salesControlTargetsVer += 1;
     }
     const guestKeys = guestExpEmployeeKeys();
-    const guestSig = `${salesControlTargetsVer}:${[...guestKeys].sort().join("|")}`;
+    const guestSig = `${salesControlTargetsVer}:${[...guestKeys].sort().join("|")}:${dvpControllerSig()}`;
     if (salesControlSrc && salesControlSrc.rows === rows && salesControlSrc.guestSig === guestSig) return salesControlSrc;
     salesControlSrc = {
       rows,
@@ -22148,6 +22277,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
       reference: dvpReferenceSummary,
     });
   }
+
+  refreshDvpControllerUsers();
 
   function exportIccExcel() {
     const dataset = getInventoryCommandDataset();

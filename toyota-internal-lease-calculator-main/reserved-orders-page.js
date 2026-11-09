@@ -89,6 +89,65 @@
         setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 240); }, 3200);
         return t;
     }
+    const THEME_KEY = 'ro-theme';
+    function currentTheme() { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+    function applyTheme(mode) {
+        const next = mode === 'light' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        document.documentElement.style.colorScheme = next;
+        const meta = document.querySelector('meta[name="color-scheme"]');
+        if (meta) meta.setAttribute('content', next);
+        try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* storage blocked */ }
+        document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
+            const day = next === 'dark';
+            btn.setAttribute('aria-pressed', day ? 'false' : 'true');
+            btn.setAttribute('title', day ? 'Day colors' : 'Night colors');
+            btn.setAttribute('aria-label', day ? 'Day colors' : 'Night colors');
+            const lab = btn.querySelector('[data-theme-label]');
+            if (lab) lab.textContent = day ? 'Day' : 'Night';
+        });
+    }
+    function initTheme() {
+        let saved = 'dark';
+        try { saved = localStorage.getItem(THEME_KEY) || 'dark'; } catch (e) { /* keep dark */ }
+        applyTheme(saved === 'light' ? 'light' : 'dark');
+        document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', () => applyTheme(currentTheme() === 'light' ? 'dark' : 'light'));
+        });
+    }
+    initTheme();
+    function fitSheet(wrap) {
+        const box = wrap || document.querySelector('#emp-sheet.sheet-wrap, .sheet-wrap');
+        const table = box && box.querySelector('.xl-grid');
+        if (!box || !table) return;
+        const sw = box.clientWidth;
+        const sh = box.clientHeight;
+        if (sw < 32 || sh < 32) return;
+        let tw = Number(table.dataset.nw);
+        let th = Number(table.dataset.nh);
+        if (!tw || !th) {
+            const keep = table.style.zoom;
+            table.style.zoom = '1';
+            tw = table.scrollWidth;
+            th = table.scrollHeight;
+            table.dataset.nw = String(tw);
+            table.dataset.nh = String(th);
+            table.style.zoom = keep || '1';
+        }
+        if (tw < 8 || th < 8) return;
+        const next = String(Math.max(0.35, Math.min(sw / tw, sh / th, 1)));
+        if (table.style.zoom !== next) table.style.zoom = next;
+        box.classList.add('sheet-fit');
+        if (!box._fitObs && typeof ResizeObserver === 'function') {
+            box._fitObs = new ResizeObserver(() => fitSheet(box));
+            box._fitObs.observe(box);
+        }
+    }
+    function scheduleFitSheet(wrap) {
+        requestAnimationFrame(() => requestAnimationFrame(() => fitSheet(wrap || $('emp-sheet'))));
+    }
     // Expiry display: countdown text, tone, bar % of the last 72 hours.
     function expInfo(deadlineDate) {
         if (!deadlineDate) return null;
@@ -827,9 +886,10 @@
         box.innerHTML = list.length
             ? `<table class="xl-grid sheet-table"><thead>${letters}${heads}</thead><tbody>${list.map((order, i) => sheetRowHtml(order, cols, i + 2)).join('')}</tbody></table>`
             : '<div class="empty">No orders match this view. Clear the search or pick another filter.</div>';
-        box.scrollTop = keepTop;
-        box.scrollLeft = keepLeft;
+        box.scrollTop = 0;
+        box.scrollLeft = 0;
         empXlSelect(box, empXlSel.r, empXlSel.c, false);
+        scheduleFitSheet(box);
         const stat = $('emp-xl-stat');
         if (stat) {
             stat.innerHTML = `<span class="mono">${list.length.toLocaleString('en-GB')} rows · ${mineCount} yours · live</span>`
@@ -850,6 +910,7 @@
         if (b) b.setAttribute('aria-pressed', sheet ? 'false' : 'true');
         const seg = $('view-seg');
         if (seg) slideIndicator(seg.querySelector('.ind'), sheet ? a : b);
+        if (sheet) scheduleFitSheet($('emp-sheet'));
     }
     // ---- Order drawer: pick a status, write the required note, save. Polling never repaints it while someone types. ----
     let drawerPick = '';
@@ -1336,13 +1397,11 @@
         if (name === 'marketing') loadMyMarketing();
         paintRail();
         document.body.classList.toggle('orders-on', name === 'orders');
-        if (shown) {
-            replayView(shown);
-            window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
-        }
+        if (shown) replayView(shown);
         if (name === 'orders') requestAnimationFrame(() => {
             slideIndicator($('kpis').querySelector('.ind'), $('kpis').querySelector('[aria-pressed="true"]'));
             paintViewMode();
+            scheduleFitSheet($('emp-sheet'));
         });
     }
     function oeStatusLabel(order) {
@@ -1664,7 +1723,7 @@
         slideIndicator($('kpis').querySelector('.ind'), $('kpis').querySelector('[aria-pressed="true"]'));
         paintViewMode();
     };
-    window.addEventListener('resize', repaintIndicators);
+    window.addEventListener('resize', () => { repaintIndicators(); scheduleFitSheet($('emp-sheet')); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(repaintIndicators);
     if ($('marketing-form')) $('marketing-form').addEventListener('submit', checkMarketing);
     if ($('marketing-sent-list')) $('marketing-sent-list').addEventListener('click', (event) => {

@@ -32,9 +32,9 @@
     { name: "Tawdod Al Sharef", code: "32834", aliases: ["Tawdod Atiah Al Sharef"] },
     { name: "Ali Muharraq A Alharbi", code: "48476", aliases: ["Ali Muharraq A. Alharbi"] },
     { name: "Aljawharah Saad Alsuhaim", code: "48448", aliases: ["Aljawharah Saad Mohammed Alsuhaim", "Aljawharah Alsuhaim"] },
-    { name: "Hamid Saeed Mohamed Saeed", code: "47100" },
+    { name: "Hamid Saeed Mohamed Saeed", code: "47100", aliases: ["Hamid Saeed", "Hamed Saeed", "Hamid Saeed Mohamed"] },
     { name: "Ziyad Faisal Kabli", code: "49786" },
-    { name: "Muhannad Hamid Al Youbi", code: "49157" },
+    { name: "Muhannad Hamid Al Youbi", code: "49157", aliases: ["Mohannad Alyoubi", "Muhannad Alyoubi", "Mohannad Al Youbi", "Muhannad Al Youbi", "Mohannad Hamid Al Youbi"] },
     { name: "Raghdah Khalid Shalabi", code: "50724" },
   ];
 

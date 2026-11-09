@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="dark light">
     <title>Reserved Orders Admin</title>
+    <script>(function(){try{var t=localStorage.getItem('ro-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}}catch(e){}})();</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109xl">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109dn1">
 </head>
 <body>
+    <button class="btn theme-toggle theme-dock" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
     <section id="gate" class="login-screen">
         <form class="login-card" id="gate-form">
             <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
@@ -30,6 +32,7 @@
             </div>
             <span class="spacer"></span>
             <div class="who" id="admin-who"><span class="av" id="admin-who-av">AD</span><div><b id="admin-who-name">Admin</b><small id="admin-who-role">Full access</small></div></div>
+            <button class="btn theme-toggle" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
             <a class="btn" href="hub.html">Hub</a>
             <a class="btn" href="reserved-orders.html">Employee page</a>
             <button class="btn" id="admin-out" type="button">Sign out</button>
@@ -264,6 +267,6 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261109xl"></script>
+    <script src="reserved-orders-admin.js?v=20261109dn1"></script>
 </body>
 </html>

@@ -14,9 +14,9 @@
  */
 (function (global) {
   const CHANNELS = [
-    { id: "lexus", title: "Lexus Sales", short: "Lexus", brand: "LEXUS", sub: "ESH · IS · LC · LX · NX · RX", color: "#c9b28a", img: "../images/cars/thumbs/lexus.webp" },
+    { id: "lexus", title: "Lexus Sales", short: "Lexus", brand: "LEXUS", sub: "Hamid Saeed", color: "#c9b28a", img: "../images/cars/thumbs/lexus.webp" },
     { id: "telesales", title: "Telesales", short: "Telesales", brand: "TOYOTA", sub: "All other advisors", color: "#22c3d6", img: "../images/cars/thumbs/camry.webp" },
-    { id: "b2c", title: "B2C Sales", short: "B2C", brand: "TOYOTA", sub: "Not Assigned · API-PATCH", color: "#a78bfa", img: "../images/cars/thumbs/fortuner.webp" },
+    { id: "b2c", title: "B2C Sales", short: "B2C", brand: "TOYOTA", sub: "Mohammed Alfadul · Mohannad Alyoubi", color: "#a78bfa", img: "../images/cars/thumbs/fortuner.webp" },
     { id: "guest", title: "Experience Automall", short: "Automall", brand: "TOYOTA", sub: "Guest Experience Center", color: "#f2b24c", img: "../images/cars/thumbs/alj-register.webp" },
   ];
   const CH_INDEX = Object.fromEntries(CHANNELS.map((c, i) => [c.id, i]));
@@ -402,8 +402,8 @@
 
         <footer class="gec-alerts gec-surface sc-foot">
           <span class="gec-alerts-title">Rules</span>
-          <span class="sc-rule"><b style="color:${CHANNELS[0].color}">Lexus</b> product codes / Lexus plant</span>
-          <span class="sc-rule"><b style="color:${CHANNELS[2].color}">B2C</b> Col A Not Assigned · API-PATCH</span>
+          <span class="sc-rule"><b style="color:${CHANNELS[0].color}">Lexus</b> Col A Hamid Saeed</span>
+          <span class="sc-rule"><b style="color:${CHANNELS[2].color}">B2C</b> Col A Toyota B2C users</span>
           <span class="sc-rule"><b style="color:${CHANNELS[3].color}">Automall</b> Guest Exp advisors (Admin) <em data-el="guest-count"></em></span>
           <span class="sc-rule"><b style="color:${CHANNELS[1].color}">Telesales</b> everyone else</span>
           <span class="sc-rule">Pro-Forma = Col P in period with Col V blank · Delivered = Col V in period</span>
@@ -1298,5 +1298,16 @@
     update();
   }
 
-  global.SalesControl = { render, prepare, state, CHANNELS };
+  function setChannelSubs(map) {
+    CHANNELS.forEach((c) => {
+      if (map && map[c.id] != null && String(map[c.id]).trim()) c.sub = String(map[c.id]).trim();
+    });
+    if (!state.root) return;
+    CHANNELS.forEach((c) => {
+      const em = state.root.querySelector(`.sc-card[data-ch="${c.id}"] .sc-card-title em`);
+      if (em) em.textContent = c.sub;
+    });
+  }
+
+  global.SalesControl = { render, prepare, state, CHANNELS, setChannelSubs };
 })(typeof window !== "undefined" ? window : globalThis);
