@@ -8,12 +8,21 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <!-- Fonts load without blocking the first paint; text shows in the fallback font until they arrive (display=swap). -->
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-  <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" /></noscript>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" /></noscript>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>/* unified-design: default tick text + grid colour for any chart that does not set its own (no chart data / options change) */
-    if (window.Chart && Chart.defaults) { Chart.defaults.color = "#8d9bb0"; Chart.defaults.borderColor = "rgba(148,163,184,.10)"; }
+    if (window.Chart && Chart.defaults) {
+      Chart.defaults.color = "#8d9bb0";
+      Chart.defaults.borderColor = "rgba(148,163,184,.10)";
+      Chart.defaults.font.family = "Manrope, IBM Plex Sans Arabic, Segoe UI, sans-serif";
+      if (Chart.defaults.datasets && Chart.defaults.datasets.bar) {
+        Chart.defaults.datasets.bar.backgroundColor = "rgba(37, 99, 235, 0.82)";
+        Chart.defaults.datasets.bar.borderColor = "rgba(37, 99, 235, 0.95)";
+        Chart.defaults.datasets.bar.borderWidth = 0;
+      }
+    }
   </script>
   <script src="employee-roster.js?v=20261109cons1"></script>
   <script src="auth.js?v=20261105zt1"></script>
@@ -59,8 +68,8 @@
 
 /* ---------- 1. Design tokens ---------- */
 :root {
-  --ex-font: "Manrope", "Outfit", "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
-  --ex-num: "Space Grotesk", "Manrope", "Outfit", sans-serif;
+  --ex-font: "Manrope", "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
+  --ex-num: "Space Grotesk", "Manrope", sans-serif;
 
   --ex-red: #eb0a1e;
   --ex-red-deep: #c40718;
@@ -71,6 +80,9 @@
   --ex-amber-soft: rgba(217, 119, 6, 0.10);
   --ex-blue: #2563eb;
   --ex-blue-soft: rgba(37, 99, 235, 0.08);
+  --ex-slate: #8d9bb0;
+  --ex-teal: #0f9d76;
+  --ex-hover: color-mix(in srgb, var(--ex-blue) 42%, var(--ex-line));
 
   /* light surfaces (generic panels) */
   --ex-bg: #f3f5f9;
@@ -100,9 +112,9 @@
 
   --ex-radius: 14px;
   --ex-radius-sm: 10px;
-  --ex-shadow: 0 1px 2px rgba(11, 19, 36, 0.04), 0 10px 28px -14px rgba(11, 19, 36, 0.18);
-  --ex-shadow-hover: 0 2px 4px rgba(11, 19, 36, 0.05), 0 18px 40px -18px rgba(11, 19, 36, 0.28);
-  --cx-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 34px -18px rgba(0, 0, 0, 0.7);
+  --ex-shadow: 0 8px 22px -16px rgba(11, 19, 36, 0.28);
+  --ex-shadow-hover: 0 10px 24px -16px rgba(11, 19, 36, 0.32);
+  --cx-shadow: 0 8px 22px -16px rgba(0, 0, 0, 0.45);
   --ex-ease: cubic-bezier(.2, .7, .2, 1);
 }
 
@@ -116,7 +128,7 @@ body.theme-dark {
   --ex-ink-2: var(--cx-ink-2);
   --ex-muted: var(--cx-muted);
   --ex-shadow: var(--cx-shadow);
-  --ex-shadow-hover: 0 20px 44px -20px rgba(0, 0, 0, 0.85);
+  --ex-shadow-hover: 0 10px 24px -16px rgba(0, 0, 0, 0.5);
 }
 
 /* ---------- 2. Base ---------- */
@@ -129,10 +141,7 @@ body.live-app {
   text-rendering: optimizeLegibility;
   font-feature-settings: "cv11", "ss01";
 }
-body.live-app .app-main,
-body.live-app .app-content { background: transparent; }
-
-body.live-app ::selection { background: rgba(235, 10, 30, 0.18); }
+body.live-app ::selection { background: var(--ex-blue-soft); }
 
 body.live-app *::-webkit-scrollbar { width: 10px; height: 10px; }
 body.live-app *::-webkit-scrollbar-track { background: transparent; }
@@ -145,7 +154,7 @@ body.live-app *::-webkit-scrollbar-thumb {
 body.live-app *::-webkit-scrollbar-thumb:hover { background-color: rgba(100, 116, 139, 0.6); }
 
 body.live-app :focus-visible {
-  outline: 2px solid var(--ex-red);
+  outline: 2px solid var(--ex-blue);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -252,11 +261,8 @@ body.live-app .sidebar-collapse-btn {
 
 /* ---------- 4. Top bar ---------- */
 body.live-app .app-topbar {
-  background: color-mix(in srgb, var(--ex-surface) 86%, transparent);
-  backdrop-filter: saturate(160%) blur(14px);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background: color-mix(in srgb, var(--ex-surface) 92%, transparent);
   border-bottom: 1px solid var(--ex-line);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset;
 }
 body.live-app .app-topbar-eyebrow {
   color: var(--ex-red);
@@ -274,11 +280,11 @@ body.live-app .app-topbar-search {
   background: var(--ex-surface-2);
   border: 1px solid var(--ex-line);
   border-radius: 12px;
-  transition: border-color .18s, box-shadow .18s;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 body.live-app .app-topbar-search:focus-within {
-  border-color: rgba(235, 10, 30, 0.45);
-  box-shadow: 0 0 0 4px var(--ex-red-soft);
+  border-color: var(--ex-hover);
+  box-shadow: 0 0 0 3px var(--ex-blue-soft);
 }
 body.live-app .app-topbar-search input {
   background: transparent;
@@ -316,12 +322,7 @@ body.live-app .app-topbar .status::before {
 body.live-app .app-topbar .status.ok { color: var(--ex-green); background: var(--ex-green-soft); border-color: rgba(15, 157, 118, 0.25); }
 body.live-app .app-topbar .status.busy { color: var(--ex-amber); background: var(--ex-amber-soft); border-color: rgba(217, 119, 6, 0.25); }
 body.live-app .app-topbar .status.err { color: var(--ex-red); background: var(--ex-red-soft); border-color: rgba(235, 10, 30, 0.25); }
-body.live-app #live-badge.ok::before { animation: ex-pulse 2s ease-in-out infinite; }
-
-@keyframes ex-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 157, 118, 0.55); }
-  50% { box-shadow: 0 0 0 5px rgba(15, 157, 118, 0); }
-}
+body.live-app #live-badge.ok::before { box-shadow: none; }
 
 /* ---------- 5. Buttons & form controls (generic panels) ---------- */
 body.live-app .btn,
@@ -332,13 +333,13 @@ body.live-app .btn-ghost {
   border: 1px solid var(--ex-line-strong);
   background: var(--ex-surface);
   color: var(--ex-ink-2);
-  transition: background .16s, border-color .16s, color .16s, transform .16s, box-shadow .16s;
+  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 body.live-app .btn:hover:not(:disabled),
 body.live-app .btn-ghost:hover:not(:disabled) {
-  border-color: var(--ex-ink-2);
+  border-color: var(--ex-hover);
   color: var(--ex-ink);
-  transform: translateY(-1px);
+  background-color: var(--ex-surface-2);
 }
 body.live-app .btn-primary {
   font-family: var(--ex-font);
@@ -349,12 +350,10 @@ body.live-app .btn-primary {
   background: linear-gradient(180deg, #f2263a, var(--ex-red) 55%, var(--ex-red-deep));
   color: #fff;
   box-shadow: 0 8px 18px -10px rgba(235, 10, 30, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  transition: transform .16s, box-shadow .16s, filter .16s;
+  transition: background-color 150ms ease, opacity 150ms ease, filter 150ms ease;
 }
 body.live-app .btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
   filter: brightness(1.04);
-  box-shadow: 0 12px 24px -12px rgba(235, 10, 30, 1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 body.live-app .btn:disabled,
 body.live-app .btn-primary:disabled {
@@ -371,13 +370,13 @@ body.live-app #dashboard input[type="date"],
 body.live-app #dashboard input[type="number"] {
   font-family: var(--ex-font);
   border-radius: 10px;
-  transition: border-color .16s, box-shadow .16s;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 body.live-app #dashboard select:focus,
 body.live-app #dashboard input:focus {
   outline: none;
-  border-color: rgba(235, 10, 30, 0.5);
-  box-shadow: 0 0 0 4px var(--ex-red-soft);
+  border-color: var(--ex-hover);
+  box-shadow: 0 0 0 3px var(--ex-blue-soft);
 }
 
 /* ---------- 6. Generic cards, KPIs, tables (light panels) ---------- */
@@ -392,12 +391,6 @@ body.live-app .pbi-viz-head h2 {
   color: var(--ex-ink);
   font-weight: 800;
   letter-spacing: -0.01em;
-}
-body.live-app .hint,
-body.live-app .foot { color: var(--ex-muted); }
-
-body.live-app .wait-card {
-  border-top: 3px solid var(--ex-red);
 }
 body.live-app .wait-card h2 { font-size: 1.25rem; }
 body.live-app .banner.load { border-radius: 10px; }
@@ -414,12 +407,11 @@ body.live-app .kpi {
   border: 1px solid var(--ex-line);
   border-radius: var(--ex-radius);
   box-shadow: var(--ex-shadow);
-  transition: transform .2s var(--ex-ease), box-shadow .2s var(--ex-ease), border-color .2s;
+  transition: background-color 150ms ease, border-color 150ms ease;
 }
 body.live-app .kpi:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--ex-shadow-hover);
-  border-color: rgba(235, 10, 30, 0.35);
+  background-color: var(--ex-surface-2);
+  border-color: var(--ex-hover);
 }
 body.live-app .kpi .label {
   color: var(--ex-muted);
@@ -548,15 +540,14 @@ body.live-app #panel-salesreport .sr-tap,
 body.live-app #bo-dash .bo-tap,
 body.live-app #boe-dash .boe-kpi,
 body.live-app #panel-ytdsales .ytd-card {
-  transition: transform .2s var(--ex-ease), border-color .2s, box-shadow .2s;
+  transition: background-color 150ms ease, border-color 150ms ease;
 }
 body.live-app #panel-salesreport .sr-tap:hover,
 body.live-app #bo-dash .bo-tap:hover,
 body.live-app #boe-dash .boe-kpi:hover,
 body.live-app #panel-ytdsales .ytd-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(235, 10, 30, 0.35);
-  box-shadow: 0 22px 44px -22px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(235, 10, 30, 0.12);
+  border-color: var(--ex-hover);
+  background-color: var(--cx-raise);
 }
 
 /* cockpit card titles */
@@ -719,7 +710,7 @@ body.live-app #pt-dash .btn:hover:not(:disabled),
 body.live-app #rv-dash .btn:hover:not(:disabled) {
   background: var(--cx-raise);
   color: #fff;
-  border-color: rgba(235, 10, 30, 0.45);
+  border-color: var(--ex-hover);
 }
 
 /* ---------- 8. Sales Dashboard header & toolbar ---------- */
@@ -743,15 +734,14 @@ body.live-app #panel-salesreport .sr-brand-word {
 }
 body.live-app #panel-salesreport .sr-live-pill {
   background: var(--ex-green-soft);
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: var(--ex-green);
+  border: 1px solid rgba(15, 157, 118, 0.3);
   border-radius: 999px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 body.live-app #panel-salesreport .sr-live-pill i {
-  background: #34d399;
-  animation: ex-pulse 2s ease-in-out infinite;
+  background: var(--ex-green);
 }
 body.live-app #panel-salesreport .sr-day-chip,
 body.live-app #panel-salesreport .sr-range-pills,
@@ -786,7 +776,7 @@ body.live-app #panel-salesreport .sr-icon-btn:hover,
 body.live-app #panel-salesreport .sr-tool-btn.is-active {
   background: var(--cx-raise);
   color: #fff;
-  border-color: rgba(235, 10, 30, 0.45);
+  border-color: var(--ex-hover);
 }
 body.live-app #panel-salesreport .sr-export-btn {
   background: linear-gradient(180deg, #f2263a, var(--ex-red) 55%, var(--ex-red-deep));
@@ -825,10 +815,9 @@ body.live-app #panel-salesreport .sr-acc-progress-track {
   overflow: hidden;
 }
 body.live-app #panel-salesreport .sr-perf-progress-fill {
-  background: linear-gradient(90deg, #b5061a, var(--ex-red) 60%, #ff5a6a);
+  background: linear-gradient(90deg, #1d4ed8, var(--ex-blue) 60%, #7aa2ff);
   border-radius: 999px;
-  box-shadow: 0 0 14px rgba(235, 10, 30, 0.55);
-  transition: width .8s var(--ex-ease);
+  transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease;
 }
 
 /* Wide buttons inside cards */
@@ -850,16 +839,14 @@ body.live-app #bas-dash .pbi-expand {
 body.live-app #panel-salesreport .pbi-expand:hover,
 body.live-app #bo-dash .pbi-expand:hover,
 body.live-app #bas-dash .pbi-expand:hover {
-  background: var(--ex-red);
-  border-color: var(--ex-red);
+  background: var(--cx-raise);
+  border-color: var(--ex-hover);
   color: #fff;
 }
 
 /* ---------- 9. Wide modal & drawers ---------- */
 body.live-app .pbi-wide-backdrop {
-  background: rgba(3, 7, 15, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(3, 7, 15, 0.82);
 }
 body.live-app .pbi-wide-modal {
   border-radius: 18px;
@@ -888,14 +875,12 @@ body.live-app #aa-drill-close {
 body.live-app #pbi-wide-close:hover,
 body.live-app #emp-drawer-close:hover,
 body.live-app #aa-drill-close:hover {
-  background: var(--ex-red);
-  border-color: var(--ex-red);
+  background: var(--cx-raise);
+  border-color: var(--ex-hover);
   color: #fff;
 }
 body.live-app .drawer-backdrop {
-  background: rgba(3, 7, 15, 0.55);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgba(3, 7, 15, 0.72);
 }
 body.live-app .emp-drawer {
   box-shadow: -30px 0 70px -30px rgba(0, 0, 0, 0.6);
@@ -988,7 +973,7 @@ body.live-app #bas-alloc-table .mv-copy {
   font: 700 0.66rem var(--ex-font);
   cursor: pointer;
 }
-body.live-app #bas-alloc-table .mv-copy:hover { color: #fff; border-color: var(--ex-red); }
+body.live-app #bas-alloc-table .mv-copy:hover { color: #fff; border-color: var(--ex-hover); }
 body.live-app #bas-dash .mv-detail {
   background: var(--cx-surface-2);
   border: 1px solid var(--cx-line);
@@ -1107,7 +1092,7 @@ body.live-app #rv-dash .rv-pos {
   border-radius: 8px;
   background: rgba(59, 130, 246, 0.18);
   border: 1px solid rgba(59, 130, 246, 0.35);
-  color: #93c5fd;
+  color: var(--ex-blue);
   font: 800 0.8rem var(--ex-num);
   margin-right: 6px;
 }
@@ -1119,8 +1104,8 @@ body.live-app #rv-dash .rv-next-list li {
 }
 body.live-app #rv-dash .rv-next-list li.rv-next-empty { background: transparent; border-style: dashed; }
 body.live-app #rv-dash .rv-next-rank {
-  background: rgba(235, 10, 30, 0.14);
-  color: #ff6b7a;
+  background: var(--ex-blue-soft);
+  color: var(--ex-blue);
   border-radius: 6px;
   font: 800 0.7rem var(--ex-num);
 }
@@ -1142,7 +1127,7 @@ body.live-app #rv-dash .rv-vin-btn {
   letter-spacing: 0.02em;
   cursor: pointer;
 }
-body.live-app #rv-dash .rv-vin-btn:hover { border-color: var(--ex-red); background: rgba(235, 10, 30, 0.08); }
+body.live-app #rv-dash .rv-vin-btn:hover { border-color: var(--ex-hover); background: var(--ex-blue-soft); }
 
 /* head strip, sheet chips, banners, side lists, pager */
 body.live-app #rv-dash .rv-head-actions {
@@ -1150,7 +1135,7 @@ body.live-app #rv-dash .rv-head-actions {
   border: 1px solid var(--cx-line);
   border-radius: 12px;
 }
-body.live-app #rv-dash .rv-live-dot { color: #34d399; font-weight: 800; }
+body.live-app #rv-dash .rv-live-dot { color: var(--ex-green); font-weight: 800; }
 body.live-app #rv-dash .rv-updated { color: var(--cx-muted); }
 body.live-app #rv-dash .rv-sheets-lab { color: var(--cx-muted); letter-spacing: 0.08em; }
 body.live-app #rv-dash .rv-sheet-chip {
@@ -1222,7 +1207,7 @@ body.live-app .app-topbar #theme-toggle[aria-pressed="true"] {
   box-shadow: none;
 }
 body.live-app .app-topbar #theme-toggle:hover {
-  border-color: rgba(235, 10, 30, 0.5);
+  border-color: var(--ex-hover);
 }
 
 /* ---------- 17. Sales Report sheets (Employee Schedule, Pace) · fully dark ----------
@@ -1293,7 +1278,7 @@ body.live-app #panel-salesreport .sr-sched-btn {
 }
 body.live-app #panel-salesreport .sr-sched-btn:hover {
   background: var(--cx-raise);
-  border-color: rgba(235, 10, 30, 0.5);
+  border-color: var(--ex-hover);
   color: #fff;
 }
 body.live-app #panel-salesreport .sr-sched-btn--primary {
@@ -1340,7 +1325,7 @@ body.live-app #panel-salesreport .sr-sched-kpi .val {
   letter-spacing: -0.02em;
 }
 body.live-app #panel-salesreport .sr-sched-kpi .sub { color: var(--cx-muted); }
-body.live-app #panel-salesreport .sr-sched-kpi.is-over .val { color: #ff6b7a; }
+body.live-app #panel-salesreport .sr-sched-kpi.is-over .val { color: var(--ex-red); }
 
 /* schedule table: no white rows, tints kept as soft colour */
 body.live-app #panel-salesreport .sr-sched-table { background: transparent; }
@@ -1369,11 +1354,11 @@ body.live-app #panel-salesreport .sr-sched-table .sr-total-row td {
 }
 body.live-app #panel-salesreport .sr-sched-table .sr-total-row td.col-yellow { background-color: #2a2a2b; }
 body.live-app #panel-salesreport .sr-sched-table .sr-total-row td.col-pink { background-color: #2c1a24; }
-body.live-app #panel-salesreport .sr-sched-table .emp-name { color: #93c5fd; font-weight: 700; }
+body.live-app #panel-salesreport .sr-sched-table .emp-name { color: var(--ex-blue); font-weight: 700; }
 body.live-app #panel-salesreport .sr-sched-table .emp-hint { color: var(--cx-muted); }
 body.live-app #panel-salesreport .sr-sched-table .xl-div0,
-body.live-app #panel-salesreport .sr-sched-table .is-cancel-over { color: #ff6b7a; font-weight: 700; }
-body.live-app #panel-salesreport .sr-sched-table .xl-vacation { color: #fbbf24; font-weight: 800; }
+body.live-app #panel-salesreport .sr-sched-table .is-cancel-over { color: var(--ex-red); font-weight: 700; }
+body.live-app #panel-salesreport .sr-sched-table .xl-vacation { color: var(--ex-amber); font-weight: 800; }
 body.live-app #panel-salesreport .sr-row-more {
   background: var(--cx-surface-2);
   border: 1px solid var(--cx-line-strong);
@@ -1391,15 +1376,15 @@ body.live-app #panel-salesreport .sr-status {
   border: 1px solid transparent;
 }
 body.live-app #panel-salesreport .sr-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-body.live-app #panel-salesreport .sr-status.is-on { background: rgba(16, 185, 129, 0.14); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
-body.live-app #panel-salesreport .sr-status.is-below { background: rgba(235, 10, 30, 0.14); color: #ff6b7a; border-color: rgba(235, 10, 30, 0.35); }
-body.live-app #panel-salesreport .sr-status.is-vac { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.3); }
+body.live-app #panel-salesreport .sr-status.is-on { background: var(--ex-green-soft); color: var(--ex-green); border-color: rgba(15, 157, 118, 0.3); }
+body.live-app #panel-salesreport .sr-status.is-below { background: var(--ex-red-soft); color: var(--ex-red); border-color: rgba(235, 10, 30, 0.35); }
+body.live-app #panel-salesreport .sr-status.is-vac { background: var(--ex-amber-soft); color: var(--ex-amber); border-color: rgba(217, 119, 6, 0.3); }
 body.live-app #panel-salesreport .sr-status.is-na { background: rgba(148, 163, 184, 0.14); color: var(--cx-muted); border-color: var(--cx-line-strong); }
 body.live-app #panel-salesreport .sr-leg { color: var(--cx-muted); }
 body.live-app #panel-salesreport .sr-sched-count {
   background: rgba(59, 130, 246, 0.14);
   border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #93c5fd;
+  color: var(--ex-blue);
   border-radius: 999px;
   font-weight: 800;
 }
@@ -1550,7 +1535,7 @@ body.live-app #rv-dash .rv-sheet-tabs :is(.is-active, .active, [aria-selected="t
   color: #fff;
 }
 body.live-app #rv-dash .rv-vin { font-family: var(--ex-num); color: #fff; letter-spacing: 0.02em; }
-body.live-app #rv-dash .rv-timer { font-family: var(--ex-num); color: #fbbf24; font-weight: 700; }
+body.live-app #rv-dash .rv-timer { font-family: var(--ex-num); color: var(--ex-amber); font-weight: 700; }
 body.live-app #rv-dash .rv-was { color: var(--cx-muted); font-size: 0.72rem; }
 
 /* Sales Dashboard: multi-select employee sum */
@@ -1561,11 +1546,21 @@ body.live-app #panel-salesreport .sr-emp-sum {
   padding: 8px 10px;
   margin: 6px 0;
   border-radius: 10px;
-  background: rgba(235, 10, 30, 0.12);
-  border: 1px solid rgba(235, 10, 30, 0.35);
+  background: var(--ex-blue-soft);
+  border: 1px solid rgba(37, 99, 235, 0.35);
   color: #fff;
   font-weight: 700;
   font-size: 0.8rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body.live-app *,
+  html body.live-app *::before,
+  html body.live-app *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
 
   </style>
@@ -1577,6 +1572,132 @@ body.live-app #panel-salesreport .sr-emp-sum {
   <link rel="stylesheet" href="bo-dashboard-fit.css?v=20261103bf1" />
   <link rel="stylesheet" href="matched-vehicles.css?v=20261105mv1" />
   <link rel="stylesheet" href="zone-tracker.css?v=20261105zt2" />
+  <style id="executive-finish">
+    /* Wins over unified-design.css: slate/blue hover, one card shadow, 20% Cars. */
+    :root { --ud-focus: 0 0 0 3px var(--ex-blue-soft); }
+    html body.live-app.toyota-theme .app-topbar .btn:hover,
+    html body.live-app.toyota-theme .app-topbar .sidebar-toggle:hover {
+      border-color: var(--ex-hover) !important;
+    }
+    body.live-app :is(select, textarea, input):focus {
+      border-color: var(--ex-blue) !important;
+      box-shadow: var(--ud-focus) !important;
+    }
+    body.live-app :is(.btn, .btn-ghost, .ghost, .gec-btn, .pt-btn, .bo-btn, .cp-btn):not(.btn-primary):not(.is-primary):hover:not(:disabled) {
+      border-color: var(--ex-hover) !important;
+    }
+    body.live-app :is(.card, .gcc-card, .lxt-card, .tbt-card, .ytd-card, .rv-board-card, .kpi, .bo-kpi) {
+      border-radius: var(--ex-radius);
+      box-shadow: var(--ex-shadow);
+    }
+    body.live-app :is(#dashboard, #sales-host, #bo-dash, #panel-salesreport, #rv-dash) thead th {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    html body.live-app .app-topbar,
+    html body.live-app.toyota-theme .app-topbar,
+    html body.live-app.toyota-theme.theme-dark .app-topbar {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      background: color-mix(in srgb, var(--cx-surface) 94%, transparent) !important;
+    }
+    html body.live-app .pbi-wide-backdrop,
+    html body.sr-mode .pbi-wide-backdrop,
+    html body.live-app .drawer-backdrop {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    html body.live-app .pbi-wide-backdrop,
+    html body.sr-mode .pbi-wide-backdrop {
+      background: rgba(3, 7, 15, 0.82) !important;
+    }
+    html body.live-app .drawer-backdrop {
+      background: rgba(3, 7, 15, 0.72) !important;
+    }
+
+    #bo-20pct {
+      min-width: 0;
+    }
+    #bo-20pct .bo-20pct-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0 0 10px;
+    }
+    #bo-20pct .bo-20pct-kpis.bo-20pct-channels {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    #bo-20pct .bo-20pct-kpis > div {
+      background: var(--cx-surface-2);
+      border: 1px solid var(--cx-line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      min-width: 0;
+    }
+    #bo-20pct .bo-20pct-kpis span {
+      display: block;
+      color: var(--cx-muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    #bo-20pct .bo-20pct-kpis b {
+      display: block;
+      color: #fff;
+      font: 700 1.15rem var(--ex-num);
+      margin-top: 2px;
+    }
+    #bo-20pct .bo-20pct-kpis small {
+      display: block;
+      margin-top: 4px;
+      color: var(--cx-muted);
+      font-size: 11px;
+    }
+    #bo-20pct .bo-20pct-kpis .is-paid b,
+    #bo-20pct .bo-20pct-paid { color: var(--ex-green) !important; }
+    #bo-20pct .bo-20pct-kpis .is-not b,
+    #bo-20pct .bo-20pct-not { color: var(--ex-red) !important; }
+    #bo-20pct .table-wrap { max-height: 220px; overflow: auto; }
+    #bo-20pct table tbody tr { cursor: pointer; }
+    #bo-20pct table tbody tr:hover td { background-color: rgba(255, 255, 255, 0.045); }
+
+    @media (min-width: 1101px) and (min-height: 640px) {
+      body.bo-dash-mode #bo-dash.bo-tower {
+        grid-template-rows:
+          var(--bo-head-h) var(--bo-tool-h) auto var(--bo-kpi-h) minmax(168px, auto)
+          var(--bo-row) var(--bo-row) var(--bo-row);
+        grid-template-areas:
+          "head head head head head"
+          "tool tool tool tool tool"
+          "chip chip chip chip chip"
+          "kpi  kpi  kpi  kpi  kpi"
+          "pct  pct  pct  pct  pct"
+          "mdl  mdl  sts  age  ins"
+          "prd  prd  sum  typ  shw"
+          "prd  prd  ppl  old  qlt";
+      }
+      body.bo-dash-mode #bo-dash #bo-20pct {
+        grid-area: pct;
+        min-height: 0;
+        overflow: auto;
+      }
+    }
+    @media (max-width: 860px) {
+      #bo-20pct .bo-20pct-kpis { grid-template-columns: 1fr 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html body.live-app *,
+      html body.live-app *::before,
+      html body.live-app *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
   <style>
     /* Delivery report · one full-viewport dashboard beside the report-sheet nav */
     html body.live-app.toyota-theme.delivery-mode {
@@ -2358,6 +2479,16 @@ body.live-app #panel-salesreport .sr-emp-sum {
           <div class="bo-chips" id="bo-chips"></div>
 
           <div class="bo-kpis" id="bo-kpis"></div>
+
+          <article class="card bo-20pct" id="bo-20pct">
+            <div class="pbi-viz-head">
+              <div>
+                <h2>20% Cars</h2>
+                <p class="hint">CAMRY · LC300 · LC70 · RAV4 · HILUX SC · HILUX DC</p>
+              </div>
+            </div>
+            <div id="bo-20pct-body"></div>
+          </article>
 
           <div class="bo-fit-main">
             <div class="bo-row bo-row-insights">
@@ -7564,13 +7695,13 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (!cfg || !cfg.display) return;
       const { ctx } = chart;
       const suffix = cfg.suffix || "";
-      const fontFamily = cfg.fontFamily || "'Outfit', 'Segoe UI', sans-serif";
+      const fontFamily = cfg.fontFamily || "'Manrope', 'Segoe UI', sans-serif";
       const horizontal = chart.options.indexAxis === "y";
       const canvasEl = chart.canvas;
       const fitRow = Number((canvasEl && canvasEl.dataset && canvasEl.dataset.fitRowPx) || 0);
       const fitCompact = horizontal && fitRow > 0 && fitRow < 30;
       ctx.save();
-      ctx.font = `700 ${fitCompact ? 9 : 12}px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
+      ctx.font = `700 ${fitCompact ? 9 : 12}px ${cfg.figureFont || "'Space Grotesk', 'Manrope', sans-serif"}`;
       const labelColor = cfg.color || "#111111";
       ctx.fillStyle = labelColor;
       ctx.textBaseline = "middle";
@@ -7626,7 +7757,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
         const fill = ds.pointLabelBg || ds.borderColor || "#2563eb";
-        ctx.font = `700 10px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
+        ctx.font = `700 10px ${cfg.figureFont || "'Space Grotesk', 'Manrope', sans-serif"}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         meta.data.forEach((el, i) => {
@@ -7683,9 +7814,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
-    const colors = ["#111111", "#eb0a1e", "#0f766e", "#6b7280", "#b45309", "#374151", "#9ca3af", "#c40718"];
-    const fontFamily = "'Outfit', 'Segoe UI', sans-serif";
-    const figureFont = "'Space Grotesk', 'Outfit', sans-serif";
+    const colors = ["#8d9bb0", "#2563eb", "#0f9d76", "#d97706", "#eb0a1e", "#64748b", "#7aa2ff", "#0d9488"];
+    const fontFamily = "'Manrope', 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif";
+    const figureFont = "'Space Grotesk', 'Manrope', sans-serif";
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
     const cockpit = !!canvas.closest("#panel-salesreport")
@@ -7807,7 +7938,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         labels,
         datasets: (opts.datasets || [{
           data: values,
-          backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : "rgba(235, 10, 30, 0.88)"),
+          backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : "rgba(37, 99, 235, 0.82)"),
           borderWidth: type === "doughnut" ? 3 : 0,
           borderColor: type === "doughnut" ? (cockpit ? "#0d1420" : "#fff") : undefined,
           borderRadius: type === "bar" ? 4 : 0,
@@ -7826,7 +7957,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         responsive: true,
         maintainAspectRatio: false,
         ...(type === "doughnut" && opts.cutout ? { cutout: opts.cutout } : {}),
-        animation: { duration: 320, easing: "easeOutQuart" },
+        animation: { duration: 250, easing: "easeOutQuart" },
         layout: {
           padding: {
             left: horizontal ? (opts.categoryExtras ? 8 : 6) : 4,
@@ -7946,10 +8077,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
       },
     };
     const existing = charts[id];
-    if (cockpit && existing && existing.canvas === canvas && existing.config.type === type) {
+    const canReuse = existing && existing.canvas === canvas && existing.config && existing.config.type === type;
+    if (canReuse) {
+      chartConfig.options.animation = { duration: 0, easing: "easeOutQuart" };
       existing.data = chartConfig.data;
       existing.options = chartConfig.options;
-      existing.update();
+      existing.update("none");
       return;
     }
     if (existing) existing.destroy();
@@ -9263,6 +9396,27 @@ body.live-app #panel-salesreport .sr-emp-sum {
     ]);
     appendObjectSheet(wb, "Executive Insights", insights);
     appendObjectSheet(wb, "Strategic Products", strategic);
+    const pct20 = build20PctCars(list);
+    appendObjectSheet(wb, "20% Cars", [
+      ...pct20.rows.map((r) => ({
+        Product: r.product,
+        Total: r.total,
+        Paid: r.paid,
+        "Not Paid": r.notPaid,
+        B2C: r.b2c,
+        Telesales: r.telesales,
+        Unknown: r.unknown,
+      })),
+      {
+        Product: "TOTAL",
+        Total: pct20.totals.total,
+        Paid: pct20.totals.paid,
+        "Not Paid": pct20.totals.notPaid,
+        B2C: pct20.totals.b2c,
+        Telesales: pct20.totals.telesales,
+        Unknown: pct20.totals.unknown,
+      },
+    ]);
     appendObjectSheet(wb, "Each Product", byProduct);
     appendObjectSheet(wb, "Top 10 Product Backlog", topBacklog);
     appendObjectSheet(wb, "Confirmation by Product", byProduct.map((r) => ({
@@ -13134,6 +13288,218 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return "ok";
   }
 
+  const PCT20_ORDER = [
+    { key: "CAMRY", label: "CAMRY" },
+    { key: "LC300", label: "LC300" },
+    { key: "LC70", label: "LC70" },
+    { key: "RAV4", label: "RAV4" },
+    { key: "HILUXSC", label: "HILUX SC" },
+    { key: "HILUXDC", label: "HILUX DC" },
+  ];
+  const PCT20_ALIAS = {
+    CAMRY: "CAMRY",
+    LC300: "LC300",
+    LANDCRUISER300: "LC300",
+    LC70: "LC70",
+    LANDCRUISER70: "LC70",
+    RAV4: "RAV4",
+    HILUXSC: "HILUXSC",
+    HILUXSINGLECAB: "HILUXSC",
+    HILUXSINGLE: "HILUXSC",
+    HILUXDC: "HILUXDC",
+    HILUXDOUBLECAB: "HILUXDC",
+    HILUXDOUBLE: "HILUXDC",
+  };
+
+  function map20PctProductKey(product) {
+    const k = boeNormProductKey(product);
+    return PCT20_ALIAS[k] || "";
+  }
+
+  function findBoPaidLetter() {
+    const rows = slots.backorder.rows || [];
+    const sample = rows.find(Boolean) || null;
+    const aliases = HEADER_ALIASES.paid || [];
+    const letter = findHeaderLetter(sample, aliases.map((a) => {
+      const na = String(a).toLowerCase();
+      return (n) => n === na || n.includes(na);
+    }));
+    return letter || "J";
+  }
+
+  function rawBoPaidAmount(bo, paidLetter) {
+    const raw = (slots.backorder.rows || [])[bo.id];
+    if (!raw) return null;
+    const cell = cellByLetter(raw, paidLetter);
+    const s = String(cell ?? "").replace(/[, ]/g, "").trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function bo20PctOrderNumber(bo) {
+    let s = String(bo && bo.boNumber || "").trim();
+    if (!s) {
+      const raw = (slots.backorder.rows || [])[bo && bo.id];
+      if (raw) s = String(cellByLetter(raw, "F") ?? "").trim();
+    }
+    return s.replace(/\.0+$/, "");
+  }
+
+  function classify20PctChannel(boNumber) {
+    const s = String(boNumber || "").trim().replace(/\.0+$/, "");
+    if (!s) return "unknown";
+    const ch = s.charAt(0);
+    if (ch === "5") return "b2c";
+    if (ch >= "0" && ch <= "9") return "telesales";
+    return "unknown";
+  }
+
+  function empty20PctRow(label) {
+    return {
+      product: label,
+      total: 0,
+      paid: 0,
+      notPaid: 0,
+      b2c: 0,
+      b2cPaid: 0,
+      telesales: 0,
+      telesalesPaid: 0,
+      unknown: 0,
+      sampleProduct: "",
+      sampleCounts: {},
+    };
+  }
+
+  function pick20PctSample(row) {
+    let best = row.sampleProduct || "";
+    let n = 0;
+    Object.keys(row.sampleCounts || {}).forEach((name) => {
+      const c = row.sampleCounts[name] || 0;
+      if (c > n) {
+        n = c;
+        best = name;
+      }
+    });
+    return best || row.product;
+  }
+
+  function build20PctCars(list) {
+    const buckets = {};
+    PCT20_ORDER.forEach((p) => { buckets[p.key] = empty20PctRow(p.label); });
+    const paidLetter = findBoPaidLetter();
+    (list || []).forEach((bo) => {
+      const key = map20PctProductKey(bo.product);
+      if (!key || !buckets[key]) return;
+      const row = buckets[key];
+      row.total += 1;
+      const orig = String(bo.product || "");
+      if (orig) row.sampleCounts[orig] = (row.sampleCounts[orig] || 0) + 1;
+      const paidAmt = rawBoPaidAmount(bo, paidLetter);
+      const isPaidAmt = paidAmt != null && paidAmt > 0;
+      if (isPaidAmt) row.paid += 1;
+      else row.notPaid += 1;
+      const ch = classify20PctChannel(bo20PctOrderNumber(bo));
+      if (ch === "b2c") {
+        row.b2c += 1;
+        if (isPaidAmt) row.b2cPaid += 1;
+      } else if (ch === "telesales") {
+        row.telesales += 1;
+        if (isPaidAmt) row.telesalesPaid += 1;
+      } else {
+        row.unknown += 1;
+      }
+    });
+    const rows = PCT20_ORDER.map((p) => {
+      const row = buckets[p.key];
+      row.sampleProduct = pick20PctSample(row);
+      return row;
+    });
+    const totals = rows.reduce((t, r) => {
+      t.total += r.total;
+      t.paid += r.paid;
+      t.notPaid += r.notPaid;
+      t.b2c += r.b2c;
+      t.b2cPaid += r.b2cPaid;
+      t.telesales += r.telesales;
+      t.telesalesPaid += r.telesalesPaid;
+      t.unknown += r.unknown;
+      return t;
+    }, empty20PctRow("TOTAL"));
+    totals.product = "TOTAL";
+    return { rows, totals };
+  }
+
+  function renderBo20PctCars(list) {
+    const host = document.getElementById("bo-20pct-body");
+    if (!host) return;
+    const { rows, totals } = build20PctCars(list);
+    console.info("[20% Cars]", totals);
+    const paidPct = totals.total ? Math.round((totals.paid / totals.total) * 100) : 0;
+    const unknownLine = totals.unknown
+      ? `<div><span>Unknown</span><b>${escapeHtml(formatNumber(totals.unknown))}</b></div>`
+      : "";
+    host.innerHTML = `
+      <div class="bo-20pct-kpis">
+        <div><span>Total 20% cars</span><b>${escapeHtml(formatNumber(totals.total))}</b></div>
+        <div class="is-paid"><span>Paid</span><b>${escapeHtml(formatNumber(totals.paid))}</b></div>
+        <div class="is-not"><span>Not paid</span><b>${escapeHtml(formatNumber(totals.notPaid))}</b></div>
+        <div><span>Paid %</span><b>${escapeHtml(String(paidPct))}%</b></div>
+      </div>
+      <div class="bo-20pct-kpis bo-20pct-channels">
+        <div>
+          <span>B2C</span>
+          <b>${escapeHtml(formatNumber(totals.b2c))}</b>
+          <small><em class="bo-20pct-paid">${escapeHtml(formatNumber(totals.b2cPaid))} paid</em>
+          · <em class="bo-20pct-not">${escapeHtml(formatNumber(totals.b2c - totals.b2cPaid))} not paid</em></small>
+        </div>
+        <div>
+          <span>Telesales</span>
+          <b>${escapeHtml(formatNumber(totals.telesales))}</b>
+          <small><em class="bo-20pct-paid">${escapeHtml(formatNumber(totals.telesalesPaid))} paid</em>
+          · <em class="bo-20pct-not">${escapeHtml(formatNumber(totals.telesales - totals.telesalesPaid))} not paid</em></small>
+        </div>
+        ${unknownLine}
+      </div>
+      <div class="table-wrap">
+        <table class="bo-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th class="num">Total</th>
+              <th class="num">Paid</th>
+              <th class="num">Not Paid</th>
+              <th class="num">B2C</th>
+              <th class="num">Telesales</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r) => {
+              const filter = r.sampleProduct || r.product;
+              return `<tr class="bo-prod-row" data-bo-product="${escapeHtml(filter)}">
+                <td>${escapeHtml(r.product)}</td>
+                <td class="num">${escapeHtml(formatNumber(r.total))}</td>
+                <td class="num bo-20pct-paid">${escapeHtml(formatNumber(r.paid))}</td>
+                <td class="num bo-20pct-not">${escapeHtml(formatNumber(r.notPaid))}</td>
+                <td class="num">${escapeHtml(formatNumber(r.b2c))}</td>
+                <td class="num">${escapeHtml(formatNumber(r.telesales))}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+          <tfoot>
+            <tr class="bo-total-row">
+              <td><b>TOTAL</b></td>
+              <td class="num"><b>${escapeHtml(formatNumber(totals.total))}</b></td>
+              <td class="num bo-20pct-paid"><b>${escapeHtml(formatNumber(totals.paid))}</b></td>
+              <td class="num bo-20pct-not"><b>${escapeHtml(formatNumber(totals.notPaid))}</b></td>
+              <td class="num"><b>${escapeHtml(formatNumber(totals.b2c))}</b></td>
+              <td class="num"><b>${escapeHtml(formatNumber(totals.telesales))}</b></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
+  }
+
   function renderBoKpis(m, extras) {
     const x = extras || {};
     const returned = Number(x.returned) || 0;
@@ -14767,7 +15133,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
               const midX = ((props.base || 0) + (props.x || 0)) / 2;
               ctx.save();
               ctx.fillStyle = di === 2 ? "#0f172a" : "#fff";
-              ctx.font = "700 9px Outfit, sans-serif";
+              ctx.font = "700 9px Manrope, sans-serif";
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.fillText(formatNumber(v), midX, props.y);
@@ -18844,6 +19210,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const aggs = productAgg(list);
     const returned = Array.isArray(d.cancelled) ? d.cancelled.length : 0;
     renderBoKpis(m, { returned });
+    renderBo20PctCars(list);
     renderBoInsights(list, m);
     renderBoStrategic(list);
     renderBoProductTable(aggs, m);
@@ -21141,10 +21508,10 @@ body.live-app #panel-salesreport .sr-emp-sum {
           const coords = modeLabelCoords(pt);
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.font = "700 11px Outfit, Segoe UI, sans-serif";
+          ctx.font = "700 11px Manrope, Segoe UI, sans-serif";
           ctx.fillStyle = "#111111";
           ctx.fillText(short, x, y + size / 2 + 2);
-          ctx.font = "600 10px 'Space Grotesk', Outfit, sans-serif";
+          ctx.font = "600 10px 'Space Grotesk', Manrope, sans-serif";
           ctx.fillStyle = "#6b7280";
           ctx.fillText(coords, x, y + size / 2 + 16);
         });
@@ -21272,7 +21639,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         ctx.stroke();
         if (useCarImages || true) {
           ctx.setLineDash([]);
-          ctx.font = "700 10px Outfit, Segoe UI, sans-serif";
+          ctx.font = "700 10px Manrope, Segoe UI, sans-serif";
           ctx.fillStyle = "rgba(235, 10, 30, 0.55)";
           ctx.textAlign = "left";
           ctx.fillText("HIGH DEMAND · LOW STOCK", left + 8, top + 14);
@@ -21339,7 +21706,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
               display: true,
               text: mode === "ageing" ? "Allocation Ageing (days)" : "Stock Coverage (Available / BO)",
               color: "#111111",
-              font: { weight: "700", family: "'Outfit', sans-serif" },
+              font: { weight: "700", family: "'Manrope', sans-serif" },
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
             beginAtZero: true,
@@ -21350,7 +21717,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
               display: true,
               text: "Sales Velocity (units / day)",
               color: "#111111",
-              font: { weight: "700", family: "'Outfit', sans-serif" },
+              font: { weight: "700", family: "'Manrope', sans-serif" },
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
             beginAtZero: true,
