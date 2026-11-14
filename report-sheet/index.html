@@ -1724,7 +1724,7 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
   </style>
   <!-- Delivery full-screen rules load last (after unified-design) -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <link rel="stylesheet" href="rv-redesign.css?v=20261031rv3" />
+  <link rel="stylesheet" href="rv-redesign.css?v=20261114wide1" />
   <link rel="stylesheet" href="unified-design.css?v=20261103ud2" />
   <link rel="stylesheet" href="bo-dashboard-fit.css?v=20261103bf1" />
   <link rel="stylesheet" href="matched-vehicles.css?v=20261105mv1" />
@@ -2959,15 +2959,18 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
           <div class="bo-kpis" id="rv-kpis"></div>
           <div class="rv-main">
             <section class="rv-board" id="rv-board" aria-label="Live sheet, marketing orders, and VIN assignment history">
-              <article class="rv-board-card rv-live-card">
+              <article class="rv-board-card rv-live-card" data-rv-box="live">
                 <header class="rv-board-h">
                   <div>
                     <h3>Live sheet</h3>
                     <p id="rv-live-meta">Same columns as the reserved orders admin live sheet</p>
                   </div>
-                  <div class="rv-sheet-tabs" role="tablist">
-                    <button type="button" class="is-on" data-rv-sheet="live">Live</button>
-                    <button type="button" data-rv-sheet="removed">Sold VINs</button>
+                  <div class="rv-head-tools">
+                    <div class="rv-sheet-tabs" role="tablist">
+                      <button type="button" class="is-on" data-rv-sheet="live">Live</button>
+                      <button type="button" data-rv-sheet="removed">Sold VINs</button>
+                    </div>
+                    <button type="button" class="rv-box-wide-btn" data-rv-box-wide="live" aria-pressed="false">Wide</button>
                   </div>
                 </header>
                 <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
@@ -2976,22 +2979,24 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
                 <p class="foot" id="rv-table-foot"></p>
               </article>
               <aside class="rv-side">
-                <article class="rv-board-card rv-mkt-card-wrap">
+                <article class="rv-board-card rv-mkt-card-wrap" data-rv-box="mkt">
                   <header class="rv-board-h">
                     <div>
                       <h3 dir="rtl">طلبات التسويق</h3>
                       <p id="rv-mkt-count">Wide to review · Done stamps the employee side</p>
                     </div>
+                    <button type="button" class="rv-box-wide-btn" data-rv-box-wide="mkt" aria-pressed="false">Wide</button>
                   </header>
                   <input id="rv-mkt-search" type="search" placeholder="Search marketing orders" aria-label="Search marketing orders" />
                   <div class="rv-mkt-list" id="rv-mkt-rows"></div>
                 </article>
-                <article class="rv-board-card rv-history-card">
+                <article class="rv-board-card rv-history-card" data-rv-box="history">
                   <header class="rv-board-h">
                     <div>
                       <h3>VIN assignment</h3>
                       <p id="rv-history-count">Who this VIN is with on reserved orders</p>
                     </div>
+                    <button type="button" class="rv-box-wide-btn" data-rv-box-wide="history" aria-pressed="false">Wide</button>
                   </header>
                   <input id="rv-history-search" type="search" placeholder="Search VIN or employee" aria-label="Search assignment history" />
                   <div class="rv-history-list" id="rv-history"></div>
@@ -2999,6 +3004,7 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
               </aside>
             </section>
           </div>
+          <div class="rv-box-wide-scrim" id="rv-box-wide-scrim" hidden></div>
           <div class="rv-mkt-wide" id="rv-mkt-wide" hidden>
             <div class="rv-mkt-wide-card" role="dialog" aria-modal="true" aria-labelledby="rv-mkt-wide-title">
               <header class="rv-mkt-wide-h">
@@ -3711,7 +3717,7 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
     </div>
   </div>
 
-<script src="report-app.js?v=20261114live1" defer></script>
+<script src="report-app.js?v=20261114wide1" defer></script>
 <script id="executive-present">
 /* Executive presentation mode · visual only.
    Adds a "Present" button to the top bar. It hides the sidebar, search and

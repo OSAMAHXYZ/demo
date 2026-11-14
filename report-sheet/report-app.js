@@ -19739,6 +19739,7 @@
   let rvBoardOrders = {};
   let rvHistoryPage = 1;
   let rvSheetMode = "live";
+  let rvSoldKind = "";
 
   function rvPad(n) { return String(n).padStart(2, "0"); }
   function rvRemain(deadline) {
@@ -19806,6 +19807,52 @@
   function closeRvMarketingWide() {
     const box = $("#rv-mkt-wide");
     if (box) box.hidden = true;
+  }
+  function rvBoxCard(which) {
+    return document.querySelector(`#rv-dash .rv-board-card[data-rv-box="${which}"]`);
+  }
+  function syncRvBoxWideButtons() {
+    document.querySelectorAll("#rv-dash [data-rv-box-wide]").forEach((btn) => {
+      const card = rvBoxCard(btn.getAttribute("data-rv-box-wide") || "");
+      const on = !!(card && card.classList.contains("is-wide"));
+      btn.textContent = on ? "Close" : "Wide";
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+  function closeRvBoxWide() {
+    document.body.classList.remove("rv-box-wide-open");
+    document.querySelectorAll("#rv-dash .rv-board-card.is-wide").forEach((el) => el.classList.remove("is-wide"));
+    const scrim = $("#rv-box-wide-scrim");
+    if (scrim) scrim.hidden = true;
+    syncRvBoxWideButtons();
+  }
+  function openRvBoxWide(which) {
+    const card = rvBoxCard(which);
+    if (!card) return;
+    document.querySelectorAll("#rv-dash .rv-board-card.is-wide").forEach((el) => {
+      if (el !== card) el.classList.remove("is-wide");
+    });
+    card.classList.add("is-wide");
+    document.body.classList.add("rv-box-wide-open");
+    const scrim = $("#rv-box-wide-scrim");
+    if (scrim) scrim.hidden = false;
+    syncRvBoxWideButtons();
+  }
+  function openRvKpiWide(kind) {
+    if (kind === "marketing") {
+      openRvBoxWide("mkt");
+      return;
+    }
+    if (kind === "reassigned") {
+      openRvBoxWide("history");
+      return;
+    }
+    if (kind === "sold") { rvSheetMode = "removed"; rvSoldKind = ""; }
+    else if (kind === "delivered") { rvSheetMode = "removed"; rvSoldKind = "delivered"; }
+    else if (kind === "proforma") { rvSheetMode = "removed"; rvSoldKind = "proforma"; }
+    else { rvSheetMode = "live"; rvSoldKind = ""; }
+    paintRvLiveSheet(($("#rv-live-search") || {}).value || "");
+    openRvBoxWide("live");
   }
   function openRvMarketingWide(id, orderNumber) {
     const item = rvFindMarketing(id, orderNumber);
@@ -19891,17 +19938,19 @@
       const delivered = removedOrders.filter((order) => order.soldKind === "delivered").length;
       const proforma = removedOrders.filter((order) => order.soldKind === "proforma").length;
       const cards = [
-        ["Live VINs", new Set(liveOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-live", "On the sheet now", '<path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2A2 2 0 0 1 19 7.5L21 13v5h-2.5M3 13v5h2.5M3 13h18"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>'],
-        ["Sold VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed", "Left the sheet", '<path d="M5 12.5l4.5 4.5L19 7.5"/>'],
-        ["Delivered", delivered, "rv-tone-live", "Invoiced · Sales Raw col V", '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.7"/><circle cx="17" cy="17.5" r="1.7"/>'],
-        ["Proforma", proforma, "rv-tone-mkt", "Sold, not invoiced yet", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'],
-        ["Marketing", (data.requests || []).filter((item) => !item.cancelled && !item.done).length, "rv-tone-amber", "Open orders", '<path d="M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6"/>'],
-        ["Reassigned", counts.reassigned || 0, "rv-tone-move", "Moved to another advisor", '<path d="M7 7h11l-3-3M17 17H6l3 3"/>'],
+        ["live", "Live VINs", new Set(liveOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-live", "On the sheet now", '<path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2A2 2 0 0 1 19 7.5L21 13v5h-2.5M3 13v5h2.5M3 13h18"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>'],
+        ["sold", "Sold VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed", "Left the sheet", '<path d="M5 12.5l4.5 4.5L19 7.5"/>'],
+        ["delivered", "Delivered", delivered, "rv-tone-live", "Invoiced · Sales Raw col V", '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.7"/><circle cx="17" cy="17.5" r="1.7"/>'],
+        ["proforma", "Proforma", proforma, "rv-tone-mkt", "Sold, not invoiced yet", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'],
+        ["marketing", "Marketing", (data.requests || []).filter((item) => !item.cancelled && !item.done).length, "rv-tone-amber", "Open orders", '<path d="M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6"/>'],
+        ["reassigned", "Reassigned", counts.reassigned || 0, "rv-tone-move", "Moved to another advisor", '<path d="M7 7h11l-3-3M17 17H6l3 3"/>'],
       ];
-      kpis.innerHTML = cards.map(([label, value, tone, sub, ico]) => `<div class="bo-kpi ${tone}"><span class="rv-kico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ico}</svg></span><span class="lab">${escapeHtml(label)}</span><strong class="val">${escapeHtml(String(value))}</strong><span class="rv-ksub">${escapeHtml(sub)}</span></div>`).join("");
+      kpis.innerHTML = cards.map(([key, label, value, tone, sub, ico]) => `<button type="button" class="bo-kpi ${tone}" data-rv-kpi="${key}" title="Open ${escapeHtml(label)} wide"><span class="rv-kico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ico}</svg></span><span class="lab">${escapeHtml(label)}</span><strong class="val">${escapeHtml(String(value))}</strong><span class="rv-ksub">${escapeHtml(sub)}</span></button>`).join("");
     }
     if (table) {
-      const pool = rvSheetMode === "removed" ? removedOrders : liveOrders;
+      const pool = rvSheetMode === "removed"
+        ? removedOrders.filter((order) => !rvSoldKind || order.soldKind === rvSoldKind)
+        : liveOrders;
       const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.statusNote, order.leaderNote, order.suffix, order.soldLabel, order.soldKind, rvUpdatedBy(order)].join(" ").toLowerCase().includes(q));
       const head = rvSheetMode === "removed"
         ? ["Sold as", "Salesman name", "Customer name", "Order number", "Product", "VIN number", "Last status", "Invoice (V)", "Where"]
@@ -19951,7 +20000,13 @@
               <td>${rvQueueOrderHtml(order, 3)}</td>
             </tr>`;
           }).join("")}</tbody></table>`
-        : `<p class="foot">${rvSheetMode === "removed" ? "No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw." : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
+        : `<p class="foot">${rvSheetMode === "removed"
+          ? (rvSoldKind === "delivered"
+            ? "No delivered VINs yet."
+            : rvSoldKind === "proforma"
+              ? "No proforma VINs yet."
+              : "No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw.")
+          : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
     }
     const mktQuery = String(($("#rv-mkt-search") || {}).value || "").trim().toLowerCase();
     const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.display || item.at} ${item.doneBy || ""} ${(item.fields || []).map((f) => `${f.label} ${f.value}`).join(" ")}`.toLowerCase().includes(mktQuery));
@@ -20021,6 +20076,20 @@
     root.addEventListener("click", (e) => {
       if (e.target === $("#rv-mkt-wide")) { closeRvMarketingWide(); return; }
       if (e.target.closest("#rv-mkt-wide-close")) { closeRvMarketingWide(); return; }
+      if (e.target === $("#rv-box-wide-scrim")) { closeRvBoxWide(); return; }
+      const boxWide = e.target.closest("[data-rv-box-wide]");
+      if (boxWide) {
+        const which = boxWide.getAttribute("data-rv-box-wide") || "live";
+        const card = rvBoxCard(which);
+        if (card && card.classList.contains("is-wide")) closeRvBoxWide();
+        else openRvBoxWide(which);
+        return;
+      }
+      const kpi = e.target.closest("[data-rv-kpi]");
+      if (kpi) {
+        openRvKpiWide(kpi.getAttribute("data-rv-kpi") || "live");
+        return;
+      }
       const soldRow = e.target.closest("[data-rv-sold]");
       if (soldRow) {
         const vin = soldRow.getAttribute("data-rv-sold") || "";
@@ -20037,6 +20106,7 @@
       const sheetTab = e.target.closest("[data-rv-sheet]");
       if (sheetTab) {
         rvSheetMode = sheetTab.getAttribute("data-rv-sheet") || "live";
+        rvSoldKind = "";
         paintRvLiveSheet(($("#rv-live-search") || {}).value || "");
         return;
       }
@@ -20066,8 +20136,15 @@
     const exit = $("#rv-exit");
     if (exit) exit.addEventListener("click", () => {
       closeRvMarketingWide();
+      closeRvBoxWide();
       if (typeof window.switchReportPanel === "function") window.switchReportPanel("salesreport");
       else switchPanel("ytdsales");
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const mkt = $("#rv-mkt-wide");
+      if (mkt && !mkt.hidden) { closeRvMarketingWide(); return; }
+      if (document.body.classList.contains("rv-box-wide-open")) closeRvBoxWide();
     });
   }
 
