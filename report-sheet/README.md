@@ -25,3 +25,11 @@ Stock & Back Order Excel dashboard — separate from Delivery Hub.
 - Client-side only — files stay in the browser (IndexedDB + localStorage)
 - Targets and workbooks are broadcast to the live tab on Push
 - Sales formulas use Col **A** (name), **P** (proforma date), **V** (delivery date)
+
+## Code layout (speed)
+
+- `index.html` holds the markup only; the dashboard code lives in **`report-app.js`** (it used to be a 950 KB inline script, re-downloaded on every visit because HTML is `no-store`).
+- Every `<script>` in `index.html` uses `defer`: the page paints first, scripts still run in the same order before `DOMContentLoaded`.
+- After editing any JS/CSS file, change its `?v=` value in `index.html`.
+- `server.js` gzip/brotli-compresses HTML/JS/CSS/JSON (about 5× smaller); Cache-Control rules are unchanged.
+- Panel switch animation speed: `SPEED` at the top of `scroll-transition.js` (1 = original 3.2 s, 0.5 = 1.6 s).

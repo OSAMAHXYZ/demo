@@ -8968,6 +8968,91 @@ if (fs.existsSync(adminDist)) {
   });
 }
 
+// Compressed static text files (HTML / JS / CSS / JSON / SVG).
+// Express sends files uncompressed; the Report Sheet alone is ~4 MB of text per visit.
+// Each file is compressed once per version (path + size + mtime) and kept in memory.
+// Cache-Control stays exactly as the express.static rules below. Anything unusual
+// (range requests, dotfiles, missing files, folders) falls through to express.static.
+const zlib = require('zlib');
+const COMPRESSIBLE_EXT = /\.(html?|js|mjs|css|json|svg|txt|csv|map)$/i;
+const COMPRESS_MIN_BYTES = 1024;
+const COMPRESS_MAX_BYTES = 8 * 1024 * 1024;
+const compressedStatic = new Map();
+let compressedStaticBytes = 0;
+const COMPRESSED_CACHE_LIMIT = 64 * 1024 * 1024;
+
+function staticCacheControl(filePath) {
+  if (/\.html?$/i.test(filePath)) return 'no-store, no-cache, must-revalidate, max-age=0';
+  if (/\.(js|css)$/i.test(filePath)) return 'no-cache';
+  return '';
+}
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (req.headers.range) return next();
+  const accept = String(req.headers['accept-encoding'] || '');
+  const encoding = /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : '';
+  if (!encoding) return next();
+
+  let rel;
+  try { rel = decodeURIComponent(req.path); } catch { return next(); }
+  if (rel.includes('\0') || rel.split('/').some((seg) => seg.startsWith('.'))) return next();
+  if (rel.endsWith('/')) rel += 'index.html';
+  const filePath = path.join(ROOT, rel);
+  if (!filePath.startsWith(ROOT + path.sep) || !COMPRESSIBLE_EXT.test(filePath)) return next();
+
+  let stat;
+  try { stat = fs.statSync(filePath); } catch { return next(); }
+  if (!stat.isFile() || stat.size < COMPRESS_MIN_BYTES || stat.size > COMPRESS_MAX_BYTES) return next();
+
+  const key = `${encoding}:${filePath}`;
+  const version = `${stat.size}-${stat.mtimeMs}`;
+  let entry = compressedStatic.get(key);
+  if (!entry || entry.version !== version) {
+    let body;
+    try {
+      const raw = fs.readFileSync(filePath);
+      body = encoding === 'br'
+        ? zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } })
+        : zlib.gzipSync(raw, { level: 6 });
+    } catch {
+      return next();
+    }
+    if (entry) compressedStaticBytes -= entry.body.length;
+    if (compressedStaticBytes + body.length > COMPRESSED_CACHE_LIMIT) {
+      compressedStatic.clear();
+      compressedStaticBytes = 0;
+    }
+    entry = {
+      version,
+      body,
+      etag: `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}-${encoding}"`,
+      lastModified: stat.mtime.toUTCString(),
+    };
+    compressedStatic.set(key, entry);
+    compressedStaticBytes += body.length;
+  }
+
+  res.setHeader('Vary', 'Accept-Encoding');
+  const cacheControl = staticCacheControl(filePath);
+  if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+  if (/\.html?$/i.test(filePath)) {
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  res.setHeader('ETag', entry.etag);
+  res.setHeader('Last-Modified', entry.lastModified);
+  if (req.headers['if-none-match'] === entry.etag) {
+    res.statusCode = 304;
+    return res.end();
+  }
+  res.type(path.extname(filePath));
+  res.setHeader('Content-Encoding', encoding);
+  res.setHeader('Content-Length', entry.body.length);
+  if (req.method === 'HEAD') return res.end();
+  return res.end(entry.body);
+});
+
 // Static files (hub UI + assets)
 app.use(express.static(ROOT, {
   extensions: ['html'],
@@ -8995,11 +9080,29 @@ loadStore();
  * Toyota Back Order file uploaded on bo-hub/bo-data-admin.html (stored by bo-data-api as bo-data/bo-data.json).
  * Reserved Orders reads it for the queue position; the Report Sheet's own Back Order slot is only the fallback.
  */
+/**
+ * Parsed-file cache for the Back Order sources Reserved Orders reads on every request.
+ * GET /api/reserved-orders/live used to unzip and parse the ~800 KB Back Order workbook on every call
+ * (~380 ms of blocked server per call, every 3 s per open employee page). The parse result is reused
+ * until the file's size or modified time changes. Callers only read the rows.
+ */
+const parsedFileCache = new Map();
+function readParsedFile(kind, filePath, parse) {
+  const stat = fs.statSync(filePath);
+  const key = `${kind}:${filePath}`;
+  const version = `${stat.size}-${stat.mtimeMs}`;
+  const hit = parsedFileCache.get(key);
+  if (hit && hit.version === version) return hit.value;
+  const value = parse(fs.readFileSync(filePath));
+  parsedFileCache.set(key, { version, value });
+  return value;
+}
+
 function readBoHubToyota() {
   try {
     const file = path.join(PERSISTENT_ROOT, 'bo-data', 'bo-data.json');
     if (!fs.existsSync(file)) return null;
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const data = readParsedFile('json', file, (buf) => JSON.parse(buf.toString('utf8')));
     if (!data || !Array.isArray(data.rows) || !data.rows.length) return null;
     return {
       headers: Array.isArray(data.headers) ? data.headers : [],
@@ -9021,6 +9124,31 @@ try {
   console.error('[report-sheet] early git seed failed', err);
 }
 
+// Every open Reserved Orders page polls /live every 3 s (~230 KB of JSON). Send it gzipped,
+// and answer 304 when the browser already has the same data. Registered before the route.
+app.get('/api/reserved-orders/live', (req, res, next) => {
+  if (!/\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) return next();
+  res.json = (body) => {
+    const text = JSON.stringify(body);
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (res.statusCode === 200) {
+      const etag = `W/"${require('crypto').createHash('sha1').update(text).digest('hex').slice(0, 24)}-gz"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'no-cache');
+      if (req.headers['if-none-match'] === etag) {
+        res.statusCode = 304;
+        return res.end();
+      }
+    }
+    const gz = zlib.gzipSync(text, { level: 5 });
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Content-Length', gz.length);
+    return res.end(gz);
+  };
+  next();
+});
+
 reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
   storeDir: REPORT_SHEET_DIR,
   // Reserved Orders admin gate password (shared "admin" user). Staff admins still use name + employee ID.
@@ -9031,13 +9159,13 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     if (hub) return { headers: hub.headers, rows: hub.rows };
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
-    return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+    return readParsedFile('bo-table', boPath, reservedOrdersApi.backOrderTableFromBuffer);
   },
   readReportSheetBackOrder() {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
     try {
-      return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+      return readParsedFile('bo-table', boPath, reservedOrdersApi.backOrderTableFromBuffer);
     } catch {
       return { headers: [], rows: [] };
     }
@@ -9066,7 +9194,7 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [], fileName: '', updatedAt: '', sheetName: '' };
     const stat = fs.statSync(boPath);
-    const table = reservedOrdersApi.firstWorksheetTableFromBuffer(fs.readFileSync(boPath));
+    const table = readParsedFile('bo-first-sheet', boPath, reservedOrdersApi.firstWorksheetTableFromBuffer);
     return {
       headers: table.headers,
       rows: table.rows,

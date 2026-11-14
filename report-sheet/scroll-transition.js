@@ -28,13 +28,24 @@
   var WHEEL_CAP = 120;         // max delta counted per wheel event
   var END_IGNORE_MS = 0;       // no wait after reaching the end
   var IDLE_RESET_MS = 450;     // reset the pull after this long without input
-  var COOLDOWN_MS = 700;       // pause after each transition
-  var COVER_MS = 820;          // curtain fully covers the screen
-  var HOLD_MS = 480;           // gear engages + the big type is read before the wipe out
-  var EXIT_MS = 900;           // wipe-out (0.7s + 0.1s stagger + margin)
-  var ENTER_MS = 1000;         // new panel entrance
+  /* SPEED scales every transition time (the JS waits below and the injected CSS).
+     1 = the original 3.2 s gear shift; 0.5 = about 1.6 s, same look, quicker switching. */
+  var SPEED = 0.5;
+  var COOLDOWN_MS = Math.round(700 * SPEED);   // pause after each transition
+  var COVER_MS = Math.round(820 * SPEED);      // curtain fully covers the screen
+  var HOLD_MS = Math.round(480 * SPEED);       // gear engages + the big type is read before the wipe out
+  var EXIT_MS = Math.round(900 * SPEED);       // wipe-out (0.7s + 0.1s stagger + margin)
+  var ENTER_MS = Math.round(1000 * SPEED);     // new panel entrance
+  function scaleCssTimes(text) {
+    return String(text).replace(/(^|[^A-Za-z0-9_.-])(\d*\.\d+|\d+)(ms|s)\b/g, function (m, pre, num, unit) {
+      return pre + Math.round(parseFloat(num) * SPEED * 1000) / 1000 + unit;
+    });
+  }
   var EDGE_PX = 4;             // mouse this close to the right edge opens the drawer
   var EDGE_DWELL_MS = 90;      // ...after staying there this long
+  var DOCK_PEEK_W = 280;       // mouse inside this bottom-left corner shows the Exit / Dashboards dock
+  var DOCK_PEEK_H = 110;
+  var dockPeek = false;
   var RED = "#eb0a1e";
   var INK = "#070d18";
 
@@ -266,6 +277,7 @@
       ".dx-dock{position:fixed;left:14px;bottom:14px;z-index:2147482500;display:flex;gap:6px;padding:5px;border-radius:999px;background:rgba(8,14,26,.72);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 12px 34px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.09);opacity:.55;transition:opacity .2s ease,transform .3s cubic-bezier(.22,1,.36,1)}",
       ".dx-dock:hover,.dx-dock:focus-within{opacity:1}",
       ".dx-dock.dx-hide{opacity:0;pointer-events:none;transform:translateY(20px)}",
+      "@media (hover:hover) and (pointer:fine){.dx-dock:not(.dx-hide){opacity:0;pointer-events:none;transform:translateY(14px)}body.dx-dock-peek .dx-dock:not(.dx-hide),.dx-dock:not(.dx-hide):focus-within{opacity:1;pointer-events:auto;transform:none}}",
       ".dx-dock button{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border:0;border-radius:999px;background:transparent;color:#fff;font:800 12px/1 " + F + ";letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .15s ease}",
       ".dx-dock button:hover,.dx-dock button:focus-visible{background:rgba(255,255,255,.1);outline:none}",
       ".dx-dock .dx-dock-exit{background:" + RED + ";box-shadow:0 6px 16px -6px rgba(235,10,30,.9)}",
@@ -281,7 +293,7 @@
     ].join("\n");
     var st = document.createElement("style");
     st.id = "dx-scroll-transition-css";
-    st.textContent = css;
+    st.textContent = scaleCssTimes(css);
     document.head.appendChild(st);
   }
 
@@ -379,15 +391,15 @@
     markGear(from);
     gearRead.textContent = String(from + 1);
     knob.classList.remove("dx-clunk");
-    gateTimers.push(setTimeout(function () { placeKnob(a.x, GATE_MID, true); markGear(-1); gearRead.textContent = "N"; }, 300));
-    gateTimers.push(setTimeout(function () { placeKnob(b.x, GATE_MID, true); }, 520));
-    gateTimers.push(setTimeout(function () { placeKnob(b.x, b.y, true); }, a.x === b.x ? 560 : 780));
+    gateTimers.push(setTimeout(function () { placeKnob(a.x, GATE_MID, true); markGear(-1); gearRead.textContent = "N"; }, 300 * SPEED));
+    gateTimers.push(setTimeout(function () { placeKnob(b.x, GATE_MID, true); }, 520 * SPEED));
+    gateTimers.push(setTimeout(function () { placeKnob(b.x, b.y, true); }, (a.x === b.x ? 560 : 780) * SPEED));
     gateTimers.push(setTimeout(function () {
       markGear(to);
       gearRead.textContent = String(to + 1);
       reflow(knob);
       knob.classList.add("dx-clunk");
-    }, a.x === b.x ? 760 : 980));
+    }, (a.x === b.x ? 760 : 980) * SPEED));
   }
 
   /* ---------- state ---------- */
@@ -575,7 +587,7 @@
 
     // curtain wipes in (red first, ink 0.1s later) while the old panel slides away
     leaving.forEach(function (el) { el.classList.toggle("dx-back", !fwd); el.classList.add("dx-leave"); });
-    setLayers("inset(0)", "0s", ".1s", true);
+    setLayers("inset(0)", "0s", scaleCssTimes(".1s"), true);
     curtain.classList.add("dx-text-in");
 
     var entering = [];
@@ -593,7 +605,7 @@
       entering.forEach(function (el) { el.classList.remove("dx-pre"); el.classList.toggle("dx-back", !fwd); el.classList.add("dx-enter"); });
       curtain.classList.remove("dx-text-in");
       curtain.classList.add("dx-text-out");
-      setLayers(exit, ".1s", "0s", true);
+      setLayers(exit, scaleCssTimes(".1s"), "0s", true);
       exiting = true;
       scheduleScans();
       return wait(EXIT_MS);
@@ -813,6 +825,14 @@
 
   function onMouseMove(e) {
     if (e.pointerType && e.pointerType !== "mouse") return;
+    // Mouse users: the Exit / Dashboards dock only shows near the bottom-left corner,
+    // so it no longer sits on top of footers and lists (touch screens keep it visible).
+    var vh = document.documentElement.clientHeight || window.innerHeight;
+    var nearDock = e.clientX <= DOCK_PEEK_W && e.clientY >= vh - DOCK_PEEK_H;
+    if (nearDock !== dockPeek) {
+      dockPeek = nearDock;
+      document.body.classList.toggle("dx-dock-peek", nearDock);
+    }
     var edge = (document.documentElement.clientWidth || window.innerWidth) - EDGE_PX;
     var atEdge = e.clientX >= edge && !e.buttons;        // never while dragging (scrollbars, selections)
     if (menuOpen) {

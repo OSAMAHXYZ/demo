@@ -1085,4 +1085,5 @@ class BoOrderLookup {
 
 }
 
-module.exports = { BoOrderLookup };
+// Node (tests / server) gets the export; in the browser the class is already a global.
+if (typeof module !== "undefined" && module.exports) module.exports = { BoOrderLookup };

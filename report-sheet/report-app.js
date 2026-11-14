@@ -1,0 +1,22652 @@
+/* Report Sheet dashboard app (was the 950 KB inline <script> in index.html).
+   Kept as its own file so browsers cache it and the HTML stays small; loaded with defer.
+   After editing, change the ?v= value on its <script> tag in index.html so browsers fetch the new copy. */
+(function () {
+  const Auth = window.ReportSheetAuth;
+  /** gecdashboardview.html → index.html?view=gec: open the GEC Control Center with no login. */
+  const GEC_VIEW = new URLSearchParams(location.search).get("view") === "gec";
+  const currentUser = GEC_VIEW
+    ? { id: "gec-view", username: "gec-view", name: "GEC Dashboard", role: "viewer", title: "View only", initial: "G" }
+    : Auth && Auth.requireLogin();
+  if (!currentUser) return;
+
+  const MAX_ROWS = 4000;
+
+  const SLOT_DEFS = [
+    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "First worksheet only · back orders 7022" },
+    { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
+    { id: "central", n: 3, title: "Stock E-Sales", ar: "مخزون المبيعات الإلكترونية", blurb: "E-Sales / central stock · fallback after RTL for matched vehicles" },
+    { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
+    { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
+    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
+    { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Guest Experience Center leads · GEC Dashboard" },
+    { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Visitor log · Date · Promoter · Visit Purpose · GEC Dashboard" },
+    { id: "reserved", n: 11, title: "Reserved File", ar: "الملف المحجوز", blurb: "Sheet E-Sales المحجوز (or first sheet) · order Col F · VIN Col L · feeds Reserved Vehicles" },
+  ];
+
+  const Store = window.ReportSheetStore;
+  const TARGETS_KEY = Store.TARGETS_KEY;
+  const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
+  const DATA_PUSH_KEY = Store.DATA_PUSH_KEY;
+  const ACCESSORIES_SETTLED_KEY = Store.ACCESSORIES_SETTLED_KEY;
+  const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
+  const WORKING_DAYS_KEY = Store.WORKING_DAYS_KEY;
+  const WORKING_DAYS_PUSH_KEY = Store.WORKING_DAYS_PUSH_KEY;
+  const ALLOCATION_PLAN_KEY = Store.ALLOCATION_PLAN_KEY;
+  const ALLOCATION_PLAN_PUSH_KEY = Store.ALLOCATION_PLAN_PUSH_KEY;
+  const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
+  function applyAllocationCatalogFromStore() {
+    let catalog = null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+      if (parsed && Array.isArray(parsed.catalog)) catalog = parsed.catalog;
+    } catch { /* template */ }
+    const next = window.AllocationPlanData.buildAllocationPlanRows(catalog);
+    ALLOCATION_ROWS.length = 0;
+    next.forEach((row) => ALLOCATION_ROWS.push(row));
+    window.ALLOCATION_ROWS = ALLOCATION_ROWS;
+  }
+  applyAllocationCatalogFromStore();
+  const EMPLOYEE_ROSTER = window.EmployeeRoster.EMPLOYEES;
+  const DEFAULT_EMPLOYEE_NAMES = EMPLOYEE_ROSTER.map((e) => e.name);
+  const EMPLOYEE_CODE_TO_NAME = new Map(
+    EMPLOYEE_ROSTER.filter((e) => e.code).map((e) => [String(e.code).replace(/^0+/, ""), e.name])
+  );
+
+  /**
+   * Canonical admin/target name → alternate spellings from Sales Raw / Cancelled / Excel.
+   * Either side of a pair resolves to the same canonical nameKey so metrics stay accurate.
+   */
+  const EMPLOYEE_NAME_ALIASES = {
+    "Samaher Abdulmoghni Al Amri": ["Samaher Al Amri", "Samaher Abdulmoghni AlAmri"],
+    "Haneen Talal Aqeel Al Madani": ["Haneen Al Madani", "Haneen Talal Al Madani"],
+    "Not assigned": [
+      "API-BATCH", "API BATCH", "Api-Batch", "Api Batch",
+      "API-PATCH", "API PATCH", "Api-Patch", "Api Patch",
+      "Not Assigned", "NOT ASSIGNED", "Unassigned", "unassigned",
+      "not assigned",
+      "EB2C", "E-B2C", "B2C", "BTOC", "eCommerce", "E-Commerce", "Ecommerce",
+    ],
+    "Wasim Kathem Awad": ["Wasim Awad", "Waseem Kathem Awad", "Waseem Awad"],
+    "Ahmed Saleh Ahmed Binmahfoodh": ["Ahmed Binmahfoodh", "Ahmed Saleh Binmahfoodh"],
+    "Ghina Assad Alameer": [
+      "Ghina Assad Salem Alameer Assa",
+      "Ghina Alameer",
+      "Ghina Assad Alameer Assa",
+      "Ghina Assad Salem Alameer",
+    ],
+    "Amjad Ahmed Alwafi": ["Amjad Alwafi", "Amjad Ahmed Al Wafi", "Amjad Al Wafi"],
+    "Ghadeer Abdulhadi Attia Altayyari": [
+      "Ghadeer Altayyari",
+      "Ghadaer Abdulhadi Attia Altayyari",
+      "Ghadaer Altayyari",
+      "Ghadeer Abdulhadi Altayyari",
+      "Ghadaer Abdulhadi Altayyari",
+      "Ghadeer Abdulhadi Attia Altyyari",
+      "Ghadeer Altyyari",
+    ],
+    "Maryam Salah Abdulrahman Tabakh": ["Maryam Tabakh", "Maryam Salah Tabakh"],
+    "Muteb Abdullah Nasser Al Shehri": ["Muteb Al Shehri", "Muteb Abdullah Al Shehri"],
+    "Mansuor Ali Al Qahtani": [
+      "Mansuor Al Qahtani",
+      "Mansour Ali Al Qahtani",
+      "Mansour Al Qahtani",
+      "Mansuor Ali AlQahtani",
+    ],
+    "Ahmed Mahmoud Yousef Al Fitni": ["Ahmed Al Fitni", "Ahmed Mahmoud Al Fitni"],
+    "Mohammed Abkar Mohammed Abkar Negry": [
+      "Mohammed Negry",
+      "Mohammed Abkar Negry",
+      "Mohammad Abkar Mohammed Abkar Negry",
+      "Mohammad Negry",
+    ],
+    "Mohammed Al Khateeb": ["Mohammad Al Khateeb", "Mohammed Alkhateeb", "Mohammad Alkhateeb"],
+    "Mohsen Zuhair Ali Al Attas": ["Mohsen Al Attas", "Mohsen Zuhair Al Attas"],
+    "Fatmah Mohammed Alasseri": [
+      "Fatmah Al Asseri",
+      "fatmah al asseri",
+      "Fatmah Alasseri",
+      "Fatimah Mohammed Alasseri",
+      "Fatimah Al Asseri",
+    ],
+    "Essa Meraizeeq Almutairy": [
+      "Essa Almutairy",
+      "Essa Meraizeeq Al Mutairy",
+      "Essa Al Mutairy",
+    ],
+    "Moath Khalel Al Hjoouj": [
+      "Moath Al Hjoouj",
+      "Moath Khalel Al Hjouj",
+      "Moath Al Hjouj",
+    ],
+    "Khulood Abdulmajeed Albaloushi": [
+      "Khulood Abdulmajeed Ghulam Alb",
+      "Khulood Albaloushi",
+      "Khulood Abdulmajeed Al Baloushi",
+    ],
+    "Raoum Fahad Samkari": ["Raoum Samkari", "Raoum Fahad Samkary"],
+    "Alawiyyah Rafi Saad Al Shehri": ["Alawiyyah Al Shehri", "Alawiya Rafi Saad Al Shehri"],
+    "Manal Moshref Almalki": ["Manal Almalki", "Manal Moshref Al Malki"],
+    "Lujen Sami Saeed Bazhair": ["Lujen Bazhair", "Lujain Sami Saeed Bazhair"],
+    "Muhannad Abdullah Makdour Minyawi": ["Muhannad Minyawi", "Muhannad Abdullah Minyawi"],
+    "Maqbool Omar Ashour": [
+      "Maqbool Ashour",
+      "Maqbool Omar Ashour -",
+      "Maqbool Omar Ashour-",
+    ],
+    "Tawdod Al Sharef": ["- Tawdod Al Sharef", "Tawdod Al Sharef -", "Tawdod Alsharef"],
+    "Ali Muharraq A Alharbi": [
+      "Ali Alharbi",
+      "Ali Muharraq A Alharbi -",
+      "Ali Muharraq Alharbi",
+      "Ali Al Harbi",
+    ],
+    "Hamid Saeed Mohamed Saeed": ["Hamid Saeed", "Hamed Saeed", "Hamid Saeed Mohamed", "حامد سعيد"],
+    "Muhannad Hamid Al Youbi": [
+      "Mohannad Alyoubi",
+      "Muhannad Alyoubi",
+      "Mohannad Al Youbi",
+      "Muhannad Al Youbi",
+      "Mohannad Hamid Al Youbi",
+    ],
+  };
+
+  const EMPLOYEE_COUNT = DEFAULT_EMPLOYEE_NAMES.length;
+  const DEFAULT_EMPLOYEES = DEFAULT_EMPLOYEE_NAMES.map((name, i) => ({
+    id: i + 1,
+    name,
+    target: 0,
+  }));
+
+  /** Plant / salesman code / notes defaults (Excel Month-to-Date columns) */
+  const EMPLOYEE_META = {
+    "samaher abdulmoghni alamri": { plant: "Telesales North", code: "", note: "Vacation" },
+    "haneen talal aqeel almadani": { plant: "Telesales North", code: "", note: "Vacation" },
+    "not assigned": { plant: "eCommerce Sales – Retail", code: "", note: "Vacation" },
+    "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "", note: "Fleet" },
+  };
+
+  /**
+   * Normalize salesman names for matching (Excel Col A ↔ Admin roster).
+   * Collapses Al/El particles and common transliterations so Col A spellings
+   * count to the same person for Proforma / Delivery.
+   */
+  /** Pure string → string; memoized because roster matching calls it dozens of times per Sales Raw row. */
+  const NAME_LOOSE_CACHE = new Map();
+  function normalizeNameLoose(v) {
+    const input = String(v ?? "");
+    const hit = NAME_LOOSE_CACHE.get(input);
+    if (hit !== undefined) return hit;
+    const out = normalizeNameLooseUncached(input);
+    if (NAME_LOOSE_CACHE.size >= 20000) NAME_LOOSE_CACHE.clear();
+    NAME_LOOSE_CACHE.set(input, out);
+    return out;
+  }
+
+  function normalizeNameLooseUncached(v) {
+    let s = String(v ?? "")
+      .normalize("NFKC")
+      .replace(/[ـ]/g, "")
+      .trim()
+      .replace(/^[\s\-–—._|,;:]+|[\s\-–—._|,;:]+$/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06ff\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!s) return "";
+    // Common English transliteration variants seen in Sales Raw
+    s = s
+      .replace(/\bmohammad\b/g, "mohammed")
+      .replace(/\bmohamed\b/g, "mohammed")
+      .replace(/\bmohamad\b/g, "mohammed")
+      .replace(/\bfatimah?\b/g, "fatmah")
+      .replace(/\blujain\b/g, "lujen")
+      .replace(/\bmansou?r\b/g, "mansuor")
+      .replace(/\bghadaer\b/g, "ghadeer")
+      .replace(/\bwaseem\b/g, "wasim")
+      .replace(/\balawiya\b/g, "alawiyyah")
+      .replace(/\bsamkary\b/g, "samkari")
+      .replace(/\bhjouj\b/g, "hjoouj")
+      .replace(/\bhamed\b/g, "hamid")
+      .replace(/\bmohannad\b/g, "muhannad");
+    // "Al Harbi" / "Al-Harbi" / "AlHarbi" → alharbi (stable last-name key)
+    s = s.replace(/\b(al|el)\s+/g, "al");
+    return s.replace(/\s+/g, " ").trim();
+  }
+
+  function nameTokens(v) {
+    return normalizeNameLoose(v).split(" ").filter((t) => t && t !== "al" && t !== "bin" && t !== "ibn");
+  }
+
+  /** aliasKey → { canonical, key } — rebuilt when targets refresh */
+  let NAME_IDENTITY_MAP = new Map();
+  let ROSTER_KEYS = new Set();
+
+  function addNameIdentity(map, alias, canonical, { force = false } = {}) {
+    const a = normalizeNameLoose(alias);
+    const key = normalizeNameLoose(canonical);
+    if (!a || !key) return;
+    if (force || !map.has(a)) map.set(a, { canonical, key });
+  }
+
+  /** Register every spelling in a same-person group → one canonical (bidirectional). */
+  function registerNameGroup(map, canonical, aliases) {
+    const group = [canonical, ...(aliases || [])]
+      .map((n) => String(n || "").trim())
+      .filter(Boolean);
+    const seen = new Set();
+    group.forEach((name) => {
+      const loose = normalizeNameLoose(name);
+      if (!loose || seen.has(loose)) return;
+      seen.add(loose);
+      addNameIdentity(map, name, canonical, { force: true });
+      const parts = loose.split(" ").filter(Boolean);
+      // Helpful shorts — never force (avoid Muteb Al Shehri ↔ Alawiyyah Al Shehri collisions)
+      if (parts.length >= 2) {
+        addNameIdentity(map, `${parts[0]} ${parts[parts.length - 1]}`, canonical, { force: false });
+      }
+      if (parts.length >= 3) {
+        addNameIdentity(map, `${parts[0]} ${parts[parts.length - 2]} ${parts[parts.length - 1]}`, canonical, { force: false });
+      }
+    });
+  }
+
+  function rosterCanonicalNames() {
+    const names = [];
+    const seen = new Set();
+    const add = (n) => {
+      const c = String(n || "").trim().replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, "");
+      const k = normalizeNameLoose(c);
+      if (!c || !k || seen.has(k)) return;
+      seen.add(k);
+      names.push(c);
+    };
+    DEFAULT_EMPLOYEE_NAMES.forEach(add);
+    (typeof employeeTargets !== "undefined" && employeeTargets ? employeeTargets : []).forEach((e) => add(e && e.name));
+    return names;
+  }
+
+  function rebuildNameIdentityMap() {
+    const map = new Map();
+    const rosterKeys = new Set();
+
+    // 1) Alias table is source of truth — both long and short forms → same canonical
+    Object.keys(EMPLOYEE_NAME_ALIASES).forEach((canon) => {
+      registerNameGroup(map, canon, EMPLOYEE_NAME_ALIASES[canon]);
+      rosterKeys.add(normalizeNameLoose(canon));
+    });
+    EMPLOYEE_ROSTER.forEach((e) => {
+      if (!e.aliases || !e.aliases.length) return;
+      registerNameGroup(map, e.name, e.aliases);
+      rosterKeys.add(normalizeNameLoose(e.name));
+    });
+
+    // 2) Roster / admin targets fold into alias groups when they match any spelling
+    rosterCanonicalNames().forEach((name) => {
+      const loose = normalizeNameLoose(name);
+      const existing = map.get(loose);
+      if (existing) {
+        addNameIdentity(map, name, existing.canonical, { force: true });
+        rosterKeys.add(existing.key);
+        return;
+      }
+      // Unknown roster person — keep as own identity
+      registerNameGroup(map, name, []);
+      rosterKeys.add(loose);
+    });
+
+    // 3) Hard Not assigned / API-BATCH catch-alls (any casing / separator)
+    [
+      ["not assigned", "Not assigned"],
+      ["unassigned", "Not assigned"],
+      ["api-batch", "Not assigned"],
+      ["api batch", "Not assigned"],
+      ["api-patch", "Not assigned"],
+      ["api patch", "Not assigned"],
+      ["eb2c", "Not assigned"],
+      ["b2c", "Not assigned"],
+      ["e-commerce", "Not assigned"],
+      ["ecommerce", "Not assigned"],
+    ].forEach(([alias, canon]) => addNameIdentity(map, alias, canon, { force: true }));
+    rosterKeys.add(normalizeNameLoose("Not assigned"));
+
+    NAME_IDENTITY_MAP = map;
+    ROSTER_KEYS = rosterKeys;
+  }
+
+  function scoreNameMatch(inputLoose, candidateLoose) {
+    if (!inputLoose || !candidateLoose) return 0;
+    if (inputLoose === candidateLoose) return 100;
+    const a = inputLoose.split(" ").filter(Boolean);
+    const b = candidateLoose.split(" ").filter(Boolean);
+    if (!a.length || !b.length) return 0;
+    const significant = (toks) => toks.filter((t) => t !== "al" && t !== "bin" && t !== "ibn" && t.length > 1);
+    const sa = significant(a);
+    const sb = significant(b);
+    if (!sa.length || !sb.length) return 0;
+    // Always require first-name agreement for fuzzy attribution (stops wrong Proforma rolls)
+    if (sa[0] !== sb[0] && !almostEqualToken(sa[0], sb[0])) return 0;
+
+    function almostEqualToken(x, y) {
+      if (x === y) return true;
+      if (!x || !y) return false;
+      // Prefix only for longer tokens (avoid "ali"↔"alawiyyah", "abdul"↔"abdullah")
+      const minLen = Math.min(x.length, y.length);
+      const maxLen = Math.max(x.length, y.length);
+      if (minLen >= 6 && maxLen - minLen <= 3 && (y.startsWith(x) || x.startsWith(y))) return true;
+      // 1-edit typo tolerance (Ghadaer ↔ Ghadeer)
+      if (Math.abs(x.length - y.length) > 1 || Math.min(x.length, y.length) < 4) return false;
+      let i = 0;
+      let j = 0;
+      let edits = 0;
+      const la = x.length;
+      const lb = y.length;
+      while (i < la && j < lb) {
+        if (x[i] === y[j]) {
+          i += 1;
+          j += 1;
+          continue;
+        }
+        edits += 1;
+        if (edits > 1) return false;
+        if (la > lb) i += 1;
+        else if (lb > la) j += 1;
+        else {
+          i += 1;
+          j += 1;
+        }
+      }
+      edits += (la - i) + (lb - j);
+      return edits <= 1;
+    }
+
+    const tokenHit = (t, pool) => pool.some((u) => almostEqualToken(t, u));
+    const aInB = sa.every((t) => tokenHit(t, sb));
+    const bInA = sb.every((t) => tokenHit(t, sa));
+    if (aInB && sa.length >= 2) return 90 + Math.min(8, sa.length);
+    if (bInA && sb.length >= 2) return 86 + Math.min(8, sb.length);
+
+    const firstOk = tokenHit(sa[0], [sb[0]]);
+    const lastOk = tokenHit(sa[sa.length - 1], [sb[sb.length - 1]]);
+    const lastLen = Math.min(sa[sa.length - 1].length, sb[sb.length - 1].length);
+    // First+last only when last name is distinctive (length ≥ 5)
+    if (firstOk && lastOk && sa.length >= 2 && sb.length >= 2 && lastLen >= 5) {
+      if (sa.length === sb.length) return 82;
+      return 78;
+    }
+    return 0;
+  }
+
+  function fuzzyMatchRoster(loose) {
+    if (!loose || loose.split(" ").filter(Boolean).length < 2) return null;
+    const scored = [];
+    rosterCanonicalNames().forEach((canon) => {
+      if (normalizeNameLoose(canon) === "not assigned") return;
+      const score = scoreNameMatch(loose, normalizeNameLoose(canon));
+      if (score >= 82) scored.push({ canonical: canon, key: normalizeNameLoose(canon), score });
+    });
+    if (!scored.length) return null;
+    scored.sort((a, b) => b.score - a.score || b.canonical.length - a.canonical.length);
+    // Ambiguous (two close roster hits) → do not guess; keeps Proforma on the raw name
+    if (scored.length > 1 && scored[0].score - scored[1].score < 10) return null;
+    return { canonical: scored[0].canonical, key: scored[0].key };
+  }
+
+  /** Known HR employee ID in a cell ("49602", "49602 - Name", "Name (49602)") → roster name. */
+  function employeeNameFromCode(v) {
+    const nums = String(v ?? "").match(/(?<!\d)\d{4,7}(?!\d)/g);
+    if (!nums) return "";
+    for (const n of nums) {
+      const name = EMPLOYEE_CODE_TO_NAME.get(n.replace(/^0+/, ""));
+      if (name) return name;
+    }
+    return "";
+  }
+
+  const EMPLOYEE_CODE_HEADER = /salesman[\s._-]*(code|id|no|number)|employee[\s._-]*(code|id|no|number)|\bemp[\s._-]*(code|id|no)\b|staff[\s._-]*(id|no|number)|رقم\s*(الموظف|البائع)/;
+
+  /** Employee from a salesman / employee code column (headers aligned with cells). */
+  var employeeCodeHeaderCache;
+  function isEmployeeCodeHeader(h) {
+    if (!employeeCodeHeaderCache) employeeCodeHeaderCache = new Map();
+    const raw = String(h || "");
+    let hit = employeeCodeHeaderCache.get(raw);
+    if (hit === undefined) {
+      hit = EMPLOYEE_CODE_HEADER.test(normHeader(raw));
+      if (employeeCodeHeaderCache.size > 20000) employeeCodeHeaderCache.clear();
+      employeeCodeHeaderCache.set(raw, hit);
+    }
+    return hit;
+  }
+
+  function employeeNameFromCodeCells(headers, cells) {
+    for (let i = 0; i < headers.length; i += 1) {
+      if (!isEmployeeCodeHeader(headers[i])) continue;
+      const name = employeeNameFromCode(cells[i]);
+      if (name) return name;
+    }
+    return "";
+  }
+
+  /**
+   * Accessories files: the salesman is identified by the HR employee ID column.
+   * 1) headers that clearly say salesman / employee code, 2) any "ID" / "Code" / salesman-like header whose cell holds a roster ID.
+   * Columns that carry other numbers (order, invoice, VIN, customer, amount, phone...) are never read as an employee ID.
+   */
+  const ACCESSORY_ID_HEADER = /^(id|code|emp|employee|salesman|salesperson|sales\s*man|sales\s*person|sales\s*employee|sales\s*id|user\s*id|hr\s*id)$|(^|[\s._-])(id|code)$|salesman|sales\s*employee|sales\s*person|employee|الرقم\s*الوظيفي|رقم\s*(الموظف|البائع|الوظيفي)/;
+  const ACCESSORY_ID_HEADER_SKIP = /order|invoice|vin|chassis|customer|client|document|doc\b|\bbo\b|ship|amount|price|vat|phone|mobile|account|contract|plate|item|material|branch|plant|showroom/;
+  function employeeNameFromIdColumns(headers, cells) {
+    const byHeader = employeeNameFromCodeCells(headers, cells);
+    if (byHeader) return byHeader;
+    for (let i = 0; i < headers.length; i += 1) {
+      const h = normHeader(headers[i]);
+      if (!h || ACCESSORY_ID_HEADER_SKIP.test(h) || !ACCESSORY_ID_HEADER.test(h)) continue;
+      const name = employeeNameFromCode(cells[i]);
+      if (name) return name;
+    }
+    return "";
+  }
+
+  function employeeNameFromCodeFields(row) {
+    if (!row) return "";
+    return employeeNameFromCodeCells(Object.keys(row), Object.values(row));
+  }
+
+  /** Roster key → HR code; rebuilt whenever the identity map is rebuilt (roster names are always registered in it). */
+  let employeeCodeIndex = null;
+  let employeeCodeIndexFor = null;
+  function employeeCodeForName(name) {
+    const key = nameKey(name);
+    if (!key) return "";
+    if (employeeCodeIndexFor !== NAME_IDENTITY_MAP) {
+      employeeCodeIndexFor = NAME_IDENTITY_MAP;
+      employeeCodeIndex = new Map();
+      EMPLOYEE_ROSTER.forEach((e) => {
+        if (!e.code) return;
+        const k = nameKey(e.name);
+        if (k && !employeeCodeIndex.has(k)) employeeCodeIndex.set(k, e.code);
+      });
+    }
+    return employeeCodeIndex.get(key) || "";
+  }
+
+  function resolveEmployeeIdentity(name) {
+    const loose = normalizeNameLoose(name);
+    if (!loose) return null;
+    const byCode = employeeNameFromCode(name);
+    if (byCode) {
+      const codeKey = normalizeNameLoose(byCode);
+      return NAME_IDENTITY_MAP.get(codeKey) || { canonical: byCode, key: codeKey };
+    }
+    if (NAME_IDENTITY_MAP.has(loose)) return NAME_IDENTITY_MAP.get(loose);
+    if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c") {
+      const canon = "Not assigned";
+      return { canonical: canon, key: normalizeNameLoose(canon) };
+    }
+    if (/^api[\s\-_]*(batch|patch)$/.test(loose) || /^e[\s\-]?commerce$/.test(loose)) {
+      const canon = "Not assigned";
+      return { canonical: canon, key: normalizeNameLoose(canon) };
+    }
+    const fuzzy = fuzzyMatchRoster(loose);
+    if (fuzzy) {
+      // Only cache high-confidence fuzzy hits (avoid sticky wrong attribution)
+      if (scoreNameMatch(loose, fuzzy.key) >= 90) NAME_IDENTITY_MAP.set(loose, fuzzy);
+      return fuzzy;
+    }
+    return {
+      canonical: String(name || "").trim().replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, ""),
+      key: loose,
+      unmatched: true,
+    };
+  }
+
+  function nameKey(v) {
+    const id = resolveEmployeeIdentity(v);
+    return id ? id.key : normalizeNameLoose(v);
+  }
+
+  function resolveDisplayName(v) {
+    const id = resolveEmployeeIdentity(v);
+    return id ? id.canonical : String(v || "").trim();
+  }
+
+  /** Normalize salesman from any Excel file to canonical admin name (aliases apply everywhere). */
+  function resolveSalesmanName(v) {
+    const resolved = resolveDisplayName(v);
+    return resolved || String(v ?? "").trim();
+  }
+
+  function isRosterKey(key) {
+    return !!key && ROSTER_KEYS.has(key);
+  }
+
+  function employeeMeta(name) {
+    const key = nameKey(name);
+    const meta = EMPLOYEE_META[key] || { plant: "eCommerce Sales – Retail", code: "", note: "" };
+    const code = employeeCodeForName(name);
+    return code ? { ...meta, code } : meta;
+  }
+
+  function isPlaceholderName(name) {
+    return /^Employee\s*\d+$/i.test(String(name || "").trim());
+  }
+
+  function loadEmployeeTargets() {
+    try {
+      const raw = localStorage.getItem(TARGETS_KEY);
+      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false, guestExpCenter: false }));
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false, guestExpCenter: false }));
+      return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
+        const row = parsed[i] || {};
+        const savedName = String(row.name || "").trim();
+        const name = !savedName || isPlaceholderName(savedName)
+          ? DEFAULT_EMPLOYEES[i].name
+          : savedName;
+        const metaNote = employeeMeta(name).note || "";
+        const vacation = row.vacation != null
+          ? !!row.vacation
+          : /vacation/i.test(String(row.note || metaNote));
+        return {
+          id: i + 1,
+          name,
+          target: Math.max(0, Number(row.target) || 0),
+          vacation,
+          guestExpCenter: !!row.guestExpCenter,
+        };
+      });
+    } catch {
+      return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false, guestExpCenter: false }));
+    }
+  }
+
+  function effectiveEmployeeTarget(e) {
+    return e && e.vacation ? 0 : Math.max(0, Number(e.target) || 0);
+  }
+
+  function rowTargetNum(r) {
+    if (!r) return 0;
+    if (r._targetNum != null) return Number(r._targetNum) || 0;
+    const t = r.Target;
+    return typeof t === "number" ? t : (Number(t) || 0);
+  }
+
+  function rowTargetLabel(r) {
+    return r && r._vacation ? "VACATION" : formatNumber(rowTargetNum(r));
+  }
+
+  function isEmployeeOnVacation(name) {
+    const key = nameKey(name);
+    if (!key) return false;
+    const hit = employeeTargets.find((e) => nameKey(e.name) === key);
+    return hit ? !!hit.vacation : false;
+  }
+
+  /** Only admin roster employees appear as named rows; everyone else rolls into Not assigned. */
+  function isRosterEmployee(name) {
+    const id = resolveEmployeeIdentity(name);
+    return !!(id && isRosterKey(id.key) && !id.unmatched);
+  }
+
+  /** Map Sales Raw names onto the roster when possible; keep real unmatched names visible. */
+  function rosterSalesmanName(name) {
+    const raw = String(name ?? "").trim();
+    if (!raw) return "";
+    const loose = normalizeNameLoose(raw);
+    if (!loose) return "";
+    if (
+      loose === "not assigned"
+      || loose === "unassigned"
+      || loose === "eb2c"
+      || loose === "b2c"
+      || /eb2c/.test(loose)
+      || /\bb2c\b/.test(loose)
+      || /^api[\s\-_]*(batch|patch)$/.test(loose)
+      || /^e[\s\-]?commerce$/.test(loose)
+      || /غير\s*(مسند|معين|مخصص)/.test(loose)
+    ) {
+      return "Not assigned";
+    }
+    const id = resolveEmployeeIdentity(raw);
+    if (id && isRosterKey(id.key) && !id.unmatched) return id.canonical;
+    // Show unmatched people under their own name so every salesman is displayed
+    return (id && id.canonical) || raw;
+  }
+
+  function loadAccessoriesSettled() {
+    try {
+      const raw = localStorage.getItem(ACCESSORIES_SETTLED_KEY);
+      if (!raw) return 0;
+      return Math.max(0, Number(JSON.parse(raw).amount) || 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  function loadWorkingDays() {
+    try {
+      const raw = localStorage.getItem(WORKING_DAYS_KEY);
+      if (!raw) return 22;
+      return Math.max(1, Number(JSON.parse(raw).days) || 22);
+    } catch {
+      return 22;
+    }
+  }
+
+  function defaultAllocationValues() {
+    const map = {};
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind === "leaf") map[r.id] = Number(r.defaultVal) || 0;
+    });
+    return map;
+  }
+
+  function loadAllocationValues() {
+    const defaults = defaultAllocationValues();
+    try {
+      const raw = localStorage.getItem(ALLOCATION_PLAN_KEY);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      const saved = parsed && parsed.values ? parsed.values : parsed;
+      if (!saved || typeof saved !== "object") return defaults;
+      ALLOCATION_ROWS.forEach((r) => {
+        if (r.kind !== "leaf") return;
+        if (saved[r.id] != null) defaults[r.id] = Math.max(0, Number(saved[r.id]) || 0);
+      });
+      return defaults;
+    } catch {
+      return defaults;
+    }
+  }
+
+  function applyAllocationSuffixes() {
+    let saved = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+      if (parsed && parsed.suffixes && typeof parsed.suffixes === "object") saved = parsed.suffixes;
+    } catch { /* template names */ }
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind !== "leaf") return;
+      if (!r.defaultSfx) r.defaultSfx = r.sfx;
+      const custom = String(saved[r.id] == null ? "" : saved[r.id]).trim();
+      r.sfx = custom || r.defaultSfx;
+    });
+  }
+
+  let employeeTargets = loadEmployeeTargets();
+  rebuildNameIdentityMap();
+  let accessoriesSettled = loadAccessoriesSettled();
+  let workingDays = loadWorkingDays();
+  let channelTargets = Store.readChannelTargets();
+  let allocationValues = loadAllocationValues();
+  applyAllocationSuffixes();
+  let activeNav = "dashboard";
+
+  function refreshTargetsFromAdmin() {
+    employeeTargets = loadEmployeeTargets();
+    rebuildNameIdentityMap();
+    accessoriesSettled = loadAccessoriesSettled();
+    workingDays = loadWorkingDays();
+    channelTargets = Store.readChannelTargets();
+    applyAllocationCatalogFromStore();
+    allocationValues = loadAllocationValues();
+    applyAllocationSuffixes();
+  }
+
+  function applyLiveTargets(reason) {
+    refreshTargetsFromAdmin();
+    if (!window._data) return false;
+    let updated = false;
+    if (hasSalesReportInputs()) {
+      window._data = data();
+      window._srRowsByKey = Object.fromEntries((window._data.salesReport.rows || []).map((r) => [r._key, r]));
+      renderSalesReportKpis(window._data.salesReport);
+      refreshSalesSelection();
+      updated = true;
+    }
+    if (hasSummaryInputs()) renderSummaryDashboard();
+    if (window._data && activePanel === "boallocstock") renderBoAllocStockDashboard(window._data);
+    if (updated) setStatus(reason || "Targets updated live", "ok");
+    return updated;
+  }
+
+  function adminTargetMap() {
+    const map = new Map();
+    employeeTargets.forEach((e) => {
+      const key = nameKey(e.name);
+      if (key) map.set(key, { target: effectiveEmployeeTarget(e), vacation: !!e.vacation });
+      const raw = normalizeNameLoose(e.name);
+      if (raw && !map.has(raw)) map.set(raw, { target: effectiveEmployeeTarget(e), vacation: !!e.vacation });
+    });
+    return map;
+  }
+
+  function resolveAdminTarget(name, fallback) {
+    const key = nameKey(name);
+    if (!key) return fallback || 0;
+    const map = adminTargetMap();
+    const entry = map.get(key) || map.get(normalizeNameLoose(name));
+    if (entry) return entry.vacation ? 0 : entry.target;
+    return fallback || 0;
+  }
+
+  function switchNav(nav) {
+    activeNav = nav;
+    document.querySelectorAll("#nav-bar [data-nav]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.nav === nav);
+    });
+    const dash = $("#dashboard");
+    const wait = $("#wait-section");
+    const showDash = activePanel === "delivery" || (nav === "dashboard" && dash && dash.classList.contains("show"));
+    if (dash) dash.style.display = showDash ? "" : "none";
+    if (wait) wait.style.display = showDash ? "none" : "";
+  }
+
+  const HEADER_ALIASES = {
+    product: ["product", "product code", "vehicle model", "car model", "المادة", "المنتج", "model code", "prod"],
+    suffix: ["alj suffix", "alj sfx", "اللاحقة", "suffix", "tmc suffix"],
+    year: ["model year", "year", "my"],
+    ext: ["exterior color  1", "exterior color 1", "exterior color", "ext color", "ext. color"],
+    int: ["interior color 1", "interior color", "inter color 1", "int color"],
+    vin: ["vin", "vehicle identification number", "chassis", "شاسيه"],
+    boNumber: ["back order number", "backorder number", "bo number", "order number", "bo no"],
+    salesman: ["salesman name", "salesman", "advisor", "consultant", "sales employee", "employee name"],
+    plant: ["plant", "sales plant", "department", "sales office", "team"],
+    salesmanCode: ["salesman code", "salesman id", "employee id", "employee no", "emp id", "staff id", "code"],
+    orderDate: ["order date", "bo date", "created date", "date"],
+    confirm: ["confirm flag", "confirm", "confirmation", "confirmation status", "confirm status", "bo confirm", "allocation status", "allocated", "allocation"],
+    paid: ["المبلغ المدفوع", "paid", "paid amount", "amount paid", "payment"],
+    location: ["current location", "gt location", "location", "storage location"],
+    status: ["primary status", "status", "secondary status"],
+    customer: ["customer", "customer name", "cust name"],
+    amount: ["amount", "net amount", "total", "sales amount", "invoice amount", "قيمة"],
+    qty: ["qty", "quantity", "units"],
+    reason: ["reason", "cancel reason", "cancellation reason", "سبب"],
+    cancelDate: ["cancel date", "cancellation date", "cancelled date"],
+    target: ["target", "monthly target", "الهدف"],
+    vsnd: ["vsnd", "vehicle sold not delivered", "sold not delivered"],
+    delivery: ["delivery", "delivered", "deliveries", "تسليم"],
+    proforma: ["proforma", "proforma orders", "pro forma", "فاتورة مبدئية"],
+    category: ["category", "vehicle category", "segment", "class", "series"],
+    salesScope: ["sales scope", "scope", "business scope", "region scope"],
+    salesChannel: ["sales channel", "channel", "distribution channel", "sales plant"],
+    salesType: ["sales type", "payment type", "finance type", "deal type", "type of sale", "sale type", "payment method"],
+    sfx: ["alj suffix", "alj sfx", "sfx", "grade", "suffix", "tmc suffix", "variant", "trim"],
+    agingDays: ["aging", "aging days", "age days", "days aging", "bo aging", "allocation ageing", "allocation aging"],
+    searchAreaDesc: ["search area desc", "search area description", "vehicle search area desc", "search area"],
+    usage: ["usage description", "usage desc", "usage"],
+    vehicleSearchArea: ["vehicle search area", "veh search area", "vehicle search area desc"],
+    sharingLevel: ["sharing level", "share level", "sharing", "sharing lvl", "stock sharing level"],
+    allocatedLocation: ["allocated location", "allocation location", "alloc location", "allocated loc"],
+  };
+
+  const HEADER_MARKERS = [
+    "product", "vin", "vehicle identification number", "alj suffix", "exterior color",
+    "interior color", "model year", "back order number", "salesman name", "amount",
+  ];
+
+  const slots = Object.fromEntries(SLOT_DEFS.map((s) => {
+    const base = { file: null, rows: [], name: "" };
+    if (s.id === "central") {
+      base.reservedRows = [];
+      base.reservedSheet = "";
+      base.displayRows = [];
+      base.displaySheet = "";
+      base.sheetNames = [];
+      base.availableSheet = "";
+    }
+    if (s.id === "accessories") {
+      base.vsndRows = [];
+      base.vsndSheet = "";
+    }
+    return [s.id, base];
+  }));
+  let view = { tab: "backorder", search: "", extra: "" };
+  const charts = {};
+  const chartSnapshots = {};
+
+  const $ = (sel) => document.querySelector(sel);
+
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  /** Customer / person name: first letter + * for remaining chars (per word). */
+  function maskPersonName(value) {
+    const s = String(value == null ? "" : value).trim();
+    if (!s || s === "—" || s === "-" || s === "N/A" || s === "n/a") return s || "—";
+    return s.replace(/[^\s]+/g, (word) => {
+      const chars = Array.from(word);
+      if (!chars.length) return word;
+      return chars[0] + "*".repeat(Math.max(0, chars.length - 1));
+    });
+  }
+
+  /** Never display phone numbers. */
+  function maskPhone(_value) {
+    return "—";
+  }
+
+  function cellToString(v) {
+    if (v == null || v === "") return "";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+    }
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+  /** Header names repeat on every row: normalise each distinct one once. */
+  var normHeaderCache;
+  function normHeader(h) {
+    if (!normHeaderCache) normHeaderCache = new Map();
+    const raw = String(h || "");
+    let n = normHeaderCache.get(raw);
+    if (n === undefined) {
+      n = raw.trim().toLowerCase().replace(/\s+/g, " ");
+      if (normHeaderCache.size > 20000) normHeaderCache.clear();
+      normHeaderCache.set(raw, n);
+    }
+    return n;
+  }
+  function upperTrim(v) {
+    return String(v ?? "").trim().toUpperCase();
+  }
+  const NUMBER_FORMAT = new Intl.NumberFormat();
+  function formatNumber(n) {
+    if (!Number.isFinite(n)) return "—";
+    return NUMBER_FORMAT.format(n);
+  }
+  function pct1(n) {
+    return (Number(n) * 100).toFixed(1) + "%";
+  }
+  function pct0(n) {
+    return Math.round(Number(n) * 100) + "%";
+  }
+  function formatBytes(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+  function setStatus(text, kind) {
+    const el = $("#status");
+    el.textContent = text;
+    el.className = "status" + (kind ? " " + kind : "");
+  }
+  function showError(msg) {
+    const el = $("#error-banner");
+    el.textContent = msg || "";
+    el.classList.toggle("show", !!msg);
+    if (msg) setStatus("Error", "err");
+  }
+
+  function detectFileType(file) {
+    const name = (file.name || "").toLowerCase();
+    if (name.endsWith(".csv")) return "csv";
+    if (name.endsWith(".xls") && !name.endsWith(".xlsx")) return "xls";
+    if (name.endsWith(".xlsx")) return "xlsx";
+    return "unknown";
+  }
+
+  /**
+   * Rows from the same sheet share the same headers, so one getter per header list is reused.
+   * Building a getter normalises every header and searches the aliases; doing that for every row
+   * (often several times per row) made BO Errors / BO Dashboard take over a second to open.
+   * The lookup depends only on the header names and the constant HEADER_ALIASES, so results are identical.
+   */
+  var fieldGetterCache;
+  var rowFieldGetter;
+  function buildFieldGetter(sampleRow) {
+    if (!fieldGetterCache) { fieldGetterCache = new Map(); rowFieldGetter = new WeakMap(); }
+    const row = sampleRow && typeof sampleRow === "object" ? sampleRow : null;
+    const rawKeys = Object.keys(sampleRow || {});
+    // Same row asked again (BO Errors asks 4–5 times per row): reuse while its columns are unchanged.
+    if (row) {
+      const mine = rowFieldGetter.get(row);
+      if (mine && mine.count === rawKeys.length) return mine.getter;
+    }
+    const sig = rawKeys.join("\u0001");
+    let getter = fieldGetterCache.get(sig);
+    if (!getter) {
+      if (fieldGetterCache.size > 500) fieldGetterCache.clear();
+      getter = makeFieldGetter(rawKeys);
+      fieldGetterCache.set(sig, getter);
+    }
+    if (row) rowFieldGetter.set(row, { count: rawKeys.length, getter });
+    return getter;
+  }
+
+  function makeFieldGetter(rawKeys) {
+    const normKeys = rawKeys.map((k) => ({ raw: k, n: normHeader(k) }));
+    const cache = {};
+    return function get(row, aliasKey) {
+      if (!(aliasKey in cache)) {
+        const aliases = HEADER_ALIASES[aliasKey] || [aliasKey];
+        let found = null;
+        for (const alias of aliases) {
+          found = normKeys.find((k) => k.n === alias);
+          if (found) break;
+          if (alias.length < 4) continue;
+          found = normKeys.find((k) => {
+            if (!k.n.includes(alias)) return false;
+            if (alias === "model" && /year|yr/.test(k.n)) return false;
+            if (alias === "suffix" && /tmc/.test(k.n) && aliases.includes("alj suffix")) return false;
+            return true;
+          });
+          if (found) break;
+        }
+        cache[aliasKey] = found ? found.raw : null;
+      }
+      const key = cache[aliasKey];
+      return key ? row[key] : "";
+    };
+  }
+
+  /** Excel epoch (1899-12-30) as UTC ms — used to recover calendar days from SheetJS Dates. */
+  const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+
+  function excelSerialToDate(serial) {
+    if (!(typeof serial === "number" && Number.isFinite(serial))) return null;
+    const day = Math.floor(serial);
+    if (day <= 20000 || day >= 100000) return null;
+    const utc = new Date(EXCEL_EPOCH_UTC + day * 86400000);
+    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+  }
+
+  function parseDate(v) {
+    if (v == null || v === "") return null;
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      // SheetJS cellDates in Asia/Riyadh (UTC+3) often yields ~20:59 UTC on the
+      // *previous* calendar day. Recover the Excel serial, then map via UTC parts
+      // so 9/1/2026 stays September 1 (not August 31).
+      const serial = Math.round((v.getTime() - EXCEL_EPOCH_UTC) / 86400000);
+      const fromSerial = excelSerialToDate(serial);
+      if (fromSerial) return fromSerial;
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Riyadh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(v);
+      const pick = (t) => Number((parts.find((p) => p.type === t) || {}).value);
+      return new Date(pick("year"), pick("month") - 1, pick("day"));
+    }
+    if (typeof v === "number" && Number.isFinite(v)) {
+      const fromSerial = excelSerialToDate(v);
+      if (fromSerial) return fromSerial;
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+
+    // M/D/YYYY (US Excel display) or D/M/YYYY (KSA) — disambiguate when both ≤ 12
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\s|$)/);
+    if (m) {
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      let yy = Number(m[3]);
+      if (yy < 100) yy += 2000;
+      const asDate = (mm, dd) => {
+        if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+        const d = new Date(yy, mm - 1, dd);
+        if (d.getFullYear() !== yy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
+        return d;
+      };
+      let chosen = null;
+      if (a > 12 && b <= 12) {
+        chosen = asDate(b, a); // D/M
+      } else if (b > 12 && a <= 12) {
+        chosen = asDate(a, b); // M/D
+      } else {
+        // Ambiguous (e.g. 9/1): prefer M/D — matches Raw Data display (9/1 = Sept 1)
+        const us = asDate(a, b);
+        const eu = asDate(b, a);
+        if (us && eu) {
+          const todayMs = Date.now();
+          const dist = (d) => Math.abs(d.getTime() - todayMs);
+          chosen = dist(us) <= dist(eu) ? us : eu;
+        } else {
+          chosen = us || eu;
+        }
+      }
+      if (chosen) return chosen;
+    }
+
+    // YYYY-MM-DD
+    m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+    if (m) {
+      const yy = Number(m[1]);
+      const mm = Number(m[2]);
+      const dd = Number(m[3]);
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return new Date(yy, mm - 1, dd);
+    }
+
+    const t = Date.parse(s);
+    if (Number.isNaN(t)) return null;
+    const d = new Date(t);
+    const serial = Math.round((d.getTime() - EXCEL_EPOCH_UTC) / 86400000);
+    const fromSerial = excelSerialToDate(serial);
+    if (fromSerial) return fromSerial;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function toYyyymm(d) {
+    const dt = d instanceof Date ? d : parseDate(d);
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return "";
+    return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function toYyyymmdd(d) {
+    const dt = d instanceof Date ? d : parseDate(d);
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return "";
+    return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
+  }
+
+  function toNumber(v) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const n = Number(String(v).replace(/[, ]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function isPaid(v) {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (!s) return false;
+    if (["paid", "yes", "y", "1", "true", "مدفوع"].includes(s)) return true;
+    return toNumber(v) > 0;
+  }
+
+  async function readFileToWorkbook(file, opts) {
+    const buffer = await file.arrayBuffer();
+    if (detectFileType(file) === "csv") {
+      const text = new TextDecoder("utf-8").decode(buffer);
+      return isolateWorkbookFirstSheet(
+        XLSX.read(text, Object.assign(xlsxReadOpts("string", opts), { FS: "," })),
+        opts
+      );
+    }
+    return isolateWorkbookFirstSheet(
+      XLSX.read(buffer, xlsxReadOpts("array", opts)),
+      opts
+    );
+  }
+
+  function xlsxReadOpts(type, opts) {
+    const readOpts = { type, cellDates: true };
+    if (opts && opts.firstSheetOnly) readOpts.sheets = 0;
+    return readOpts;
+  }
+
+  /** Drop every worksheet after tab 1 so later BO/Fleet sheets cannot be read or merged. */
+  function isolateWorkbookFirstSheet(workbook, opts) {
+    if (!workbook || !(opts && opts.firstSheetOnly)) return workbook;
+    const names = workbook.SheetNames || [];
+    if (names.length <= 1) return workbook;
+    const keep = names[0];
+    names.slice(1).forEach((name) => {
+      try { delete workbook.Sheets[name]; } catch (_) { /* ignore */ }
+    });
+    workbook.SheetNames = keep ? [keep] : [];
+    return workbook;
+  }
+
+  function expandSheetRange(sheet, minLastColLetter) {
+    if (!sheet) return;
+    const minCol = colLetterToIndex(minLastColLetter);
+    let range;
+    try {
+      range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    } catch {
+      range = { s: { r: 0, c: 0 }, e: { r: 0, c: minCol } };
+    }
+    if (range.e.c < minCol) {
+      range.e.c = minCol;
+      sheet["!ref"] = XLSX.utils.encode_range(range);
+    }
+  }
+
+  function padCells(line, width) {
+    const out = new Array(width);
+    for (let i = 0; i < width; i += 1) {
+      out[i] = line && line[i] != null ? line[i] : "";
+    }
+    return out;
+  }
+
+  function sheetCellValue(sheet, rowIdx, colIdx) {
+    if (!sheet) return "";
+    const addr = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+    const cell = sheet[addr];
+    if (!cell) return "";
+    if (cell.v != null && cell.v !== "") return cell.v;
+    if (cell.w != null && cell.w !== "") return cell.w;
+    return "";
+  }
+
+  /** Row arrays where index 0 is always Excel Col A, even when the used range starts at B+ (blank Col A). */
+  function sheetMatrixFromColA(sheet) {
+    const opts = { header: 1, defval: "", blankrows: false, raw: true, cellDates: true };
+    try {
+      const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+      range.s.c = 0;
+      opts.range = range;
+    } catch { /* fall back to the sheet's own range */ }
+    return XLSX.utils.sheet_to_json(sheet, opts);
+  }
+
+  function sheetRows(workbook, sheetName) {
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    const sheet = workbook.Sheets[sheetName];
+    // Keep Excel letters through AI so AD/AE stock columns are not dropped
+    expandSheetRange(sheet, "AI");
+    let range;
+    try {
+      range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    } catch {
+      range = { s: { r: 0, c: 0 }, e: { r: 0, c: colLetterToIndex("AI") } };
+    }
+    const minWidth = colLetterToIndex("AI") + 1;
+    const width = Math.max(minWidth, range.e.c - range.s.c + 1);
+    // Build rows with absolute sheet indices so sparse-cell backfill cannot
+    // accidentally read the header row (matrix index ≠ sheet row when blanks skip).
+    const matrix = [];
+    for (let R = range.s.r; R <= range.e.r; R += 1) {
+      const line = new Array(width);
+      let any = false;
+      for (let C = 0; C < width; C += 1) {
+        const v = sheetCellValue(sheet, R, C);
+        line[C] = v;
+        if (cellToString(v).trim() !== "") any = true;
+      }
+      if (!any) continue;
+      matrix.push({ sheetRow: R, line });
+    }
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i].line || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = HEADER_MARKERS.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 3) break;
+    }
+
+    const headerRaw = padCells(matrix[headerIdx].line || [], width);
+    const headers = headerRaw.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const seen = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seen[h]) { seen[h] = 1; return h; }
+      seen[h] += 1;
+      return `${h} (${seen[h]})`;
+    });
+    const headerNorms = uniqueHeaders.map((h) => normHeader(h));
+
+    const rows = [];
+    for (let i = headerIdx + 1; i < matrix.length; i += 1) {
+      const line = padCells(matrix[i].line || [], uniqueHeaders.length);
+      // Drop leftover sub-header rows (cell value equals its column header)
+      let headerLike = 0;
+      let nonEmpty = 0;
+      for (let c = 0; c < line.length; c += 1) {
+        const raw = cellToString(line[c]).trim();
+        if (!raw) continue;
+        nonEmpty += 1;
+        if (normHeader(raw) === headerNorms[c] || normHeader(raw) === normHeader(headers[c])) {
+          headerLike += 1;
+        }
+      }
+      if (nonEmpty > 0 && headerLike >= Math.min(3, nonEmpty) && headerLike / nonEmpty >= 0.5) {
+        continue;
+      }
+      // Never keep a cell whose value is literally that column's header label
+      for (let c = 0; c < line.length; c += 1) {
+        const raw = cellToString(line[c]).trim();
+        if (!raw) continue;
+        if (normHeader(raw) === headerNorms[c] || normHeader(raw) === normHeader(headers[c])) {
+          line[c] = "";
+        }
+      }
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      const obj = {};
+      uniqueHeaders.forEach((h, idx) => { obj[h] = line[idx] != null ? line[idx] : ""; });
+      obj.__cells = line;
+      obj.__headers = uniqueHeaders;
+      obj.__sheetRow = matrix[i].sheetRow;
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function indexToColLetter(idx) {
+    let n = Number(idx) + 1;
+    let s = "";
+    while (n > 0) {
+      const rem = (n - 1) % 26;
+      s = String.fromCharCode(65 + rem) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  function cellByLetter(row, letter) {
+    const idx = colLetterToIndex(letter);
+    if (idx < 0 || !row) return "";
+    if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
+      const key = row.__headers[idx];
+      if (Object.prototype.hasOwnProperty.call(row, key) && row[key] != null && row[key] !== "") {
+        return row[key];
+      }
+    }
+    if (Array.isArray(row.__cells) && row.__cells[idx] != null && row.__cells[idx] !== "") {
+      return row.__cells[idx];
+    }
+    if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
+      return row[row.__headers[idx]] != null ? row[row.__headers[idx]] : "";
+    }
+    const keys = Object.keys(row).filter((k) => !k.startsWith("__"));
+    if (keys[idx] != null) return row[keys[idx]] != null ? row[keys[idx]] : "";
+    return "";
+  }
+
+  function headerByLetter(row, letter) {
+    const idx = colLetterToIndex(letter);
+    if (row && Array.isArray(row.__headers) && row.__headers[idx]) return row.__headers[idx];
+    return `Column ${String(letter || "").toUpperCase()}`;
+  }
+
+  function findHeaderLetter(row, tests) {
+    const headers = row && Array.isArray(row.__headers) ? row.__headers : [];
+    for (let i = 0; i < headers.length; i += 1) {
+      const n = normHeader(headers[i]);
+      if (tests.some((t) => t(n))) return indexToColLetter(i);
+    }
+    return "";
+  }
+
+  function boQtyValue(row) {
+    const letter = findHeaderLetter(row, [
+      (n) => n === "bo qty" || n === "back order qty" || n === "backorder qty",
+      (n) => n.includes("bo") && n.includes("qty"),
+      (n) => n === "qty" || n === "quantity" || n === "order qty",
+      (n) => n.includes("order") && n.includes("qty"),
+    ]);
+    if (letter) {
+      const n = toNumber(cellByLetter(row, letter));
+      if (n > 0) return n;
+    }
+    const v = cellByLetter(row, "AD");
+    const n = toNumber(v);
+    if (cellToString(v).trim() !== "" && n > 0) return n;
+    return 1;
+  }
+
+  let stockAvailabilityCache = null;
+
+  function invalidateStockAvailabilityCache() {
+    stockAvailabilityCache = null;
+  }
+
+  function boAllocKey(row) {
+    const get = buildFieldGetter(row);
+    const product = upperTrim(get(row, "product") || cellByLetter(row, "B"));
+    const rawSuffix = upperTrim(get(row, "suffix") || get(row, "sfx") || cellByLetter(row, "G"));
+    const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
+    const year = String(get(row, "year") || cellByLetter(row, "F") || "").trim();
+    const ext = colorKey(get(row, "ext") || cellByLetter(row, "H"));
+    const int = colorKey(get(row, "int") || cellByLetter(row, "I"));
+    return { product, suffix, year, ext, int, full: [product, suffix, year, ext, int].join("|") };
+  }
+
+  function buildStockAvailabilityMap() {
+    const counts = new Map();
+    const addRows = (rows) => {
+      (rows || []).forEach((r) => {
+        const get = buildFieldGetter(r);
+        const product = upperTrim(get(r, "product") || cellByLetter(r, "B"));
+        const rawSuffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
+        const year = String(get(r, "year") || cellByLetter(r, "F") || "").trim();
+        const ext = colorKey(get(r, "ext") || cellByLetter(r, "H"));
+        const int = colorKey(get(r, "int") || cellByLetter(r, "I"));
+        const full = [product, suffix, year, ext, int].join("|");
+        if (!product && !suffix) return;
+        counts.set(full, (counts.get(full) || 0) + 1);
+        const ps = `${product}|${suffix}`;
+        counts.set(ps, (counts.get(ps) || 0) + 1);
+        if (product) counts.set(product, (counts.get(product) || 0) + 1);
+      });
+    };
+    addRows(slots.rtl.rows);
+    addRows(slots.central.rows);
+    return counts;
+  }
+
+  function stockAvailabilityMap() {
+    if (!stockAvailabilityCache) stockAvailabilityCache = buildStockAvailabilityMap();
+    return stockAvailabilityCache;
+  }
+
+  function computedAvailableStock(row) {
+    const { product, suffix, full } = boAllocKey(row);
+    const counts = stockAvailabilityMap();
+    if (counts.get(full)) return counts.get(full);
+    const ps = `${product}|${suffix}`;
+    if (counts.get(ps)) return counts.get(ps);
+    if (product && counts.get(product)) return counts.get(product);
+    return 0;
+  }
+
+  function availableStockValue(row) {
+    const letter = findHeaderLetter(row, [
+      (n) => n.includes("available") && (n.includes("stock") || n.includes("qty")),
+      (n) => n === "available stock" || n === "avail stock" || n === "stock available",
+      (n) => n === "available" || n === "avl" || n === "avl qty",
+      (n) => n.includes("stock") && (n.includes("qty") || n.includes("count") || n.includes("avail")),
+      (n) => n.includes("inventory") && n.includes("avail"),
+    ]);
+    if (letter) {
+      const n = toNumber(cellByLetter(row, letter));
+      if (n > 0) return n;
+    }
+    const v = cellByLetter(row, "AE");
+    const n = toNumber(v);
+    if (cellToString(v).trim() !== "" && n > 0) return n;
+    if (hasStockFiles()) return computedAvailableStock(row);
+    return 0;
+  }
+
+  function isYesFlag(v) {
+    return /^(yes|y|1|true)$/i.test(String(v ?? "").trim());
+  }
+
+  /**
+   * Back Order Excel for BO Dashboard and every other BO consumer:
+   * Read worksheet 1 only (typically named "back orders 7022").
+   * Do not import, merge, reference, or calculate from any later tab.
+   */
+  function backorderRows(workbook) {
+    isolateWorkbookFirstSheet(workbook, { firstSheetOnly: true });
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const sheetName = names[0];
+    const rows = sheetRows(workbook, sheetName);
+    if (typeof console !== "undefined" && console.info) {
+      console.info("[BO sheet]", sheetName, "rows:", rows.length, "(first worksheet only)");
+    }
+    return rows;
+  }
+
+  /**
+   * Cancelled BOs Excel:
+   *   Col I = VIN (required to count)
+   *   Salesman from header (or Col A fallback)
+   * Rows without a VIN in Col I are skipped.
+   */
+  function cancelledBoRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /cancel/i.test(n)) ||
+      names.find((n) => /back\s*order|backorder|bo/i.test(n)) ||
+      names[0];
+    if (!workbook.Sheets[preferred]) return [];
+
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const cancelMarkers = [
+      "salesman", "sales employee", "advisor", "vin", "product", "back order",
+      "bo number", "cancel", "reason", "customer",
+    ];
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = cancelMarkers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 3) break;
+    }
+
+    const idxI = colLetterToIndex("I");
+    let idxSalesman = colLetterToIndex("A");
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
+    const headerSalesman = findHeaderIdx([
+      (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
+      (n) => n === "advisor" || n === "consultant" || n.includes("salesman"),
+    ]);
+    if (headerSalesman >= 0) idxSalesman = headerSalesman;
+
+    const headerBo = findHeaderIdx([
+      (n) => n.includes("back order") && n.includes("number"),
+      (n) => n === "bo number" || n === "bo no" || n === "order number",
+    ]);
+    const headerProduct = findHeaderIdx([
+      (n) => n === "product" || n === "model" || n.includes("vehicle model"),
+    ]);
+    const headerReason = findHeaderIdx([
+      (n) => n.includes("cancel") && n.includes("reason"),
+      (n) => n === "reason" || n === "cancellation reason",
+    ]);
+    const headerDate = findHeaderIdx([
+      (n) => n.includes("cancel") && n.includes("date"),
+      (n) => n === "order date" || n === "bo date" || n === "date",
+    ]);
+
+    const seenHdr = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seenHdr[h]) { seenHdr[h] = 1; return h; }
+      seenHdr[h] += 1;
+      return `${h} (${seenHdr[h]})`;
+    });
+    const width = Math.max(uniqueHeaders.length, idxI + 1, idxSalesman + 1);
+
+    const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = padCells(matrix[r] || [], width);
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+
+      // Col I must contain a VIN — otherwise do not count
+      const vin = extractVinValue(line[idxI]);
+      if (!vin) continue;
+
+      const salesman = employeeNameFromCodeCells(uniqueHeaders, line)
+        || resolveSalesmanName(cellToString(line[idxSalesman]).trim());
+      if (!salesman) continue;
+
+      const obj = {
+        salesman,
+        vin,
+        boNumber: headerBo >= 0 ? cellToString(line[headerBo]).trim() : "",
+        product: headerProduct >= 0 ? cellToString(line[headerProduct]).trim() : "",
+        reason: headerReason >= 0 ? cellToString(line[headerReason]).trim() : "Cancelled BO",
+        cancelDate: headerDate >= 0 ? parseDate(line[headerDate]) : null,
+        _sheet: preferred,
+        _colI: true,
+        __cells: line,
+        __headers: uniqueHeaders,
+      };
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  /**
+   * Accessories Excel (slot 6) — always first sheet:
+   *   Col D = VIN (look up salesman in Sales Raw)
+   *   Col L = amount (accessories achieved)
+   * Optional date column (by header) for period filter; undated rows still count in MTD.
+   * Sheet 2 «VSND»: Col I VIN · Col L sales employee · Col S value (in progress / not delivered).
+   * A VIN on both sheets counts as achieved only, not also in progress.
+   * Ach% = amount ÷ accessories target (settled pool share, else employee monthly target)
+   */
+  function parseAmount(v) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const s = String(v ?? "").replace(/,/g, "").trim();
+    if (!s) return 0;
+    const n = parseFloat(s.replace(/[^\d.\-]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function cellHasValue(v) {
+    if (v == null) return false;
+    if (typeof v === "number") return Number.isFinite(v);
+    return String(v).trim() !== "";
+  }
+
+  function accessoriesVsndSheetName(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return null;
+    return (
+      names.find((n) => /^vsnd$/i.test(String(n).trim())) ||
+      names.find((n) => /\bvsnd\b/i.test(n)) ||
+      (names.length > 1 ? names[1] : null)
+    );
+  }
+
+  /**
+   * Accessories workbook · sheet VSND:
+   *   Col I = VIN · Col L = sales employee · Col S = value
+   * Count/sum only rows that have a value in Col S.
+   */
+  function accessoriesVsndRows(workbook) {
+    const preferred = accessoriesVsndSheetName(workbook);
+    if (!preferred || !workbook.Sheets[preferred]) return [];
+
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const markers = ["vin", "chassis", "sales employee", "salesman", "employee", "amount", "value"];
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = markers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 2) break;
+    }
+
+    const idxI = colLetterToIndex("I");
+    const idxL = colLetterToIndex("L");
+    const idxS = colLetterToIndex("S");
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const seenHdr = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seenHdr[h]) { seenHdr[h] = 1; return h; }
+      seenHdr[h] += 1;
+      return `${h} (${seenHdr[h]})`;
+    });
+    const width = Math.max(uniqueHeaders.length, idxS + 1);
+
+    const start = bestHits >= 1 ? headerIdx + 1 : 1;
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = padCells(matrix[r] || [], width);
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      if (!cellHasValue(line[idxS])) continue;
+
+      const amount = parseAmount(line[idxS]);
+      if (!amount) continue;
+
+      const vin = extractVinValue(line[idxI]) || upperTrim(cellToString(line[idxI]));
+      // The employee ID column decides the salesman; Col L (the name) is only the fallback.
+      const salesman = employeeNameFromIdColumns(uniqueHeaders, line)
+        || resolveSalesmanName(cellToString(line[idxL]).trim());
+      const obj = {
+        vin,
+        amount,
+        salesman,
+        _colL: salesman,
+        _sheet: preferred,
+        _kind: "vsnd",
+        __cells: line,
+        __headers: uniqueHeaders,
+      };
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function accessoriesRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    // Always read the first sheet (as uploaded)
+    const preferred = names[0];
+    if (!workbook.Sheets[preferred]) return [];
+
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
+    if (!matrix.length) return [];
+
+    // Fixed letters per business rule: D = VIN, L = amount (headers only for optional date)
+    const idxD = colLetterToIndex("D");
+    const idxL = colLetterToIndex("L");
+
+    // Header = last non-empty row above the first row with a VIN in Col D (skips title / report-date rows)
+    const firstDataIdx = matrix.findIndex((line) => !!extractVinValue((line || [])[idxD]));
+    let headerIdx = -1;
+    for (let i = (firstDataIdx < 0 ? Math.min(matrix.length, 1) : firstDataIdx) - 1; i >= 0; i -= 1) {
+      if ((matrix[i] || []).some((c) => cellToString(c).trim() !== "")) { headerIdx = i; break; }
+    }
+
+    let idxDate = -1;
+    const headerRow = headerIdx >= 0
+      ? (matrix[headerIdx] || [])
+      : new Array(Math.max(idxL + 1, (matrix[0] || []).length)).fill("");
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const findHeaderIdx = (tests) => {
+      for (const t of tests) {
+        const i = headers.findIndex((h, j) => j !== idxD && j !== idxL && t(normHeader(h)));
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+    const headerDate = findHeaderIdx([
+      (n) => n === "date" || n === "التاريخ",
+      (n) => /(invoice|transaction|sales|order|posting)\s*date/.test(n) || /تاريخ\s*(الفاتورة|البيع)/.test(n),
+      (n) => n.includes("date") || n.includes("تاريخ"),
+    ]);
+    if (headerDate >= 0) idxDate = headerDate;
+
+    const seenHdr = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seenHdr[h]) { seenHdr[h] = 1; return h; }
+      seenHdr[h] += 1;
+      return `${h} (${seenHdr[h]})`;
+    });
+    const width = Math.max(uniqueHeaders.length, idxL + 1, idxD + 1, idxDate + 1);
+
+    const start = headerIdx + 1;
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = padCells(matrix[r] || [], width);
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+
+      const vin = extractVinValue(line[idxD]);
+      if (!vin) continue;
+
+      const amount = parseAmount(line[idxL]);
+      if (!amount) continue;
+
+      const obj = {
+        vin,
+        amount,
+        salesman: "", // filled at report time: employee ID column first, then the Sales Raw VIN match
+        _idSalesman: employeeNameFromIdColumns(uniqueHeaders, line),
+        accessoryDate: idxDate >= 0 ? parseDate(line[idxDate]) : null,
+        _sheet: preferred,
+        __cells: line,
+        __headers: uniqueHeaders,
+      };
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  /** VIN → salesman from Sales Raw (Col A employee · VIN on row). */
+  function salesVinEmployeeMap(salesRows) {
+    const map = new Map();
+    (salesRows || []).forEach((r) => {
+      const vin = extractVinValue(r && r.vin);
+      if (!vin) return;
+      const name = resolveSalesmanName(r._salesmanRaw || r.salesman);
+      if (!name) return;
+      // First row wins, unless a later row names a real roster employee instead of Not assigned / unknown
+      if (!map.has(vin) || salesmanMatchRank(name) > salesmanMatchRank(map.get(vin))) map.set(vin, name);
+    });
+    return map;
+  }
+
+  /** 2 = roster employee · 1 = named but not on roster · 0 = Not assigned / blank */
+  function salesmanMatchRank(name) {
+    const key = nameKey(name);
+    if (!key || key === normalizeNameLoose("Not assigned")) return 0;
+    return isRosterEmployee(name) ? 2 : 1;
+  }
+
+  /** VIN → salesman from the Accessories VSND sheet (Col L employee). */
+  function accessoriesVsndVinEmployeeMap() {
+    const map = new Map();
+    (slots.accessories.vsndRows || []).forEach((r) => {
+      const vin = extractVinValue(r && r.vin);
+      const name = vin ? resolveSalesmanName(r.salesman) : "";
+      if (!name) return;
+      if (!map.has(vin) || salesmanMatchRank(name) > salesmanMatchRank(map.get(vin))) map.set(vin, name);
+    });
+    return map;
+  }
+
+  /** Sales Raw VIN owner first, then Accessories VSND sheet · unmatched VINs → Not assigned so totals equal the file. */
+  function accessorySalesmanForRow(r, vinMap, vsndMap) {
+    if (!r) return "";
+    const vin = extractVinValue(r.vin);
+    // The employee ID on the achieved sheet wins; the VIN lookups only fill rows that carry no known ID.
+    if (r._idSalesman) return r._idSalesman;
+    const candidates = [
+      vin && vinMap ? vinMap.get(vin) : "",
+      vin && vsndMap ? vsndMap.get(vin) : "",
+    ].filter(Boolean);
+    return candidates.find((n) => salesmanMatchRank(n) === 2) || candidates[0] || "Not assigned";
+  }
+
+  var colLetterIndexCache;
+  function colLetterToIndex(letter) {
+    if (!colLetterIndexCache) colLetterIndexCache = new Map();
+    const raw = String(letter || "");
+    const hit = colLetterIndexCache.get(raw);
+    if (hit !== undefined) return hit;
+    let n = 0;
+    const s = raw.toUpperCase().replace(/[^A-Z]/g, "");
+    for (let i = 0; i < s.length; i += 1) n = n * 26 + (s.charCodeAt(i) - 64);
+    if (colLetterIndexCache.size > 2000) colLetterIndexCache.clear();
+    colLetterIndexCache.set(raw, n - 1);
+    return n - 1;
+  }
+
+  function todayKeys(now = new Date()) {
+    const local = saudiToday(now);
+    return {
+      now: local,
+      monthKey: toYyyymm(local),
+      dayKey: toYyyymmdd(local),
+      label: cellToString(local),
+      source: "calendar",
+    };
+  }
+
+  /** Business calendar is Asia/Riyadh (not the browser timezone). */
+  function saudiToday(now = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Riyadh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(now);
+    const pick = (t) => Number((parts.find((p) => p.type === t) || {}).value);
+    return new Date(pick("year"), pick("month") - 1, pick("day"));
+  }
+
+  /** When calendar month has no Col P/V dates, use the latest month found in Sales Raw. */
+  function detectSalesReportLive(salesRows, calendarLive) {
+    const monthCounts = new Map();
+    const dayCounts = new Map();
+
+    (salesRows || []).forEach((r) => {
+      [r.proformaDate, r.deliveryDate].forEach((d) => {
+        if (!d) return;
+        const ym = toYyyymm(d);
+        const yd = toYyyymmdd(d);
+        if (ym) monthCounts.set(ym, (monthCounts.get(ym) || 0) + 1);
+        if (yd) dayCounts.set(yd, (dayCounts.get(yd) || 0) + 1);
+      });
+    });
+
+    if (!monthCounts.size) {
+      return { ...calendarLive, source: "calendar", noFileDates: true };
+    }
+
+    if ((monthCounts.get(calendarLive.monthKey) || 0) > 0) {
+      return { ...calendarLive, source: "calendar" };
+    }
+
+    let reportMonthKey = "";
+    monthCounts.forEach((count, ym) => {
+      if (!reportMonthKey || ym > reportMonthKey) reportMonthKey = ym;
+    });
+
+    let reportDayKey = "";
+    dayCounts.forEach((count, yd) => {
+      if (yd.startsWith(reportMonthKey) && yd > reportDayKey) reportDayKey = yd;
+    });
+
+    const yy = Number(reportMonthKey.slice(0, 4));
+    const mm = Number(reportMonthKey.slice(4, 6)) - 1;
+    const dd = reportDayKey ? Number(reportDayKey.slice(6, 8)) : 1;
+    const refDate = new Date(yy, mm, dd);
+
+    const monthLabel = refDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+    return {
+      now: refDate,
+      monthKey: reportMonthKey,
+      dayKey: reportDayKey || toYyyymmdd(refDate),
+      label: cellToString(refDate),
+      source: "file",
+      reportMonthLabel: monthLabel,
+      calendarMonthKey: calendarLive.monthKey,
+      calendarDayKey: calendarLive.dayKey,
+      calendarLabel: calendarLive.label,
+    };
+  }
+
+  function parseIsoDateInput(s) {
+    if (!s) return null;
+    const m = String(s).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function toIsoDateInput(d) {
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function sameCalendarDay(a, b) {
+    if (!a || !b) return false;
+    const da = a instanceof Date ? a : parseDate(a);
+    const db = b instanceof Date ? b : parseDate(b);
+    if (!(da instanceof Date) || !(db instanceof Date) || Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+    return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+  }
+
+  function dateInRangeInclusive(d, from, to) {
+    if (!d || !from || !to) return false;
+    const dt = d instanceof Date ? d : parseDate(d);
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return false;
+    const t = startOfDay(dt).getTime();
+    return t >= startOfDay(from).getTime() && t <= startOfDay(to).getTime();
+  }
+
+  function salesDateBounds(salesRows) {
+    let min = null;
+    let max = null;
+    (salesRows || []).forEach((r) => {
+      [r.proformaDate, r.deliveryDate].forEach((d) => {
+        if (!d) return;
+        const dt = d instanceof Date ? d : parseDate(d);
+        if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return;
+        const day = startOfDay(dt);
+        if (!min || day < min) min = day;
+        if (!max || day > max) max = day;
+      });
+    });
+    return { min, max };
+  }
+
+  function prevRangeFor(from, to) {
+    const spanDays = Math.max(1, Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1);
+    const prevTo = new Date(from.getFullYear(), from.getMonth(), from.getDate() - 1);
+    const prevFrom = new Date(prevTo.getFullYear(), prevTo.getMonth(), prevTo.getDate() - (spanDays - 1));
+    return { prevFrom, prevTo };
+  }
+
+  function resolveGlobalDatePeriod(salesRows, filter) {
+    const preset = (filter && filter.preset) || "today";
+    const calendarLive = todayKeys();
+    const today = saudiToday();
+    const bounds = salesDateBounds(salesRows || []);
+    const fmt = (d) => d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const fmtMonth = (d) => d.toLocaleString("en-US", { month: "long", year: "numeric" });
+
+    if (preset === "custom" && filter.from && filter.to) {
+      const from = parseIsoDateInput(filter.from);
+      const to = parseIsoDateInput(filter.to);
+      if (from && to && startOfDay(from).getTime() <= startOfDay(to).getTime()) {
+        const sameDay = startOfDay(from).getTime() === startOfDay(to).getTime();
+        const rangeLabel = sameDay ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+        const spanDays = Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1;
+        const { prevFrom, prevTo } = prevRangeFor(from, to);
+    return {
+          now: to,
+          monthKey: toYyyymm(to),
+          dayKey: toYyyymmdd(to),
+          label: cellToString(to),
+          source: "custom",
+          filterMode: "custom",
+          preset: "custom",
+          rangeFrom: from,
+          rangeTo: to,
+          rangeLabel,
+          reportMonthLabel: rangeLabel,
+          calendarMonthKey: calendarLive.monthKey,
+          calendarLabel: calendarLive.label,
+          daysInMonth: spanDays,
+          daysPassed: spanDays,
+          daysRemaining: 0,
+          dayUsesRange: !sameDay,
+          prevRangeFrom: prevFrom,
+          prevRangeTo: prevTo,
+          prevMonthLabel: `${fmt(prevFrom)} – ${fmt(prevTo)}`,
+        };
+      }
+    }
+
+    if (preset === "last_month") {
+      const monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      const dim = monthEnd.getDate();
+      const prevStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+      const prevEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), 0);
+      return {
+        now: monthEnd,
+        monthKey: toYyyymm(monthEnd),
+        dayKey: toYyyymmdd(monthEnd),
+        label: cellToString(monthEnd),
+        source: "preset",
+        filterMode: "preset",
+        preset: "last_month",
+        rangeFrom: monthStart,
+        rangeTo: monthEnd,
+        rangeLabel: fmtMonth(monthStart),
+        reportMonthLabel: fmtMonth(monthStart),
+        calendarMonthKey: calendarLive.monthKey,
+        calendarLabel: calendarLive.label,
+        daysInMonth: dim,
+        daysPassed: dim,
+        daysRemaining: 0,
+        dayUsesRange: true,
+        prevRangeFrom: prevStart,
+        prevRangeTo: prevEnd,
+        prevMonthLabel: fmtMonth(prevStart),
+      };
+    }
+
+    if (preset === "all") {
+      const from = bounds.min ? startOfDay(bounds.min) : today;
+      const to = bounds.max ? startOfDay(bounds.max) : today;
+      const spanDays = Math.max(1, Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1);
+      const { prevFrom, prevTo } = prevRangeFor(from, to);
+      return {
+        now: to,
+        monthKey: toYyyymm(to),
+        dayKey: toYyyymmdd(to),
+        label: cellToString(to),
+        source: "preset",
+        filterMode: "preset",
+        preset: "all",
+        rangeFrom: from,
+        rangeTo: to,
+        rangeLabel: `${fmt(from)} – ${fmt(to)}`,
+        reportMonthLabel: "All dates in file",
+        calendarMonthKey: calendarLive.monthKey,
+        calendarLabel: calendarLive.label,
+        daysInMonth: spanDays,
+        daysPassed: spanDays,
+        daysRemaining: 0,
+        dayUsesRange: true,
+        prevRangeFrom: prevFrom,
+        prevRangeTo: prevTo,
+        prevMonthLabel: `${fmt(prevFrom)} – ${fmt(prevTo)}`,
+      };
+    }
+
+    if (preset === "this_month") {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const dim = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      const rangeLabel = `${fmt(monthStart)} – ${fmt(today)}`;
+      return {
+        now: today,
+        monthKey: toYyyymm(today),
+        dayKey: toYyyymmdd(today),
+        label: cellToString(today),
+        source: "preset",
+        filterMode: "preset",
+        preset: "this_month",
+        rangeFrom: monthStart,
+        rangeTo: today,
+        rangeLabel,
+        reportMonthLabel: `${fmtMonth(today)} · ${monthStart.getDate()}–${today.getDate()}`,
+        calendarMonthKey: calendarLive.monthKey,
+        calendarLabel: calendarLive.label,
+        daysInMonth: dim,
+        daysPassed: today.getDate(),
+        daysRemaining: Math.max(0, dim - today.getDate()),
+        dayUsesRange: false,
+        prevRangeFrom: prevStart,
+        prevRangeTo: prevEnd,
+        prevMonthLabel: fmtMonth(prevStart),
+      };
+    }
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const dim = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    return {
+      now: today,
+      monthKey: toYyyymm(today),
+      dayKey: toYyyymmdd(today),
+      label: cellToString(today),
+      source: "preset",
+      filterMode: "preset",
+      preset: "today",
+      rangeFrom: monthStart,
+      rangeTo: today,
+      rangeLabel: fmt(today),
+      reportMonthLabel: fmtMonth(today),
+      calendarMonthKey: calendarLive.monthKey,
+      calendarLabel: calendarLive.label,
+      daysInMonth: dim,
+      daysPassed: today.getDate(),
+      daysRemaining: Math.max(0, dim - today.getDate()),
+      dayUsesRange: false,
+      prevRangeFrom: prevStart,
+      prevRangeTo: prevEnd,
+      prevMonthLabel: fmtMonth(prevStart),
+    };
+  }
+
+  function resolveSalesReportPeriod(salesRows, dateFilter) {
+    const filter = dateFilter || globalDateFilter;
+    return resolveGlobalDatePeriod(salesRows, filter);
+  }
+
+  function hasDeliveryDate(r) {
+    const d = r && r.deliveryDate;
+    if (d == null || d === "") return false;
+    if (d instanceof Date) return !Number.isNaN(d.getTime());
+    return !!parseDate(d);
+  }
+
+  /** Excel COUNTIFS Col V blank — any Col V date closes the proforma. */
+  function hasColVDate(r) {
+    return hasDeliveryDate(r);
+  }
+
+  // Alias used by matched-VIN status helpers (Col V filled = invoiced/delivered)
+  function hasInvoiceDate(r) {
+    return hasColVDate(r);
+  }
+
+  /**
+   * Excel Proforma:
+   *   =COUNTIFS(Rowdata!A:A, name, Rowdata!P:P, ">="&start, Rowdata!V:V, "")
+   * Excel Delivery:
+   *   =SUMPRODUCT(--(TRIM(A)=name), --(TEXT(V,"yyyymm")=month))
+   */
+  function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
+    if (!r) return false;
+    if (hasColVDate(r)) return false; // Rowdata!V:V, ""
+    return salesPeriodMatch(r.proformaDate, live, period, prevMonthKey);
+  }
+
+  function salesIsDeliveryInPeriod(r, live, period, prevMonthKey) {
+    return salesPeriodMatch(r && r.deliveryDate, live, period, prevMonthKey);
+  }
+
+  /** Prefer delivery label when both match; used only for single-tag displays. */
+  function salesActivityKind(r, live, period, prevMonthKey) {
+    if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) return "delivery";
+    if (salesIsProformaInPeriod(r, live, period, prevMonthKey)) return "proforma";
+    return null;
+  }
+
+  function salesDateInActivePeriod(d, live) {
+    if (!d || !live || !live.rangeFrom || !live.rangeTo) return false;
+    return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
+  }
+
+  function salesPeriodMatch(d, live, period, prevMonthKey) {
+    if (!d) return false;
+    if ((live.filterMode === "custom" || live.filterMode === "preset") && live.rangeFrom && live.rangeTo) {
+      if (period === "day") {
+        if (live.dayUsesRange) return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
+        return sameCalendarDay(d, live.rangeTo);
+      }
+      if (period === "month") return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
+      if (period === "prev" && live.prevRangeFrom && live.prevRangeTo) {
+        return dateInRangeInclusive(d, live.prevRangeFrom, live.prevRangeTo);
+      }
+      return false;
+    }
+    const ym = toYyyymm(d);
+    const yd = toYyyymmdd(d);
+    if (period === "month") return ym === live.monthKey;
+    if (period === "day") return yd === live.dayKey;
+    if (period === "prev") return ym === prevMonthKey;
+    return false;
+  }
+
+  /** Sales Raw / Rowdata: Col A = salesman, Col P = proforma date, Col V = delivery date */
+  function salesRawRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /raw\s*data|row\s*data|rowdata/i.test(n)) ||
+      names.find((n) => /sales/i.test(n)) ||
+      names[0];
+    if (!workbook.Sheets[preferred]) return [];
+
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = HEADER_MARKERS.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 3) break;
+    }
+
+    // Excel COUNTIFS uses fixed Col A / P / V. Col V is Invoice Date in Sales Raw
+    // (blank V = open proforma). Delivery Date may be a separate header column.
+    let idxA = colLetterToIndex("A");
+    let idxP = colLetterToIndex("P");
+    const idxColV = colLetterToIndex("V");
+    let idxV = idxColV;
+
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
+    const headerSalesman = findHeaderIdx([
+      (n) => n === "salesman name",
+      (n) => n === "salesman",
+      (n) => n === "sales employee" || n === "employee name",
+      (n) => n === "advisor" || n === "consultant",
+    ]);
+    const headerProforma = findHeaderIdx([
+      (n) => n.includes("proforma") && n.includes("date"),
+      (n) => n === "proforma" || n === "proforma date" || n === "pro forma date",
+    ]);
+    const headerInvoice = findHeaderIdx([
+      (n) => n.includes("invoice") && n.includes("date"),
+      (n) => n === "invoice date" || n === "inv date" || n === "invoice",
+    ]);
+    const headerDelivery = findHeaderIdx([
+      (n) => n === "delivery date" || n === "delivered date" || n === "actual delivery date",
+      (n) => n.includes("delivery") && n.includes("date") && !n.includes("note") && !n.includes("invoice"),
+      (n) => n === "delivery" || n === "delivered date",
+    ]);
+    const headerSecondary = findHeaderIdx([
+      (n) => n === "secondary status" || n === "secondary status desc",
+      (n) => n.includes("secondary") && n.includes("status"),
+    ]);
+
+    const colANorm = normHeader(headers[idxA] || "");
+    const colAIsCode = /\b(code|id|number|no|emp)\b/.test(colANorm) && !/name/.test(colANorm);
+    const colAIsName = !colANorm
+      || /salesman|employee|advisor|consultant|name/.test(colANorm);
+    if (headerSalesman >= 0 && (colAIsCode || (!colAIsName && headerSalesman !== idxA))) {
+      idxA = headerSalesman;
+    } else if (headerSalesman === idxA) {
+      idxA = headerSalesman;
+    }
+    // else keep Col A — matches Excel Rowdata!A:A
+
+    if (headerProforma >= 0) idxP = headerProforma;
+
+    // Excel formulas lock Col V for delivery + open-proforma blank check.
+    // Do not remap V to another "Delivery Date" header — SUMPRODUCT uses Rowdata!V.
+    idxV = idxColV;
+    const idxInvoice = idxColV;
+    const idxDelivery = idxColV;
+
+    const idxSecondary = headerSecondary >= 0 ? headerSecondary : colLetterToIndex("H");
+
+    // Excel Rowdata formulas start at row 2 → skip header row (index 0+)
+    const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
+
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+
+      // Skip repeated header-looking rows
+      const asText = line.map((c) => normHeader(c));
+      if (HEADER_MARKERS.filter((m) => asText.some((c) => c === m || c.includes(m))).length >= 3) continue;
+
+      const salesmanRaw = cellToString(line[idxA]).trim();
+      if (!salesmanRaw) continue;
+      // Resolve once from the raw Col A spelling (aliases + safe fuzzy)
+      const salesman = resolveSalesmanName(salesmanRaw);
+
+      // Col P = proforma date · Col V = delivery date (blank => open proforma)
+      const deliveryDate = parseDate(line[idxColV]);
+      const invoiceDate = deliveryDate;
+
+      const obj = {
+        salesman,
+        _salesmanRaw: salesmanRaw,
+        plant: "",
+        salesmanCode: "",
+        proformaDate: parseDate(line[idxP]),
+        invoiceDate,
+        deliveryDate,
+        secondaryStatus: cellToString(line[idxSecondary]).trim(),
+        vin: "",
+        _sheet: preferred,
+        __cells: line,
+        _colSalesman: idxA,
+        _colProforma: idxP,
+        _colInvoice: idxColV,
+        _colDelivery: idxColV,
+      };
+      headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+
+      const plantIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        if (!n) return false;
+        // "Plant", "Plant Name", "Sales Plant", sales office / department / channel / team / brand
+        return n === "plant"
+          || /(^|\s)plant(\s|$)/.test(n)
+          || n.includes("sales office")
+          || n.includes("sales plant")
+          || n.includes("department")
+          || n === "channel"
+          || n.includes("sales channel")
+          || n === "team"
+          || n === "brand"
+          || n.includes("division");
+      });
+      const codeIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return n.includes("salesman code") || n.includes("employee id") || n.includes("emp id") || n === "staff id" || n === "code";
+      });
+      if (plantIdx >= 0) obj.plant = cellToString(line[plantIdx]).trim();
+      if (codeIdx >= 0) obj.salesmanCode = cellToString(line[codeIdx]).trim();
+      const codeName = employeeNameFromCode(obj.salesmanCode) || employeeNameFromCodeCells(headers, line);
+      if (codeName) {
+        obj.salesman = codeName;
+        obj._salesmanRaw = codeName;
+      }
+
+      // Prefer VIN column by header name, else scan row for a 17-char VIN
+      const vinHeaderIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return n === "vin" || n.includes("vehicle identification") || n === "chassis";
+      });
+      let vin = "";
+      if (vinHeaderIdx >= 0) vin = extractVinValue(line[vinHeaderIdx]);
+      if (!vin) {
+        for (let i = 0; i < line.length; i += 1) {
+          if (i === idxA || i === idxP || i === idxColV) continue;
+          vin = extractVinValue(line[i]);
+          if (vin) break;
+        }
+      }
+      obj.vin = vin;
+
+      const salesTypeIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return HEADER_ALIASES.salesType.some((a) => n === a || n.includes(a));
+      });
+      const paidIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return HEADER_ALIASES.paid.some((a) => n === a || n.includes(a));
+      });
+      const paid = paidIdx >= 0 ? isPaid(line[paidIdx]) : false;
+      obj.salesType = inferSalesType(salesTypeIdx >= 0 ? line[salesTypeIdx] : "", paid);
+
+      // Explicit product for channel cards (Lexus codes etc.)
+      // Prefer exact "Product" — never steal "Model Year" via includes("model").
+      const isYearishHeader = (n) => /\byear\b/.test(n) || n === "my" || n === "model year";
+      const productIdxExact = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return n === "product" || n === "product code" || n === "prod" || n === "المادة" || n === "المنتج";
+      });
+      const productIdxLoose = headers.findIndex((h) => {
+        const n = normHeader(h);
+        if (!n || isYearishHeader(n)) return false;
+        return n === "vehicle model" || n === "car model" || n === "model code"
+          || n === "vehicle model code" || n === "series"
+          || (n === "model" && !isYearishHeader(n));
+      });
+      const materialIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        if (!n || isYearishHeader(n)) return false;
+        return n === "material"
+          || n.includes("material desc")
+          || n.includes("material description");
+      });
+      const colB = cellToString(line[colLetterToIndex("B")]).trim();
+      const colC = cellToString(line[colLetterToIndex("C")]).trim();
+      const colD = cellToString(line[colLetterToIndex("D")]).trim();
+      if (productIdxExact >= 0) obj.product = cellToString(line[productIdxExact]).trim();
+      if (!obj.product && productIdxLoose >= 0) obj.product = cellToString(line[productIdxLoose]).trim();
+      if (!obj.product && materialIdx >= 0) obj.product = cellToString(line[materialIdx]).trim();
+      // RTL / Sales Raw convention: Col B is usually Product — prefer letter codes over years
+      if (!obj.product || /^\d{4}$/.test(obj.product)) {
+        const letterProd = [colB, colC, colD].find((v) => v && !/^\d{4}$/.test(v) && /[A-Za-z]/.test(v));
+        if (letterProd) obj.product = letterProd;
+        else if (!obj.product) obj.product = colB || colC || colD || "";
+      }
+      obj._productRaw = obj.product;
+
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function extractVinValue(raw) {
+    const cleaned = String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!cleaned) return "";
+    const m = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/) || cleaned.match(/[A-Z0-9]{17}/);
+    return m ? m[0] : "";
+  }
+
+  /** Reserved sheet Col L — full VIN or chassis tail; hide junk like "37". */
+  function reservedVinFromCell(raw) {
+    const full = extractVinValue(raw);
+    if (full) return full;
+    const cleaned = String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (cleaned.length >= 8 && cleaned.length <= 16 && /[A-Z]/.test(cleaned)) return cleaned;
+    return "";
+  }
+
+  /** E-Sales / central: prefer sheet 3 «المخزون المتاح all retail». */
+  function esalesAvailableStockRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /المخزون\s*المتاح/i.test(n) && /retail|all/i.test(n)) ||
+      names.find((n) => /المخزون\s*المتاح/i.test(n)) ||
+      names.find((n) => /all\s*retail/i.test(n) && /مخزون|stock|avail/i.test(n)) ||
+      names.find((n) => /all\s*retail/i.test(n)) ||
+      names[2] ||
+      names[0];
+    return sheetRows(workbook, preferred);
+  }
+
+  /** E-Sales reserved sheet — only «E-Sales المحجوز» (order F · VIN L · product I · suffix J · ext M · int N). */
+  function esalesReservedSheetName(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return null;
+    return (
+      names.find((n) => /^e[\s_-]*sales\s*المحجوز$/i.test(String(n).trim())) ||
+      names.find((n) => /e[\s_-]*sales/i.test(n) && /المحجوز/i.test(n)) ||
+      names.find((n) => /المحجوز/i.test(n) && /e[\s_-]*sales|esales/i.test(n)) ||
+      names.find((n) => /^المحجوز$/i.test(String(n).trim())) ||
+      names.find((n) => /المحجوز/i.test(n)) ||
+      null
+    );
+  }
+
+  function esalesDisplaySheetName(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return null;
+    return (
+      names.find((n) => /display\s*central\s*1/i.test(n)) ||
+      names.find((n) => /display\s*central/i.test(n)) ||
+      names.find((n) => /display/i.test(n) && /central/i.test(n)) ||
+      names.find((n) => /^display\b/i.test(String(n).trim())) ||
+      names.find((n) => /عرض/.test(String(n)) && /central|سنترال|1/.test(String(n))) ||
+      null
+    );
+  }
+
+  function esalesDisplayVinFromRow(r) {
+    const vinHeader = findHeaderLetter(r, [
+      (n) => n === "vin" || n === "vin no" || n === "vin number" || n === "chassis",
+      (n) => n.includes("vin") || n.includes("chassis") || n.includes("شاسيه"),
+    ]);
+    const candidates = [];
+    if (vinHeader) candidates.push(cellByLetter(r, vinHeader));
+    ["L", "H", "E", "K", "J", "I", "F", "D", "C", "A"].forEach((letter) => {
+      candidates.push(cellByLetter(r, letter));
+    });
+    candidates.push(r.vin, stockFieldByAlias(r, "vin", []));
+    if (Array.isArray(r.__cells)) {
+      r.__cells.forEach((c) => candidates.push(c));
+    }
+    for (let i = 0; i < candidates.length; i += 1) {
+      const full = extractVinValue(candidates[i]);
+      if (full) return full;
+    }
+    // Display sheets sometimes store chassis tails (8–16 chars)
+    for (let i = 0; i < candidates.length; i += 1) {
+      const cleaned = String(candidates[i] ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (cleaned.length >= 8 && cleaned.length <= 17) return cleaned;
+    }
+    return "";
+  }
+
+  /** Display Central 1 rows are available unless clearly sold / delivered / unavailable. */
+  function isEsalesDisplayAvailable(r) {
+    const blob = [
+      stockPrimaryStatus(r),
+      stockSecondaryStatus(r),
+      stockFieldByAlias(r, "status", []),
+      cellToString(cellByLetter(r, "C")),
+      cellToString(cellByLetter(r, "M")),
+    ].join(" ").toLowerCase();
+    if (/display|عرض|showroom|معرض/.test(blob)) return true;
+    if (/not\s*avail|unavailable|غير\s*متاح/.test(blob)) return false;
+    if (/\b(sold|مباع|delivered|invoiced)\b/.test(blob) && !/avail|متاح/.test(blob)) return false;
+    return true;
+  }
+
+  function esalesDisplayStockRows(workbook) {
+    const sheetName = esalesDisplaySheetName(workbook);
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    return sheetRows(workbook, sheetName).map((r, idx) => {
+      const vin = esalesDisplayVinFromRow(r);
+      const product = cellToString(cellByLetter(r, "B")).trim()
+        || cellToString(cellByLetter(r, "D")).trim()
+        || stockFieldByAlias(r, "product", [])
+        || "";
+      const suffix = normalizeProductSuffix(
+        product,
+        cellToString(cellByLetter(r, "G")).trim()
+          || cellToString(cellByLetter(r, "E")).trim()
+          || stockFieldByAlias(r, "suffix", [])
+          || ""
+      );
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", [])
+        || "";
+      const status = stockPrimaryStatus(r) || stockSecondaryStatus(r) || stockFieldByAlias(r, "status", []) || "";
+      return {
+        idx,
+        sheet: sheetName,
+        vin,
+        product,
+        suffix,
+        location,
+        status,
+        available: isEsalesDisplayAvailable(r),
+        _raw: r,
+      };
+    }).filter((r) => r.vin);
+  }
+
+  function esalesReservedStockRows(workbook, sheetNameOverride) {
+    const sheetName = sheetNameOverride || esalesReservedSheetName(workbook);
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    return sheetRows(workbook, sheetName).map((r, idx) => {
+      const orderRaw = cellByLetter(r, "F");
+      let orderNumber = cellToString(orderRaw).trim();
+      if (/^\d+\.0+$/.test(orderNumber)) orderNumber = orderNumber.replace(/\.0+$/, "");
+      const vin = reservedVinFromCell(cellByLetter(r, "L"));
+      // Col I product · Col J suffix · Col M exterior · Col N interior
+      const product = cellToString(cellByLetter(r, "I")).trim()
+        || cellToString(cellByLetter(r, "B")).trim()
+        || stockFieldByAlias(r, "product", [])
+        || "";
+      const suffix = normalizeProductSuffix(
+        product,
+        cellToString(cellByLetter(r, "J")).trim()
+          || cellToString(cellByLetter(r, "G")).trim()
+          || stockFieldByAlias(r, "suffix", [])
+          || ""
+      );
+      const ext = cellToString(cellByLetter(r, "M")).trim()
+        || stockFieldByAlias(r, "ext", [])
+        || "";
+      const int = cellToString(cellByLetter(r, "N")).trim()
+        || stockFieldByAlias(r, "int", [])
+        || "";
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", [])
+        || "";
+      const searchArea = cellToString(cellByLetter(r, "P")).trim()
+        || stockFieldByAlias(r, "vehicleSearchArea", [])
+        || "";
+      return {
+        idx,
+        sheet: sheetName,
+        orderNumber,
+        vin,
+        product,
+        suffix,
+        ext,
+        int,
+        location,
+        searchArea,
+        _raw: r,
+      };
+    }).filter((r) => r.orderNumber || r.vin);
+  }
+
+  /** First worksheet only. Invoice Date is found by header, never by column V. */
+  function ytdInvoiceRows(workbook) {
+    window._ytdInvoiceRows = [];
+    window._ytdInvoiceMeta = { sheet: "", invoiceHeader: "", qtyHeader: "", idHeader: "", nameHeader: "" };
+    const names = (workbook && workbook.SheetNames) || [];
+    const sheetName = names[0];
+    if (!sheetName || !workbook.Sheets[sheetName]) return;
+    const matrix = sheetMatrixFromColA(workbook.Sheets[sheetName]);
+    if (!matrix.length) return;
+    let headerIdx = 0;
+    let bestHits = -1;
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      const hits = ["invoice date", "sales qty", "salesman", "advisor"].filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+    }
+    const headers = (matrix[headerIdx] || []).map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const findHeader = (test) => headers.findIndex((h) => test(normHeader(h)));
+    const invoiceIdx = findHeader((n) => n === "invoice date" || n === "inv date" || (n.includes("invoice") && n.includes("date")));
+    const qtyIdx = findHeader((n) => n === "sales qty" || n === "sales quantity" || n === "qty" || n.includes("sales qty"));
+    const nameIdx = findHeader((n) => n === "salesman name" || n === "salesman" || n === "advisor" || n === "employee name" || n === "consultant");
+    const idIdx = findHeader((n) => n.includes("employee id") || n === "emp id" || n.includes("salesman id") || n.includes("salesman code") || n === "staff id");
+    const vinIdx = findHeader((n) => n === "vin" || n === "chassis" || n.includes("vehicle identification"));
+    const idxName = nameIdx >= 0 ? nameIdx : colLetterToIndex("A");
+    const idxReport = colLetterToIndex("V");
+    const rows = [];
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      const rawName = cellToString(line[idxName]).trim();
+      if (!rawName) continue;
+      const invoice = invoiceIdx >= 0 ? parseDate(line[invoiceIdx]) : null;
+      const qtyRaw = qtyIdx >= 0 ? line[qtyIdx] : null;
+      const qtyNum = qtyRaw == null || String(qtyRaw).trim() === "" ? null : Number(String(qtyRaw).replace(/,/g, "").trim());
+      const qty = Number.isFinite(qtyNum) ? qtyNum : null;
+      let reason = "";
+      if (invoiceIdx < 0) reason = "Invoice Date column was not found";
+      else if (!invoice) reason = "Blank or invalid Invoice Date";
+      else if (qtyIdx < 0) reason = "Sales Qty column was not found";
+      else if (qty == null) reason = "Missing Sales Qty";
+      rows.push({
+        name: resolveSalesmanName(rawName) || rawName,
+        id: idIdx >= 0 ? cellToString(line[idIdx]).trim() : "",
+        invoice,
+        qty,
+        reason,
+        reportDate: parseDate(line[idxReport]),
+        vin: vinIdx >= 0 ? cellToString(line[vinIdx]).trim() : "",
+      });
+    }
+    window._ytdInvoiceRows = rows;
+    window._ytdInvoiceMeta = {
+      sheet: sheetName,
+      invoiceHeader: invoiceIdx >= 0 ? headers[invoiceIdx] : "",
+      qtyHeader: qtyIdx >= 0 ? headers[qtyIdx] : "",
+      idHeader: idIdx >= 0 ? headers[idIdx] : "",
+      nameHeader: headers[idxName] || "",
+    };
+  }
+
+  function rowsForSlot(id, workbook) {
+    if (id === "backorder") return backorderRows(workbook);
+    if (id === "cancelled") return cancelledBoRows(workbook);
+    if (id === "accessories") return accessoriesRows(workbook);
+    if (id === "sales") {
+      ytdInvoiceRows(workbook);
+      return salesRawRows(workbook);
+    }
+    if (id === "central") return esalesAvailableStockRows(workbook);
+    return sheetRows(workbook, workbook.SheetNames[0]);
+  }
+
+  function colorKey(v) {
+    return upperTrim(v).replace(/[^A-Z0-9]/g, "");
+  }
+
+  function matchScore(bo, stock) {
+    const checks = [
+      ["product", upperTrim(bo.product) && upperTrim(bo.product) === upperTrim(stock.product)],
+      ["year", String(bo.year || "") && String(bo.year) === String(stock.year)],
+      ["suffix", upperTrim(bo.suffix) && upperTrim(bo.suffix) === upperTrim(stock.suffix)],
+      ["ext", colorKey(bo.ext) && colorKey(bo.ext) === colorKey(stock.ext)],
+      ["int", colorKey(bo.int) && colorKey(bo.int) === colorKey(stock.int)],
+    ];
+    const applicable = checks.filter((c) => bo[c[0]] && String(bo[c[0]]).trim()).length || 5;
+    const hits = checks.filter((c) => c[1]).length;
+    return Math.round((hits / applicable) * 100);
+  }
+
+  function isConfirmedFlag(v) {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (!s) return false;
+    // Not confirmed — check before generic "confirm" substring match
+    if (/^(n|no|nc|0|false)$/i.test(s)) return false;
+    if (/(not[\s_-]*conf|un[\s_-]*conf|non[\s_-]*conf|pending|waiting|open|unalloc|not alloc|غير\s*مؤكد)/i.test(s)) return false;
+    // Confirmed
+    if (/^(y|yes|c|1|true|confirmed|confirm|allocated|alloc|مؤكد)$/i.test(s)) return true;
+    if (/^conf(irmed)?$/i.test(s)) return true;
+    if (/\b(confirmed|allocated|مؤكد)\b/.test(s)) return true;
+    return false;
+  }
+
+  /** True when a cell looks like a confirm flag (not an exterior color code). */
+  function looksLikeConfirmValue(v) {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (!s) return false;
+    if (/^(y|yes|n|no|nc|c|0|1|true|false)$/i.test(s)) return true;
+    if (/conf|alloc|pending|waiting|open|مؤكد|غير/.test(s)) return true;
+    return false;
+  }
+
+  /**
+   * Back Order confirmation:
+   * 1) Confirm / allocation header or alias
+   * 2) Col H only when the value looks like a confirm flag (some BO files put it in H)
+   * Never treat exterior color codes in H as confirm.
+   */
+  function boConfirmRaw(row, get) {
+    const letter = findHeaderLetter(row, [
+      (n) => n === "confirm flag" || n === "confirm" || n === "confirmation",
+      (n) => n.includes("confirm") && !n.includes("not"),
+      (n) => n.includes("allocation") || n.includes("allocated"),
+    ]);
+    if (letter) {
+      const v = cellByLetter(row, letter);
+      if (cellToString(v).trim() !== "") return v;
+    }
+    const fromAlias = get(row, "confirm");
+    if (cellToString(fromAlias).trim() !== "") return fromAlias;
+    const colH = cellByLetter(row, "H");
+    if (looksLikeConfirmValue(colH)) return colH;
+    const status = get(row, "status");
+    if (looksLikeConfirmValue(status)) return status;
+    return status;
+  }
+
+  function ensureGlobalLivePeriod() {
+    window._globalLivePeriod = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
+    return window._globalLivePeriod;
+  }
+
+  function inferSalesType(raw, paid) {
+    const s = String(raw ?? "").trim().toLowerCase();
+    if (!s) return paid ? "Cash" : "Other";
+    if (/fleet|أسطول/.test(s)) return "Fleet";
+    if (/employee|emp|موظف|staff/.test(s)) return "Employee";
+    if (/aljuf|alj\s*uf|ufinance|u-?finance/.test(s)) return "ALJUF";
+    if (/bank|بنك|finance|تمويل/.test(s)) return "Bank";
+    if (/cash|نقد/.test(s)) return "Cash";
+    const t = String(raw).trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : "Other";
+  }
+
+  /** Product + ALJ suffix from a BO row. Col B / Col G when headers don't alias. */
+  function boRowProductSuffix(row, get) {
+    const g = get || buildFieldGetter(row || {});
+    let product = cellToString(g(row, "product")).trim();
+    if (!product || /^\d{4}$/.test(product) || /^(model\s*year|year)$/i.test(product)) {
+      product = cellToString(cellByLetter(row, "B")).trim();
+    }
+    product = product.replace(/^TOYOTA\s+/i, "").trim();
+    let rawSuffix = cellToString(g(row, "suffix")).trim();
+    if (!rawSuffix) rawSuffix = cellToString(g(row, "sfx")).trim();
+    const colG = cellToString(cellByLetter(row, "G")).trim();
+    // TMC codes are long (AXVA70-…); Allocation plan uses short ALJ sfx (AA, G2, …).
+    if (colG && (!rawSuffix || (rawSuffix.length > 12 && colG.length <= 12))) rawSuffix = colG;
+    if (!rawSuffix) rawSuffix = colG;
+    return { product, rawSuffix };
+  }
+
+  function mapBo(rows) {
+    const get = buildFieldGetter(rows[0] || {});
+    return (rows || []).map((r, i) => {
+      const orderDate = parseDate(get(r, "orderDate"));
+      const agingFromCol = toNumber(get(r, "agingDays"));
+      const aging = agingFromCol > 0
+        ? agingFromCol
+        : (orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null);
+      const confirmRaw = boConfirmRaw(r, get);
+      const confirmed = isConfirmedFlag(confirmRaw);
+      const mapped = boRowProductSuffix(r, get);
+      const product = mapped.product;
+      const rawSuffix = mapped.rawSuffix;
+      const suffix = normalizeProductSuffix(product, rawSuffix);
+      const paid = isPaid(get(r, "paid"));
+      const salesType = inferSalesType(get(r, "salesType"), paid);
+      const category = cellToString(get(r, "category")) || (product ? String(product).split(/\s+/)[0] : "—");
+      const salesChannel = cellToString(get(r, "salesChannel") || get(r, "plant")) || "—";
+      const salesScope = cellToString(get(r, "salesScope")) || salesChannel || "—";
+      return {
+        id: i,
+        boNumber: cellToString(get(r, "boNumber")),
+        customer: maskPersonName(cellToString(get(r, "customer"))),
+        salesman: employeeNameFromCodeFields(r) || resolveSalesmanName(get(r, "salesman")),
+        product: product || "—",
+        category,
+        year: cellToString(get(r, "year")),
+        suffix,
+        sfx: suffix || "—",
+        ext: cellToString(get(r, "ext")),
+        int: cellToString(get(r, "int")),
+        paid,
+        confirm: cellToString(confirmRaw),
+        confirmed,
+        salesType,
+        salesChannel,
+        salesScope,
+        orderDate: orderDate ? cellToString(orderDate) : "",
+        orderDateObj: orderDate,
+        aging,
+        vin: extractVinValue(get(r, "vin")) || cellToString(get(r, "vin")).trim().toUpperCase(),
+      };
+    });
+  }
+
+  function mapStock(rows, source) {
+    const get = buildFieldGetter(rows[0] || {});
+    return rows.map((r, i) => {
+      const product = cellToString(get(r, "product"));
+      const suffix = normalizeProductSuffix(product, get(r, "suffix"));
+      return {
+      id: source + "-" + i,
+      source,
+      vin: cellToString(get(r, "vin")),
+      product,
+      year: cellToString(get(r, "year")),
+      suffix,
+      ext: cellToString(get(r, "ext")),
+      int: cellToString(get(r, "int")),
+      location: cellToString(get(r, "location")),
+      status: cellToString(get(r, "status")),
+      };
+    });
+  }
+
+  function mapSales(rows) {
+    return rows.map((r, i) => {
+      const get = buildFieldGetter(r);
+      return {
+      id: i,
+        salesman: resolveSalesmanName(r.salesman || get(r, "salesman")),
+        product: cellToString(r.product || r.Product || r.model || r.Model || get(r, "product") || ""),
+      vin: cellToString(r.vin || r.VIN || ""),
+        amount: toNumber(r.amount != null ? r.amount : get(r, "amount")),
+        qty: toNumber(r.qty != null ? r.qty : get(r, "qty")) || 1,
+      proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
+      deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
+      date: r.proformaDate ? cellToString(r.proformaDate) : (r.deliveryDate ? cellToString(r.deliveryDate) : ""),
+      };
+    });
+  }
+
+  function mapCancelled(rows) {
+    const get = buildFieldGetter(rows[0] || {});
+    const out = [];
+    (rows || []).forEach((r, i) => {
+      // Prefer Col I VIN already extracted by cancelledBoRows
+      let vin = extractVinValue(r.vin);
+      if (!vin) vin = extractVinValue(get(r, "vin"));
+      if (!vin && Array.isArray(r.__cells)) {
+        vin = extractVinValue(r.__cells[colLetterToIndex("I")]);
+      }
+      // Count every row where Col I has a VIN (duplicates included)
+      if (!vin) return;
+
+      const salesman = resolveSalesmanName(r.salesman || get(r, "salesman"));
+      if (!salesman) return;
+
+      out.push({
+      id: i,
+        boNumber: cellToString(r.boNumber || get(r, "boNumber")),
+        product: cellToString(r.product || get(r, "product")),
+        salesman,
+        reason: cellToString(r.reason || get(r, "reason")) || "Cancelled BO",
+        date: cellToString(
+          r.cancelDate
+            || parseDate(get(r, "cancelDate"))
+            || get(r, "cancelDate")
+            || get(r, "orderDate")
+        ),
+        vin,
+        _fromCancelFile: true,
+      });
+    });
+    return out;
+  }
+
+  /**
+   * Cancelled BOs = rows from Cancelled Excel where Col I has a VIN,
+   * counted under the salesman name on that row (duplicates included).
+   */
+  function allCancelledRawRows() {
+    const get = buildFieldGetter((slots.cancelled.rows || [])[0] || {});
+    return (slots.cancelled.rows || []).filter((r) => {
+      let vin = extractVinValue(r.vin);
+      if (!vin) vin = extractVinValue(get(r, "vin"));
+      if (!vin && Array.isArray(r.__cells)) vin = extractVinValue(r.__cells[colLetterToIndex("I")]);
+      return !!vin;
+    });
+  }
+
+  function cancelledRawRowsForSalesman(key) {
+    const get = buildFieldGetter((slots.cancelled.rows || [])[0] || {});
+    return allCancelledRawRows().filter((r) => {
+      const salesman = resolveSalesmanName(r.salesman || get(r, "salesman"));
+      return salesman && nameKey(salesman) === key;
+    });
+  }
+
+  function renderCancelledFileTableHtml(rawRows, limit) {
+    const max = limit != null ? limit : MAX_ROWS;
+    if (!rawRows.length) {
+      return `<p class="foot" style="padding:12px">No cancelled BO rows to show.</p>`;
+    }
+    const sample = rawRows[0];
+    const cols = boFileColumns(sample);
+    const showCount = Math.min(rawRows.length, max);
+    const colCount = cols.length;
+    const overflow = rawRows.length > showCount
+      ? `<p class="foot">Showing ${formatNumber(showCount)} of ${formatNumber(rawRows.length)} rows · ${colCount} columns</p>`
+      : `<p class="foot">${formatNumber(rawRows.length)} row${rawRows.length === 1 ? "" : "s"} · ${colCount} columns</p>`;
+    return `<div class="emp-raw-wrap bo-car-rows-wrap">
+      <table class="bo-table stock-file-table">
+        <thead><tr>${cols.map((c) =>
+          `<th title="Column ${c.letter}">${escapeHtml(c.label)}<span class="stock-col-letter">${c.letter}</span></th>`
+        ).join("")}</tr></thead>
+        <tbody>${rawRows.slice(0, showCount).map((r) => `
+          <tr>${cols.map((c) =>
+            `<td>${escapeHtml(cellToString(boFileCell(r, c)))}</td>`
+          ).join("")}</tr>`
+        ).join("")}</tbody>
+        <tfoot><tr class="bo-total-row">
+          <td><b>TOTAL</b></td>
+          <td colspan="${Math.max(1, colCount - 1)}"><b>${formatNumber(rawRows.length)} row${rawRows.length === 1 ? "" : "s"}</b></td>
+        </tr></tfoot>
+      </table>
+      ${overflow}
+    </div>`;
+  }
+
+  function resolveCancelledList() {
+    const rows = slots.cancelled.rows || [];
+    if (!rows.length) return [];
+    return mapCancelled(rows);
+  }
+
+  function uniqueVins(list) {
+    const set = new Set();
+    list.forEach((r) => { if (r.vin) set.add(upperTrim(r.vin)); });
+    return set;
+  }
+
+  // Same result as scoring every free stock row with matchScore(); keys are normalised once per row.
+  function bestMatches(bos, stock) {
+    const free = stock.filter((s) => s.vin).map((s) => ({
+      s,
+      product: upperTrim(s.product),
+      year: String(s.year),
+      suffix: upperTrim(s.suffix),
+      ext: colorKey(s.ext),
+      int: colorKey(s.int),
+    }));
+    const used = new Set();
+    return bos.map((bo) => {
+      const product = upperTrim(bo.product);
+      const year = String(bo.year || "");
+      const suffix = upperTrim(bo.suffix);
+      const ext = colorKey(bo.ext);
+      const int = colorKey(bo.int);
+      const applicable = ["product", "year", "suffix", "ext", "int"]
+        .filter((k) => bo[k] && String(bo[k]).trim()).length || 5;
+      const possible = (product ? 1 : 0) + (year ? 1 : 0) + (suffix ? 1 : 0) + (ext ? 1 : 0) + (int ? 1 : 0);
+      const maxScore = Math.round((possible / applicable) * 100);
+      let best = null;
+      for (let i = 0; i < free.length; i++) {
+        const f = free[i];
+        if (used.has(f.s.id)) continue;
+        const hits = (product && product === f.product ? 1 : 0)
+          + (year && year === f.year ? 1 : 0)
+          + (suffix && suffix === f.suffix ? 1 : 0)
+          + (ext && ext === f.ext ? 1 : 0)
+          + (int && int === f.int ? 1 : 0);
+        const score = Math.round((hits / applicable) * 100);
+        if (!best || score > best.score) {
+          best = { stock: f.s, score };
+          if (score >= maxScore) break;
+        }
+      }
+      if (best && best.score >= 60) {
+        used.add(best.stock.id);
+        return { ...bo, matchVin: best.stock.vin, matchScore: best.score, matchSource: best.stock.source };
+      }
+      return { ...bo, matchVin: bo.vin || "", matchScore: bo.vin ? 100 : 0, matchSource: bo.vin ? "existing" : "" };
+    });
+  }
+
+  function countBy(list, key, limit) {
+    const map = new Map();
+    list.forEach((r) => {
+      const k = String(r[key] || "—").trim() || "—";
+      map.set(k, (map.get(k) || 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit || 8);
+  }
+
+  function sumBy(list, key, valueKey, limit) {
+    const map = new Map();
+    list.forEach((r) => {
+      const k = String(r[key] || "—").trim() || "—";
+      map.set(k, (map.get(k) || 0) + (r[valueKey] || 0));
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit || 8);
+  }
+
+  function slotHasRows(id) {
+    return !!(slots[id] && (slots[id].rows || []).length);
+  }
+
+  function hasAnyPushedFiles() {
+    return SLOT_DEFS.some((d) => slotHasRows(d.id) || (slots[d.id] && slots[d.id].name));
+  }
+
+  function updateWaitFoot() {
+    const el = $("#wait-foot");
+    if (!el) return;
+    const sales = slotHasRows("sales");
+    const cancelled = slotHasRows("cancelled");
+    if (sales && cancelled) {
+      el.textContent = "Sales + Cancelled BOs · count all rows when Col I has a VIN (duplicates included).";
+    } else if (sales) {
+      el.textContent = "Sales Raw loaded · building Sales Report (Cancelled BOs optional · Col I = VIN).";
+    } else if (cancelled) {
+      el.textContent = "Cancelled BOs loaded · add Sales Raw for Sales Report.";
+    } else if (hasAnyPushedFiles()) {
+      el.textContent = "Some files loaded · Push Sales Raw from Admin for Sales Report.";
+    } else {
+      el.textContent = "No workbooks yet · use Admin → Push to live.";
+    }
+  }
+
+  function bufferToWorkbook(name, buffer, opts) {
+    const lower = String(name || "").toLowerCase();
+    if (lower.endsWith(".csv")) {
+      const text = new TextDecoder("utf-8").decode(buffer);
+      return isolateWorkbookFirstSheet(
+        XLSX.read(text, Object.assign(xlsxReadOpts("string", opts), { FS: "," })),
+        opts
+      );
+    }
+    return isolateWorkbookFirstSheet(
+      XLSX.read(buffer, xlsxReadOpts("array", opts)),
+      opts
+    );
+  }
+
+  async function hydrateSlotsFromAdmin(opts) {
+    const options = opts && typeof opts === "object" ? opts : {};
+    const skipSync = !!options.skipSync;
+    if (!skipSync) {
+    try {
+      await Store.syncFromServer();
+    } catch {
+      /* fall back to local IndexedDB */
+    }
+    }
+    const payload = await Store.loadWorkbookFiles();
+    return applyWorkbookPayload(payload);
+  }
+
+  async function applyWorkbookPayload(payload) {
+    SLOT_DEFS.forEach((d) => {
+      slots[d.id] = { file: null, rows: [], name: "" };
+      if (d.id === "central") {
+        slots[d.id].reservedRows = [];
+        slots[d.id].reservedSheet = "";
+        slots[d.id].displayRows = [];
+        slots[d.id].displaySheet = "";
+        slots[d.id].sheetNames = [];
+        slots[d.id].availableSheet = "";
+      }
+      if (d.id === "accessories") {
+        slots[d.id].vsndRows = [];
+        slots[d.id].vsndSheet = "";
+      }
+    });
+    if (!payload || !payload.files) {
+      updateWaitFoot();
+      $("#run-btn").disabled = true;
+      $("#clear-btn").disabled = true;
+      return false;
+    }
+    $("#load-banner").classList.add("show");
+    $("#load-banner").textContent = "Reading shared workbooks…";
+    setStatus("Loading workbooks…", "busy");
+    try {
+      for (const d of SLOT_DEFS) {
+        const f = payload.files[d.id];
+        if (!f || !f.buffer) continue;
+        if (GEC_VIEW && !GEC_VIEW_SLOTS.has(d.id)) continue;
+        if (LEXUS_VIEW) continue;
+        if (d.id === "gec") {
+          const gecDataset = window.GecData ? window.GecData.parseBuffer(f.buffer, { fileName: f.name }) : null;
+          slots.gec = {
+            file: { name: f.name, size: f.size || f.buffer.byteLength },
+            rows: gecDataset ? gecDataset.records : [],
+            name: f.name,
+            sheet: "",
+            gec: gecDataset,
+          };
+          continue;
+        }
+        if (d.id === "gecVisitors") {
+          const visitorSet = window.GecData ? window.GecData.parseVisitorsBuffer(f.buffer, { fileName: f.name }) : null;
+          slots.gecVisitors = {
+            file: { name: f.name, size: f.size || f.buffer.byteLength },
+            rows: visitorSet ? visitorSet.records : [],
+            name: f.name,
+            sheet: visitorSet ? visitorSet.sheetName || "" : "",
+            visitors: visitorSet,
+          };
+          continue;
+        }
+        if (d.id === "reserved") {
+          const wb = bufferToWorkbook(f.name, f.buffer, {});
+          const sheetName = esalesReservedSheetName(wb) || (wb.SheetNames || [])[0] || "";
+          const rows = sheetName ? esalesReservedStockRows(wb, sheetName) : [];
+          slots.reserved = {
+            file: { name: f.name, size: f.size || f.buffer.byteLength },
+            rows,
+            name: f.name,
+            sheet: sheetName,
+          };
+          // The dedicated Reserved File wins over the reserved sheet inside Stock E-Sales.
+          if (rows.length && slots.central) {
+            slots.central.reservedRows = rows;
+            slots.central.reservedSheet = sheetName;
+          }
+          continue;
+        }
+        const wb = bufferToWorkbook(f.name, f.buffer, { firstSheetOnly: d.id === "backorder" });
+        const rows = rowsForSlot(d.id, wb);
+        const slot = {
+          file: { name: f.name, size: f.size || f.buffer.byteLength },
+          rows,
+          name: f.name,
+          sheet: d.id === "backorder" ? ((wb.SheetNames || [])[0] || "") : "",
+        };
+        if (d.id === "central") {
+          slot.reservedRows = esalesReservedStockRows(wb);
+          slot.reservedSheet = esalesReservedSheetName(wb) || "";
+          slot.displayRows = esalesDisplayStockRows(wb);
+          slot.displaySheet = esalesDisplaySheetName(wb) || "";
+          slot.sheetNames = (wb.SheetNames || []).slice();
+          slot.availableSheet = (() => {
+            const names = wb.SheetNames || [];
+            return names.find((n) => /المخزون\s*المتاح/i.test(n))
+              || names.find((n) => /all\s*retail/i.test(n))
+              || names[2]
+              || "";
+          })();
+        }
+        if (d.id === "accessories") {
+          slot.vsndRows = accessoriesVsndRows(wb);
+          slot.vsndSheet = accessoriesVsndSheetName(wb) || "";
+        }
+        slots[d.id] = slot;
+        // Let the browser paint between large Excel parses
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      invalidateStockAvailabilityCache();
+      invalidateIccCache();
+      const any = hasAnyPushedFiles();
+      $("#run-btn").disabled = !any;
+      $("#clear-btn").disabled = !any;
+      updateWaitFoot();
+      return any;
+    } finally {
+      $("#load-banner").classList.remove("show");
+    }
+  }
+
+  function renderSlots() {
+    updateWaitFoot();
+    const any = hasAnyPushedFiles();
+    $("#clear-btn").disabled = !any;
+    $("#run-btn").disabled = !any;
+    if (!any) setStatus("Waiting for Admin Push");
+    else setStatus("Ready · click Refresh for latest data", "ok");
+  }
+
+  function accessoriesInPeriod(r, live, prevMonthKey) {
+    if (!r) return false;
+    // "All dates" / no range: include every row (even if Col F date is blank)
+    if (live && (live.preset === "all" || live.filterMode === "all")) return true;
+    if (!r.accessoryDate) {
+      // Undated rows still count toward the open month view
+      return !!(live && (live.preset === "this_month" || live.preset === "today" || !live.preset));
+    }
+    return salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey);
+  }
+
+  /** VINs already on the achieved sheet. They stay achieved and are not also counted in progress. */
+  function accessoriesAchievedVins() {
+    const vins = new Set();
+    (slots.accessories.rows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin);
+      if (vin) vins.add(vin);
+    });
+    return vins;
+  }
+
+  function buildAccessoriesMetrics(live, prevMonthKey) {
+    const settled = accessoriesSettled;
+    const totalAdminTarget = employeeTargets.reduce((s, e) => s + effectiveEmployeeTarget(e), 0);
+    const useSettledPool = settled > 0 && totalAdminTarget > 0;
+    const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
+    const vsndMap = accessoriesVsndVinEmployeeMap();
+    const soldByKey = new Map();
+    const soldCountByKey = new Map();
+    let matchedRows = 0;
+    let unmatchedVin = 0;
+    (slots.accessories.rows || []).forEach((r) => {
+      if (!accessoriesInPeriod(r, live, prevMonthKey)) return;
+      const vin = extractVinValue(r.vin);
+      if (!r._idSalesman && !vinMap.has(vin) && !vsndMap.has(vin)) unmatchedVin += 1;
+      else matchedRows += 1;
+      const salesman = accessorySalesmanForRow(r, vinMap, vsndMap);
+      r.salesman = salesman; // keep detail tables / filters in sync
+      const key = nameKey(salesman);
+      if (!key) return;
+      soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
+      soldCountByKey.set(key, (soldCountByKey.get(key) || 0) + 1);
+    });
+
+    const progressByKey = new Map();
+    const progressCountByKey = new Map();
+    let progressRows = 0;
+    let progressUnmatched = 0;
+    const achievedVins = accessoriesAchievedVins();
+    (slots.accessories.vsndRows || []).forEach((r) => {
+      const amount = Number(r.amount) || 0;
+      if (!amount) return;
+      const vin = extractVinValue(r.vin);
+      if (vin && achievedVins.has(vin)) return;
+      const candidates = [
+        resolveSalesmanName(r._colL != null ? r._colL : r.salesman),
+        vin ? vinMap.get(vin) : "",
+      ].filter(Boolean);
+      if (!candidates.length) progressUnmatched += 1;
+      const salesman = candidates.find((n) => salesmanMatchRank(n) === 2) || candidates[0] || "Not assigned";
+      r.salesman = salesman;
+      const key = nameKey(salesman);
+      if (!key) return;
+      progressRows += 1;
+      progressByKey.set(key, (progressByKey.get(key) || 0) + amount);
+      progressCountByKey.set(key, (progressCountByKey.get(key) || 0) + 1);
+    });
+
+    const byKey = new Map();
+    employeeTargets.forEach((e) => {
+      const key = nameKey(e.name);
+      if (!key) return;
+      const adminTarget = effectiveEmployeeTarget(e);
+      // Accessories target: settled pool share, else employee's monthly target
+      const quota = useSettledPool
+        ? (settled / totalAdminTarget) * adminTarget
+        : adminTarget;
+      const sold = soldByKey.get(key) || 0;
+      const inProgress = progressByKey.get(key) || 0;
+      const remaining = Math.max(0, quota - sold - inProgress);
+      byKey.set(key, {
+        salesman: e.name,
+        adminTarget,
+        quota,
+        sold,
+        soldCount: soldCountByKey.get(key) || 0,
+        inProgress,
+        progressCount: progressCountByKey.get(key) || 0,
+        achPct: quota > 0 ? sold / quota : null,
+        combinedPct: quota > 0 ? (sold + inProgress) / quota : null,
+        remaining,
+        netTarget: remaining,
+      });
+      soldByKey.delete(key);
+      progressByKey.delete(key);
+      soldCountByKey.delete(key);
+      progressCountByKey.delete(key);
+    });
+    const leftoverKeys = new Set([...soldByKey.keys(), ...progressByKey.keys()]);
+    leftoverKeys.forEach((key) => {
+      const sold = soldByKey.get(key) || 0;
+      const inProgress = progressByKey.get(key) || 0;
+      const soldCount = soldCountByKey.get(key) || 0;
+      const progressCount = progressCountByKey.get(key) || 0;
+      const fromFile = (slots.accessories.rows || []).find((r) => nameKey(r.salesman) === key)
+        || (slots.accessories.vsndRows || []).find((r) => nameKey(r.salesman) === key);
+      byKey.set(key, {
+        salesman: fromFile ? fromFile.salesman : key,
+        adminTarget: 0,
+        quota: 0,
+        sold,
+        soldCount,
+        inProgress,
+        progressCount,
+        achPct: null,
+        remaining: 0,
+        netTarget: 0,
+      });
+    });
+
+    const totSold = [...byKey.values()].reduce((s, x) => s + x.sold, 0);
+    const totQuota = [...byKey.values()].reduce((s, x) => s + x.quota, 0);
+    const totInProgress = [...byKey.values()].reduce((s, x) => s + (x.inProgress || 0), 0);
+    return {
+      settled,
+      totalAdminTarget,
+      useSettledPool,
+      byKey,
+      matchedRows,
+      unmatchedVin,
+      progressRows,
+      progressUnmatched,
+      totals: {
+        sold: totSold,
+        quota: totQuota,
+        inProgress: totInProgress,
+        achPct: totQuota > 0 ? totSold / totQuota : null,
+      },
+      hasFile: !!(slots.accessories.rows && slots.accessories.rows.length)
+        || !!(slots.accessories.vsndRows && slots.accessories.vsndRows.length),
+    };
+  }
+
+  function applyAccessoriesToReportRows(rows, acc) {
+    const emptyBlock = (target) => ({
+      Proforma: 0,
+      Delivery: 0,
+      Target: target || 0,
+      "Ach%": target ? "0%" : "#DIV/0!",
+      "Del+VSND": 0,
+      "Ach% (Sales)": target ? "0%" : "#DIV/0!",
+      Diff: target || 0,
+      "Cancelled BOs": 0,
+      "Cancellation %": "#DIV/0!",
+      "Can. Target 30%": "30%",
+      "Gap +/-": "#DIV/0!",
+      Notes: "",
+      _deliveryAch: 0,
+      _salesAch: 0,
+      _cancelPct: null,
+      _gap: null,
+      _diff: target || 0,
+      _targetNum: target || 0,
+      _vacation: false,
+    });
+
+    const merged = rows.map((r) => {
+      const m = acc.byKey.get(r._key) || {
+        quota: 0, sold: 0, inProgress: 0, achPct: null, netTarget: rowTargetNum(r), adminTarget: rowTargetNum(r),
+      };
+      const accAchPct = m.achPct;
+      return {
+        ...r,
+        "Acc Target": m.quota,
+        "Acc Achieved": m.sold,
+        "Acc In Progress": m.inProgress || 0,
+        "Acc Ach %": accAchPct == null ? (m.quota ? "0%" : "—") : pct1(accAchPct),
+        "Acc Ach+IP %": (m.quota || 0) > 0 ? pct1(((m.sold || 0) + (m.inProgress || 0)) / m.quota) : "—",
+        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
+        "Adjusted Target": m.netTarget,
+        _accQuota: m.quota,
+        _accSold: m.sold,
+        _accInProgress: m.inProgress || 0,
+        _accAchPct: accAchPct,
+        _accCombinedPct: (m.quota || 0) > 0 ? ((m.sold || 0) + (m.inProgress || 0)) / m.quota : null,
+        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
+        _accNetTarget: m.netTarget,
+      };
+    });
+
+    const existing = new Set(merged.map((r) => r._key));
+    acc.byKey.forEach((m, key) => {
+      if (existing.has(key) || !(m.sold || m.inProgress)) return;
+      const target = Number(m.adminTarget) || 0;
+      const monthBlock = emptyBlock(target);
+      const dayBlock = emptyBlock(target);
+      merged.push({
+        No: 0,
+        Plant: "—",
+        Salesman: "",
+        "Sales Employee": m.salesman || key,
+        Notes: "",
+        VSND: 0,
+        "Proforma (Day)": 0,
+        "Proforma (Month)": 0,
+        "Proforma (Prev)": 0,
+        "Delivery (Day)": 0,
+        "Delivery (Month)": 0,
+        "Delivery (Prev)": 0,
+        Target: target,
+        "Day Target": target,
+        "Prof+Del": 0,
+        "Del %": target ? "0%" : "#DIV/0!",
+        "Prof+Del %": target ? "0%" : "#DIV/0!",
+        "Cancelled BOs": 0,
+        "Cancellation %": "#DIV/0!",
+        "Can. Target 30%": "30%",
+        "Gap +/-": "#DIV/0!",
+        "Acc Target": m.quota,
+        "Acc Achieved": m.sold,
+        "Acc In Progress": m.inProgress || 0,
+        "Acc Ach %": m.achPct == null ? (m.quota ? "0%" : "—") : pct1(m.achPct),
+        "Acc Ach+IP %": (m.quota || 0) > 0 ? pct1(((m.sold || 0) + (m.inProgress || 0)) / m.quota) : "—",
+        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
+        "Adjusted Target": m.netTarget,
+        ...monthBlock,
+        Proforma: 0,
+        Delivery: 0,
+        day: dayBlock,
+        month: monthBlock,
+        _delPct: target ? 0 : null,
+        _profDelPct: target ? 0 : null,
+        _vacation: false,
+        _targetNum: target,
+        _vins: [],
+        _records: [],
+        _key: key,
+        _accQuota: m.quota,
+        _accSold: m.sold,
+        _accInProgress: m.inProgress || 0,
+        _accAchPct: m.achPct,
+        _accCombinedPct: (m.quota || 0) > 0 ? ((m.sold || 0) + (m.inProgress || 0)) / m.quota : null,
+        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
+        _accNetTarget: m.netTarget,
+      });
+    });
+    return merged.map((r, i) => ({ ...r, No: i + 1 }));
+  }
+
+  function accessoriesRawRowsForSalesman(key, live, prevMonthKey) {
+    const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
+    const vsndMap = accessoriesVsndVinEmployeeMap();
+    return (slots.accessories.rows || []).filter((r) => {
+      if (!accessoriesInPeriod(r, live, prevMonthKey)) return false;
+      const salesman = accessorySalesmanForRow(r, vinMap, vsndMap);
+      r.salesman = salesman;
+      return nameKey(salesman) === key;
+    });
+  }
+
+  function proformaDayIndex(date, live) {
+    if (!date) return null;
+    const d = parseDate(date);
+    if (!d) return null;
+    if (live.filterMode === "custom" || live.preset === "this_month" || live.preset === "last_month") {
+      if (live.rangeFrom && live.rangeTo) {
+        const from = startOfDay(live.rangeFrom).getTime();
+        const to = startOfDay(live.rangeTo).getTime();
+        const t = startOfDay(d).getTime();
+        if (t < from || t > to) return null;
+        return Math.round((t - from) / 86400000) + 1;
+      }
+    }
+    if (toYyyymm(d) !== live.monthKey) return null;
+    return d.getDate();
+  }
+
+  function todayWorkingDayIndex(live, workDays) {
+    const elapsed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
+    return Math.max(1, Math.min(elapsed, Math.max(1, workDays)));
+  }
+
+  function buildEmployeeDailyProforma(live, prevMonthKey) {
+    const byKey = new Map();
+    salesDashboardRows().forEach((r) => {
+      // Col P proforma date in selected month (includes delivered rows)
+      if (!salesIsProformaInPeriod(r, live, "month", prevMonthKey)) return;
+      const pd = r.proformaDate;
+      const dayIndex = proformaDayIndex(pd, live);
+      if (!dayIndex) return;
+      const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      const key = nameKey(name);
+      if (!key) return;
+      if (!byKey.has(key)) byKey.set(key, new Map());
+      const dayMap = byKey.get(key);
+      dayMap.set(dayIndex, (dayMap.get(dayIndex) || 0) + 1);
+    });
+    return byKey;
+  }
+
+  function roundDaily(n) {
+    return Math.round(Number(n) * 10) / 10;
+  }
+
+  /**
+   * Daily pace with carry-forward: if yesterday needed 5 and got 4, today needs 6.
+   */
+  function computeDailyTargetPace(monthTarget, workDays, dailyMap, todayIndex, onVacation) {
+    const todayAchieved = (dailyMap && dailyMap.get(todayIndex)) || 0;
+    if (onVacation) {
+      return {
+        baseDaily: 0,
+        carryShortfall: 0,
+        todayTarget: 0,
+        todayAchieved,
+        todayAchPct: null,
+        onTrack: true,
+        workingDay: todayIndex,
+      };
+    }
+    if (monthTarget <= 0 || workDays <= 0) {
+      return {
+        baseDaily: 0,
+        carryShortfall: 0,
+        todayTarget: 0,
+        todayAchieved,
+        todayAchPct: null,
+        onTrack: false,
+        workingDay: todayIndex,
+      };
+    }
+    const baseDaily = monthTarget / workDays;
+    let carry = 0;
+    for (let d = 1; d < todayIndex; d += 1) {
+      const dayTarget = baseDaily + carry;
+      const achieved = (dailyMap && dailyMap.get(d)) || 0;
+      carry = Math.max(0, dayTarget - achieved);
+    }
+    const todayTarget = baseDaily + carry;
+    const todayAchPct = todayTarget > 0 ? todayAchieved / todayTarget : null;
+    return {
+      baseDaily,
+      carryShortfall: carry,
+      todayTarget,
+      todayAchieved,
+      todayAchPct,
+      onTrack: todayAchPct != null && todayAchPct >= 1,
+      workingDay: todayIndex,
+    };
+  }
+
+  function buildDailyTargetReport(rows, live, workDays, dailyProformaByKey) {
+    const todayIndex = todayWorkingDayIndex(live, workDays);
+    const enriched = rows.map((r) => {
+      const key = r._key;
+      const dayMap = dailyProformaByKey.get(key) || new Map();
+      const pace = computeDailyTargetPace(
+        rowTargetNum(r),
+        workDays,
+        dayMap,
+        todayIndex,
+        !!r._vacation
+      );
+      return {
+        ...r,
+        "Daily Base": pace.baseDaily ? roundDaily(pace.baseDaily) : 0,
+        "Daily Carry": roundDaily(pace.carryShortfall),
+        "Daily Need": roundDaily(pace.todayTarget),
+        "Daily Achieved": pace.todayAchieved,
+        "Daily Ach %": pace.todayAchPct == null
+          ? (r._vacation ? "—" : "0%")
+          : pct1(pace.todayAchPct),
+        _dailyBase: pace.baseDaily,
+        _dailyCarry: pace.carryShortfall,
+        _dailyNeed: pace.todayTarget,
+        _dailyAchieved: pace.todayAchieved,
+        _dailyAchPct: pace.todayAchPct,
+        _dailyOnTrack: pace.onTrack,
+      };
+    });
+    const active = enriched.filter((r) => !r._vacation && rowTargetNum(r) > 0);
+    const onTrack = active.filter((r) => r._dailyOnTrack).length;
+    return {
+      workingDays: workDays,
+      todayWorkingDay: todayIndex,
+      rows: enriched,
+      totals: {
+        onTrack,
+        active: active.length,
+        avgAchPct: active.length
+          ? active.reduce((s, r) => s + (r._dailyAchPct || 0), 0) / active.length
+          : null,
+      },
+    };
+  }
+
+  /** Sales Dashboard counts Toyota only; Lexus rows are split out and shown as a separate count. */
+  let srRowsSplit = null;
+  function splitSalesDashboardRows() {
+    const src = slots.sales.rows || [];
+    if (!srRowsSplit || srRowsSplit.src !== src || srRowsSplit.len !== src.length) {
+      const rows = [];
+      const lexus = [];
+      src.forEach((r) => (isLexusSaleRow(r) ? lexus : rows).push(r));
+      srRowsSplit = { src, len: src.length, rows, lexus };
+    }
+    return srRowsSplit;
+  }
+
+  function salesDashboardRows() {
+    return splitSalesDashboardRows().rows;
+  }
+
+  function buildSalesReport(bos, sales, cancelled) {
+    const CANCEL_TARGET = 0.30;
+    const calendarLive = todayKeys();
+    srRowsSplit = null;
+    const split = splitSalesDashboardRows();
+    const salesRows = split.rows;
+    const live = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
+    window._globalLivePeriod = live;
+    const prevDate = new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1);
+    const prevMonthKey = toYyyymm(prevDate);
+    const prevMonthLabel = live.prevMonthLabel
+      || prevDate.toLocaleString("en-US", { month: "long" });
+    const byPerson = new Map();
+    const deliveryBySalesType = Object.create(null);
+    let proformaExceptMonth = 0;
+    let lexusDeliveryMonth = 0;
+    const lexusDeliveryByKey = Object.create(null);
+    split.lexus.forEach((r) => {
+      if (!salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) return;
+      lexusDeliveryMonth += 1;
+      const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      const display = name ? resolveDisplayName(name) : "";
+      const key = display ? nameKey(display) : "";
+      if (key) lexusDeliveryByKey[key] = (lexusDeliveryByKey[key] || 0) + 1;
+    });
+
+    const bumpSalesType = (type) => {
+      const t = String(type || "Other").trim() || "Other";
+      deliveryBySalesType[t] = (deliveryBySalesType[t] || 0) + 1;
+    };
+
+    const ensure = (name) => {
+      const display = resolveDisplayName(name);
+      if (!display) return null;
+      const key = nameKey(display);
+      if (!byPerson.has(key)) {
+        const meta = employeeMeta(display);
+        byPerson.set(key, {
+          salesman: display,
+          plant: meta.plant,
+          salesmanCode: meta.code,
+          note: meta.note || "",
+          proformaDay: 0,
+          proformaMonth: 0,
+          proformaPrev: 0,
+          proformaExceptMonth: 0,
+          deliveryDay: 0,
+          deliveryMonth: 0,
+          deliveryPrev: 0,
+          target: 0,
+          vsnd: 0,
+          cancelledBOs: 0,
+          cancelledDay: 0,
+          totalOrders: 0,
+          vins: [],
+          vinSet: new Set(),
+          records: [],
+        });
+      }
+      return byPerson.get(key);
+    };
+
+    const recordSkipKeys = new Set([
+      "salesman", "plant", "salesmancode", "proformadate", "deliverydate", "vin", "_sheet",
+    ]);
+    // Prefer common fields first in display order
+    const recordPreferredOrder = ["product", "model", "year", "model year", "exterior", "interior", "suffix", "customer", "amount", "status", "location"];
+    const recordSkipCache = new Map();
+    const recordOrderCache = new Map();
+    const isRecordSkipKey = (k) => {
+      let v = recordSkipCache.get(k);
+      if (v === undefined) {
+        v = recordSkipKeys.has(normHeader(k).replace(/\s+/g, ""));
+        recordSkipCache.set(k, v);
+      }
+      return v;
+    };
+    const recordOrderOf = (k) => {
+      let v = recordOrderCache.get(k);
+      if (v === undefined) {
+        const h = normHeader(k);
+        v = recordPreferredOrder.findIndex((p) => h.includes(p));
+        recordOrderCache.set(k, v);
+      }
+      return v;
+    };
+
+    function buildSalesRecord(r, flags) {
+      const vin = extractVinValue(r.vin) || extractVinValue(
+        Object.values(r).find((v) => extractVinValue(v))
+      );
+      const extra = [];
+      Object.keys(r).forEach((k) => {
+        if (String(k).startsWith("_")) return;
+        if (isRecordSkipKey(k)) return;
+        const val = cellToString(r[k]).trim();
+        if (!val) return;
+        // Skip duplicate of known date/vin columns by value only if header is Column N
+        extra.push({ key: k, value: val });
+      });
+      extra.sort((a, b) => {
+        const ia = recordOrderOf(a.key);
+        const ib = recordOrderOf(b.key);
+        if (ia < 0 && ib < 0) return String(a.key).localeCompare(String(b.key));
+        if (ia < 0) return 1;
+        if (ib < 0) return -1;
+        return ia - ib;
+      });
+      return {
+        vin: vin || "",
+        salesman: cellToString(r.salesman).trim(),
+        plant: cellToString(r.plant || "").trim(),
+        salesmanCode: cellToString(r.salesmanCode || "").trim(),
+        proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
+        deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        product: cellToString(r.product || r.Product || r.model || r.Model || "").trim(),
+        extra: extra.slice(0, 24),
+        flags,
+        source: "Sales Raw",
+      };
+    }
+
+    // Seed admin employees + their targets
+    employeeTargets.forEach((e) => {
+      const p = ensure(e.name);
+      if (!p) return;
+      p.vacation = !!e.vacation;
+      p.target = effectiveEmployeeTarget(e);
+      if (p.vacation) p.note = "VACATION";
+    });
+
+    // Sales Raw:
+    // Proforma = Col A name · Col P in period · invoice date blank
+    // Delivery = delivery date in period
+    // Always resolve from _salesmanRaw (Col A spelling) so Proforma attribution stays stable
+    salesRows.forEach((r) => {
+      const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      if (!name) return;
+      const p = ensure(name);
+      if (!p) return;
+
+      const adminT = resolveAdminTarget(name, 0);
+      if (adminT > 0) p.target = adminT;
+      if (isEmployeeOnVacation(name)) {
+        p.vacation = true;
+        p.target = 0;
+        p.note = "VACATION";
+      }
+
+      const plantVal = cellToString(r.plant || r.Plant || "").trim();
+      const codeVal = cellToString(r.salesmanCode || r.code || "").trim();
+      if (plantVal) p.plant = plantVal;
+      if (codeVal) p.salesmanCode = codeVal;
+
+      const flags = {
+        proformaMonth: false,
+        proformaDay: false,
+        proformaPrev: false,
+        deliveryMonth: false,
+        deliveryDay: false,
+        deliveryPrev: false,
+      };
+
+      if (salesIsProformaInPeriod(r, live, "month", prevMonthKey)) {
+        p.proformaMonth += 1;
+        flags.proformaMonth = true;
+      } else if (!hasColVDate(r) && r.proformaDate) {
+        // Open proforma whose Col P is outside the active month/period
+        p.proformaExceptMonth += 1;
+        proformaExceptMonth += 1;
+      }
+      if (salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) {
+        p.deliveryMonth += 1;
+        flags.deliveryMonth = true;
+        bumpSalesType(r.salesType || inferSalesType("", false));
+      }
+
+      if (salesIsProformaInPeriod(r, live, "prev", prevMonthKey)) {
+        p.proformaPrev += 1;
+        flags.proformaPrev = true;
+      }
+      if (salesIsDeliveryInPeriod(r, live, "prev", prevMonthKey)) {
+        p.deliveryPrev += 1;
+        flags.deliveryPrev = true;
+      }
+
+      if (salesIsProformaInPeriod(r, live, "day", prevMonthKey)) {
+        p.proformaDay += 1;
+        flags.proformaDay = true;
+      }
+      if (salesIsDeliveryInPeriod(r, live, "day", prevMonthKey)) {
+        p.deliveryDay += 1;
+        flags.deliveryDay = true;
+      }
+
+      p.totalOrders += 1;
+
+      // Keep detailed raw rows for proforma/delivery (month or day) for the click drawer
+      if (flags.proformaMonth || flags.proformaDay || flags.deliveryMonth || flags.deliveryDay) {
+        p.records.push(buildSalesRecord(r, flags));
+      }
+
+      const vin = extractVinValue(r.vin) || extractVinValue(
+        Object.values(r).find((v) => extractVinValue(v))
+      );
+      if (vin && !p.vinSet.has(vin)) {
+        p.vinSet.add(vin);
+        p.vins.push({
+          vin,
+          source: "Sales Raw",
+          kind: [
+            flags.proformaDay ? "Proforma (today)" : "",
+            flags.proformaMonth ? "Proforma (month)" : "",
+            flags.deliveryDay ? "Delivery (today)" : "",
+            flags.deliveryMonth ? "Delivery (month)" : "",
+          ].filter(Boolean).join(" · ") || "Sales row",
+          proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
+          deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        });
+      }
+    });
+
+    // Diagnostics: help explain empty Day/Month calculations
+    const diag = {
+      salesRows: salesRows.length,
+      withProformaDate: 0,
+      withProformaOpen: 0,
+      withDeliveryDate: 0,
+      monthProforma: 0,
+      monthDelivery: 0,
+      dayProforma: 0,
+      dayDelivery: 0,
+      matchedRoster: 0,
+      unmatchedNames: 0,
+      sampleUnmatched: [],
+      sampleProforma: [],
+      sampleDelivery: [],
+      today: live.label,
+      monthKey: live.monthKey,
+      dayKey: live.dayKey,
+      source: live.source || "calendar",
+      filterMode: live.filterMode || "auto",
+      rangeLabel: live.rangeLabel || "",
+      reportMonthLabel: live.reportMonthLabel || "",
+      calendarMonthKey: live.calendarMonthKey || calendarLive.monthKey,
+      calendarLabel: live.calendarLabel || calendarLive.label,
+    };
+    salesRows.forEach((r) => {
+      const raw = r._salesmanRaw || r.salesman;
+      const id = resolveEmployeeIdentity(raw);
+      if (id && isRosterKey(id.key) && !id.unmatched) diag.matchedRoster += 1;
+      else {
+        diag.unmatchedNames += 1;
+        if (diag.sampleUnmatched.length < 6 && raw) {
+          diag.sampleUnmatched.push(String(raw).trim());
+        }
+      }
+      if (r.proformaDate && !hasInvoiceDate(r)) diag.withProformaOpen += 1;
+      if (r.proformaDate) {
+        diag.withProformaDate += 1;
+        if (diag.sampleProforma.length < 5) {
+          diag.sampleProforma.push(cellToString(r.proformaDate) || toYyyymm(r.proformaDate) || "(unparsed)");
+        }
+      }
+      if (r.deliveryDate) {
+        diag.withDeliveryDate += 1;
+        if (diag.sampleDelivery.length < 5) {
+          diag.sampleDelivery.push(cellToString(r.deliveryDate) || toYyyymm(r.deliveryDate) || "(unparsed)");
+        }
+      }
+      if (salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) diag.monthDelivery += 1;
+      if (salesIsProformaInPeriod(r, live, "month", prevMonthKey)) diag.monthProforma += 1;
+      if (salesIsDeliveryInPeriod(r, live, "day", prevMonthKey)) diag.dayDelivery += 1;
+      if (salesIsProformaInPeriod(r, live, "day", prevMonthKey)) diag.dayProforma += 1;
+    });
+
+    // VSND fallback from open BOs without VIN (not in Excel formula, keep for report)
+    bos.forEach((b) => {
+      const name = rosterSalesmanName(b.salesman);
+      if (!name) return;
+      const p = ensure(name);
+      if (!p) return;
+      if (!b.vin) p.vsnd += 1;
+      const adminT = resolveAdminTarget(name, 0);
+      if (adminT > 0) p.target = adminT;
+      const vin = extractVinValue(b.vin);
+      if (vin && !p.vinSet.has(vin)) {
+        p.vinSet.add(vin);
+        p.vins.push({
+          vin,
+          source: "Back Order",
+          kind: b.boNumber ? `BO ${b.boNumber}` : "Back Order",
+          proformaDate: "",
+          deliveryDate: "",
+        });
+      }
+    });
+
+    cancelled.forEach((c) => {
+      const name = rosterSalesmanName(c.salesman);
+      if (!name) return;
+      const p = ensure(name);
+      if (!p) return;
+      const cancelDate = parseDate(c.date) || (c.date instanceof Date ? c.date : null);
+      if (live.filterMode === "custom") {
+        if (salesPeriodMatch(cancelDate, live, "month", prevMonthKey)) p.cancelledBOs += 1;
+      } else {
+      p.cancelledBOs += 1;
+      }
+      if (salesPeriodMatch(cancelDate, live, "day", prevMonthKey)) p.cancelledDay += 1;
+      const adminT = resolveAdminTarget(name, 0);
+      if (adminT > 0) p.target = adminT;
+    });
+
+    const daysInMonth = live.daysInMonth
+      || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
+
+    // Proforma = Col P in period · Col V blank · Delivery = Col V in period
+    // Del+VSND = Proforma + Delivery · Ach% = Del+VSND÷Target · Diff = Target − Del+VSND
+    const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
+      const delPlusVsnd = proforma + delivery; // Del+VSND = Proforma + Delivery
+      if (onVacation) {
+        return {
+          Proforma: proforma,
+          Delivery: delivery,
+          Target: "VACATION",
+          "Ach%": "0%",
+          "Del+VSND": delPlusVsnd,
+          "Ach% (Sales)": "0%",
+          Diff: 0,
+          "Cancelled BOs": cancelledCount,
+          "Cancellation %": "0%",
+          "Can. Target 30%": "30%",
+          "Gap +/-": "0%",
+          Notes: note || "VACATION",
+          _deliveryAch: 0,
+          _salesAch: 0,
+          _cancelPct: 0,
+          _gap: 0,
+          _diff: 0,
+          _targetNum: 0,
+          _vacation: true,
+        };
+      }
+      const deliveryAch = target ? delivery / target : 0;
+      const salesAch = target ? delPlusVsnd / target : 0;
+      const diff = target - delPlusVsnd;
+      const cancelBase = delivery + cancelledCount;
+      const cancelPct = cancelBase ? cancelledCount / cancelBase : null;
+      const gap = cancelPct == null ? null : CANCEL_TARGET - cancelPct;
+      return {
+        Proforma: proforma,
+        Delivery: delivery,
+        Target: target,
+        "Ach%": target ? pct1(salesAch) : "#DIV/0!",
+        "Del+VSND": delPlusVsnd,
+        "Ach% (Sales)": target ? pct1(salesAch) : "#DIV/0!",
+        Diff: diff,
+        "Cancelled BOs": cancelledCount,
+        "Cancellation %": cancelPct == null ? "#DIV/0!" : pct0(cancelPct),
+        "Can. Target 30%": "30%",
+        "Gap +/-": gap == null ? "#DIV/0!" : pct0(gap),
+        Notes: note || "",
+        _deliveryAch: deliveryAch,
+        _salesAch: salesAch,
+        _cancelPct: cancelPct,
+        _gap: gap,
+        _diff: diff,
+        _targetNum: target,
+        _vacation: false,
+      };
+    };
+
+    // Official admin roster first, then any other Sales Raw people with activity
+    const ordered = [];
+    const seen = new Set();
+    employeeTargets.forEach((e) => {
+      const key = nameKey(e.name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      ordered.push(byPerson.get(key));
+    });
+    byPerson.forEach((p, key) => {
+      if (!key || seen.has(key)) return;
+      const hasActivity = (p.proformaMonth || 0) + (p.deliveryMonth || 0)
+        + (p.proformaDay || 0) + (p.deliveryDay || 0) + (p.cancelledBOs || 0) > 0;
+      if (!hasActivity) return;
+      seen.add(key);
+      ordered.push(p);
+    });
+
+    const rows = ordered.filter(Boolean).map((p) => {
+      const onVacation = !!p.vacation;
+      const target = onVacation ? 0 : (p.target || 0);
+      const note = onVacation ? "VACATION" : (p.note || "");
+      // Day sheet = same formulas as month, but Col P / Col V filtered to today
+      const monthBlock = makeBlock(p.proformaMonth, p.deliveryMonth, target, p.cancelledBOs, note, onVacation);
+      const dayBlock = makeBlock(p.proformaDay, p.deliveryDay, target, p.cancelledDay, note, onVacation);
+      const prof = p.proformaMonth;
+      const del = p.deliveryMonth;
+      const profPlusDel = prof + del;
+      const delPct = onVacation ? 0 : (target ? del / target : null);
+      const profDelPct = onVacation ? 0 : (target ? profPlusDel / target : null);
+      return {
+        No: 0,
+        Plant: p.plant || "—",
+        Salesman: p.salesmanCode || "",
+        "Sales Employee": p.salesman,
+        Notes: note,
+        VSND: p.vsnd,
+        "Proforma (Day)": p.proformaDay,
+        "Proforma (Month)": p.proformaMonth,
+        "Proforma (Prev)": p.proformaPrev,
+        "Proforma (Except Month)": p.proformaExceptMonth,
+        "Delivery (Day)": p.deliveryDay,
+        "Delivery (Month)": p.deliveryMonth,
+        "Delivery (Prev)": p.deliveryPrev,
+        "Day Target": onVacation ? "VACATION" : target,
+        Target: onVacation ? "VACATION" : target,
+        "Prof+Del": profPlusDel,
+        "Del %": onVacation ? "0%" : (delPct == null ? "#DIV/0!" : pct1(delPct)),
+        "Prof+Del %": onVacation ? "0%" : (profDelPct == null ? "#DIV/0!" : pct1(profDelPct)),
+        _delPct: delPct,
+        _profDelPct: profDelPct,
+        _vacation: onVacation,
+        _targetNum: target,
+        // Month fields (default / backward compatible)
+        ...monthBlock,
+        Proforma: monthBlock.Proforma,
+        Delivery: monthBlock.Delivery,
+        "Del−Target": p.deliveryMonth - p.target,
+        "Ach % (Del)": monthBlock["Ach%"],
+        "Ach % (Sales)": monthBlock["Ach% (Sales)"],
+        "Cancel %": monthBlock["Cancellation %"],
+        "Can. Target": "30%",
+        day: dayBlock,
+        month: monthBlock,
+        _vins: p.vins.slice(),
+        _records: p.records.slice(),
+        _key: nameKey(p.salesman),
+        _achGap: p.deliveryMonth - p.target,
+      };
+    }).map((r, i) => ({ ...r, No: i + 1 }));
+
+    const accessories = buildAccessoriesMetrics(live, prevMonthKey);
+    const rowsWithAcc = applyAccessoriesToReportRows(rows, accessories);
+    const dailyProformaByKey = buildEmployeeDailyProforma(live, prevMonthKey);
+    const dailyTarget = buildDailyTargetReport(rowsWithAcc, live, workingDays, dailyProformaByKey);
+    const rowsFinal = dailyTarget.rows;
+
+    const totProformaDay = rowsFinal.reduce((s, r) => s + (Number(r["Proforma (Day)"]) || 0), 0);
+    const totProformaMonth = rowsFinal.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
+    const totProformaPrev = rowsFinal.reduce((s, r) => s + (Number(r["Proforma (Prev)"]) || 0), 0);
+    const totDeliveryDay = rowsFinal.reduce((s, r) => s + (Number(r["Delivery (Day)"]) || 0), 0);
+    const totDeliveryMonth = rowsFinal.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
+    const totDeliveryPrev = rowsFinal.reduce((s, r) => s + (Number(r["Delivery (Prev)"]) || 0), 0);
+    const totTarget = rowsFinal.reduce((s, r) => s + (Number(r._targetNum) || 0), 0);
+    const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
+    const totProfPlusDel = totProformaMonth + totDeliveryMonth;
+    const totVsnd = rowsFinal.reduce((s, r) => s + (Number(r.VSND) || 0), 0);
+    const totDelVsnd = totProformaMonth + totDeliveryMonth; // Del+VSND = Proforma + Delivery
+    const totDelVsndDay = totProformaDay + totDeliveryDay;
+    const totCancelled = rowsFinal.reduce((s, r) => s + (Number(r["Cancelled BOs"]) || 0), 0);
+    const totCancelledDay = rowsFinal.reduce((s, r) => s + (Number(r.day && r.day["Cancelled BOs"]) || 0), 0);
+    const monthCancelBase = totDeliveryMonth + totCancelled;
+    const dayCancelBase = totDeliveryDay + totCancelledDay;
+    const daysPassed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
+    const daysRemaining = Math.max(0, daysInMonth - daysPassed);
+
+    return {
+      rows: rowsFinal,
+      live,
+      daysInMonth,
+      daysPassed,
+      daysRemaining,
+      prevMonthKey,
+      prevMonthLabel,
+      diag,
+      accessories,
+      dailyTarget,
+      lexusDeliveryByKey,
+      totals: {
+        proformaDay: totProformaDay,
+        proformaMonth: totProformaMonth,
+        proformaPrev: totProformaPrev,
+        proformaExceptMonth,
+        deliveryBySalesType: { ...deliveryBySalesType },
+        deliveryDay: totDeliveryDay,
+        deliveryMonth: totDeliveryMonth,
+        deliveryPrev: totDeliveryPrev,
+        lexusDeliveryMonth,
+        proforma: totProformaMonth,
+        delivery: totDeliveryMonth,
+        target: totTarget,
+        dayTarget: totDayTarget,
+        profPlusDel: totProfPlusDel,
+        delPct: totTarget ? totDeliveryMonth / totTarget : 0,
+        profDelPct: totTarget ? totProfPlusDel / totTarget : 0,
+        vsnd: totVsnd,
+        delVsnd: totDelVsnd,
+        delVsndDay: totDelVsndDay,
+        diff: totTarget - totDelVsnd,
+        diffDay: totDayTarget - totDelVsndDay,
+        deliveryAch: totTarget ? totDeliveryMonth / totTarget : 0,
+        salesAch: totTarget ? totDelVsnd / totTarget : 0,
+        deliveryAchDay: totDayTarget ? totDeliveryDay / totDayTarget : 0,
+        salesAchDay: totDayTarget ? totDelVsndDay / totDayTarget : 0,
+        cancelled: totCancelled,
+        cancelledDay: totCancelledDay,
+        cancelPct: monthCancelBase ? totCancelled / monthCancelBase : 0,
+        cancelPctDay: dayCancelBase ? totCancelledDay / dayCancelBase : 0,
+        accSold: accessories.totals.sold,
+        accQuota: accessories.totals.quota,
+        accAchPct: accessories.totals.achPct,
+        accInProgress: accessories.totals.inProgress || 0,
+        accSettled: accessories.settled,
+      },
+    };
+  }
+
+  function data() {
+    const bos = mapBo(slots.backorder.rows);
+    const rtl = mapStock(slots.rtl.rows, "RTL");
+    const central = mapStock(slots.central.rows, "Central");
+    const sales = mapSales(slots.sales.rows);
+    const cancelled = resolveCancelledList();
+    const stock = [...rtl, ...central];
+    const matched = bestMatches(bos, stock);
+    const salesReport = buildSalesReport(bos, sales, cancelled);
+    return { bos, rtl, central, sales, cancelled, stock, matched, salesReport };
+  }
+
+  function renderKpis(d) {
+    const rtlVins = uniqueVins(d.rtl);
+    const centralVins = uniqueVins(d.central);
+    const paid = d.bos.filter((b) => b.paid).length;
+    const matched = d.matched.filter((b) => b.matchScore >= 80).length;
+    const avgAge = d.bos.length
+      ? Math.round(d.bos.reduce((s, b) => s + (b.aging || 0), 0) / d.bos.length)
+      : 0;
+    const salesAmt = d.sales.reduce((s, r) => s + r.amount, 0);
+    const cards = [
+      { label: "Back Orders", value: d.bos.length, sub: "open BO cars", tab: "backorder" },
+      { label: "Paid BOs", value: paid, sub: `${d.bos.length ? Math.round((paid / d.bos.length) * 100) : 0}% of BO`, tab: "backorder" },
+      { label: "RTL Stock", value: rtlVins.size || d.rtl.length, sub: "retail VINs", tab: "rtl" },
+      { label: "Central Stock", value: centralVins.size || d.central.length, sub: "central VINs", tab: "central" },
+      { label: "Matched ≥80%", value: matched, sub: "recommended VIN", tab: "matches" },
+      { label: "Avg BO aging", value: avgAge, sub: "days", tab: "backorder" },
+      { label: "Sales rows", value: d.sales.length, sub: salesAmt ? formatNumber(salesAmt) : "raw records", tab: "sales" },
+      { label: "Cancelled BOs", value: d.cancelled.length, sub: "Col I VIN · all rows · duplicates included", tab: "cancelled" },
+    ];
+    $("#kpis").innerHTML = cards.map((c) => `
+      <button class="kpi" data-tab="${c.tab}">
+        <div class="label">${c.label}</div>
+        <div class="value">${formatNumber(c.value)}</div>
+        <div class="sub">${escapeHtml(String(c.sub))}</div>
+      </button>`).join("");
+  }
+
+  function fitHorizontalChartHeight(labelCount, seriesCount, opts) {
+    const o = opts || {};
+    const pad = o.pad != null ? o.pad : 64;
+    const minRow = o.minRow != null ? o.minRow : (seriesCount >= 2 ? 22 : 18);
+    const preferredRow = o.preferredRow != null
+      ? o.preferredRow
+      : (seriesCount >= 3 ? 44 : seriesCount === 2 ? 36 : 28);
+    const frac = o.maxViewportFrac != null ? o.maxViewportFrac : 0.72;
+    const maxH = Math.max(220, Math.floor(window.innerHeight * frac) - (o.chromePx || 0));
+    const preferred = labelCount * preferredRow + pad;
+    if (preferred <= maxH) {
+      return { height: preferred, rowPx: preferredRow };
+    }
+    const rowPx = Math.max(minRow, Math.floor((maxH - pad) / Math.max(1, labelCount)));
+    return { height: Math.min(maxH, labelCount * rowPx + pad), rowPx };
+  }
+
+  function sizeChartScrollBox(canvasId, labelCount, horizontal, seriesCount) {
+    if (
+      canvasId === "pbi-wide-canvas"
+      || canvasId === "pbi-wide-salestype-canvas"
+      || canvasId === "pbi-wide-cancelcount-canvas"
+    ) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const box = canvas.closest(".chart-box");
+    const scroll = canvas.closest(".chart-scroll");
+    if (!box) return;
+    if (canvas.closest("#bo-dash")) {
+      box.style.height = "";
+      box.style.minHeight = "";
+      delete canvas.dataset.fitRowPx;
+      if (scroll) {
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
+      }
+      return;
+    }
+    if (horizontal && labelCount > 1) {
+      const series = Math.max(1, Number(seriesCount) || 1);
+      const perf = canvasId === "chart-sr-perf";
+      const profdel = canvasId === "chart-sr-profdel";
+      const cancel = canvasId === "chart-cancel";
+      const inSales = !!(scroll && scroll.closest && scroll.closest("#panel-salesreport"));
+      let preferredRow;
+      if (perf) preferredRow = series >= 2 ? 44 : 32;
+      else if (profdel) preferredRow = series >= 2 ? 40 : 28;
+      else if (cancel) preferredRow = series >= 2 ? 40 : 28;
+      else if (canvasId === "chart-sr-accessories") preferredRow = 40;
+      else preferredRow = series >= 3 ? 40 : series === 2 ? 34 : 26;
+      const fit = fitHorizontalChartHeight(labelCount, series, {
+        preferredRow,
+        minRow: canvasId === "chart-sr-accessories" ? 28 : (series >= 2 ? 20 : 16),
+        maxViewportFrac: inSales ? (perf ? 0.55 : canvasId === "chart-sr-accessories" ? 0.7 : 0.62) : 0.55,
+        pad: 56,
+      });
+      box.style.height = fit.height + "px";
+      box.style.minHeight = fit.height + "px";
+      canvas.dataset.fitRowPx = String(fit.rowPx);
+      if (scroll) {
+        if (canvasId === "chart-sr-accessories" && labelCount > 8) {
+          scroll.classList.add("is-scroll");
+          scroll.style.maxHeight = Math.max(320, Math.floor(window.innerHeight * 0.55)) + "px";
+        } else {
+          scroll.classList.remove("is-scroll");
+          scroll.style.maxHeight = "";
+        }
+      }
+    } else if (canvasId === "chart-sr-profdel") {
+      box.style.height = "210px";
+      box.style.minHeight = "210px";
+      delete canvas.dataset.fitRowPx;
+      if (scroll) {
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
+      }
+    } else {
+      box.style.height = "220px";
+      box.style.minHeight = "";
+      delete canvas.dataset.fitRowPx;
+      if (scroll) {
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
+      }
+    }
+  }
+
+  function formatBarEndLabel(n, suffix) {
+    if (!Number.isFinite(n)) return "";
+    const rounded = Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
+    return rounded + (suffix || "");
+  }
+
+  /** Draw values at the end of bars (right for horizontal). */
+  const barEndLabelsPlugin = {
+    id: "barEndLabels",
+    afterDatasetsDraw(chart) {
+      const cfg = chart.options.plugins && chart.options.plugins.barEndLabels;
+      if (!cfg || !cfg.display) return;
+      const { ctx } = chart;
+      const suffix = cfg.suffix || "";
+      const fontFamily = cfg.fontFamily || "'Manrope', 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif";
+      const horizontal = chart.options.indexAxis === "y";
+      const canvasEl = chart.canvas;
+      const fitRow = Number((canvasEl && canvasEl.dataset && canvasEl.dataset.fitRowPx) || 0);
+      const fitCompact = horizontal && fitRow > 0 && fitRow < 30;
+      ctx.save();
+      ctx.font = `700 ${fitCompact ? 9 : 12}px ${cfg.figureFont || "'Space Grotesk', 'Manrope', sans-serif"}`;
+      const labelColor = cfg.color || "#111111";
+      ctx.fillStyle = labelColor;
+      ctx.textBaseline = "middle";
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds.hidden) return;
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        const dsSuffix = ds.valueSuffix != null
+          ? ds.valueSuffix
+          : (looksLikePercentLabel(ds.label) ? "%" : (suffix || ""));
+        meta.data.forEach((el, i) => {
+          const raw = Number(ds.data[i]);
+          if (!Number.isFinite(raw)) return;
+          const text = formatBarEndLabel(raw, dsSuffix);
+          if (!text) return;
+          const { x, y } = el.getProps(["x", "y"], true);
+          if (horizontal) {
+            const pad = 8;
+            const maxX = chart.chartArea.right - 2;
+            const tw = ctx.measureText(text).width;
+            // Outside bar on the right; if clipped, draw inside the bar in white
+            if (x + pad + tw <= maxX) {
+              ctx.textAlign = "left";
+              ctx.fillStyle = labelColor;
+              ctx.fillText(text, x + pad, y);
+            } else {
+              ctx.textAlign = "right";
+              ctx.fillStyle = "#fff";
+              ctx.fillText(text, Math.max(x - 6, chart.chartArea.left + tw + 4), y);
+            }
+          } else {
+            ctx.textAlign = "center";
+            ctx.fillStyle = labelColor;
+            ctx.fillText(text, x, y - 10);
+          }
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  /** Colored value tags above line-chart points (Prof / Del daily). */
+  const linePointLabelsPlugin = {
+    id: "linePointLabels",
+    afterDatasetsDraw(chart) {
+      const cfg = chart.options.plugins && chart.options.plugins.linePointLabels;
+      if (!cfg || !cfg.display) return;
+      if (chart.config.type !== "line") return;
+      const { ctx } = chart;
+      ctx.save();
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds.hidden) return;
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        const fill = ds.pointLabelBg || ds.borderColor || "#2563eb";
+        ctx.font = `700 10px ${cfg.figureFont || "'Space Grotesk', 'Manrope', sans-serif"}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        meta.data.forEach((el, i) => {
+          const raw = Number(ds.data[i]);
+          if (!Number.isFinite(raw) || raw <= 0) return;
+          const text = String(Math.round(raw));
+          const { x, y } = el.getProps(["x", "y"], true);
+          const tw = ctx.measureText(text).width;
+          const padX = 5;
+          const padY = 3;
+          const bw = tw + padX * 2;
+          const bh = 14;
+          const stackLift = di * (bh + 2);
+          const bx = x - bw / 2;
+          const by = y - 16 - stackLift - bh / 2;
+          ctx.fillStyle = fill;
+          ctx.beginPath();
+          const r = 3;
+          ctx.moveTo(bx + r, by);
+          ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
+          ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
+          ctx.arcTo(bx, by + bh, bx, by, r);
+          ctx.arcTo(bx, by, bx + bw, by, r);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.fillText(text, x, by + bh / 2);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  function cloneChartExtra(opts) {
+    const o = opts || {};
+    return JSON.parse(JSON.stringify({
+      backgroundColor: o.backgroundColor,
+      datasets: o.datasets,
+      empKeys: o.empKeys,
+      clickable: o.clickable,
+      horizontal: o.horizontal,
+      legend: o.legend,
+      max: o.max,
+      showValues: o.showValues,
+      valueSuffix: o.valueSuffix,
+      categoryExtras: o.categoryExtras,
+      rowMeta: o.rowMeta,
+      dualValueAxis: o.dualValueAxis,
+      stacked: o.stacked,
+      cutout: o.cutout,
+    }));
+  }
+
+  function exCssToken(name, fallback) {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      if (v) return v;
+    } catch (_) { /* ignore */ }
+    return fallback;
+  }
+
+  function chartTokenPalette() {
+    const slate = exCssToken("--cx-muted", "#8d9bb0");
+    const blue = exCssToken("--ex-blue", "#2563eb");
+    const teal = exCssToken("--ex-green", "#0f9d76");
+    const amber = exCssToken("--ex-amber", "#d97706");
+    const red = exCssToken("--ex-red", "#eb0a1e");
+    window.__exChartPalette = [slate, blue, teal, amber, red];
+    if (window.Chart && Chart.defaults) {
+      Chart.defaults.color = slate;
+      Chart.defaults.borderColor = exCssToken("--cx-line", "rgba(148,163,184,.10)");
+      Chart.defaults.font.family = "Manrope, 'IBM Plex Sans Arabic', 'Segoe UI', system-ui, sans-serif";
+      if (Chart.defaults.datasets && Chart.defaults.datasets.bar) {
+        Chart.defaults.datasets.bar.backgroundColor = blue;
+      }
+    }
+    return [slate, blue, teal, amber, red, slate, blue, teal];
+  }
+
+  function upsertChart(id, type, labels, values, extra) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const colors = chartTokenPalette();
+    const fontFamily = "'Manrope', 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif";
+    const figureFont = "'Space Grotesk', 'Manrope', sans-serif";
+    const opts = extra || {};
+    const horizontal = !!opts.horizontal;
+    const cockpit = !!canvas.closest("#panel-salesreport")
+      || !!canvas.closest("#bo-dash")
+      || (document.body.classList.contains("sr-mode") && !!canvas.closest(".pbi-wide-modal"));
+    const tickColor = cockpit ? "#8d9bb0" : "#6b7280";
+    const gridColor = cockpit ? "rgba(148, 163, 184, 0.10)" : "rgba(17, 17, 17, 0.06)";
+    const strongTick = cockpit ? "#d5deea" : "#111827";
+    const empKeys = opts.empKeys || null;
+    const labelCount = (labels && labels.length) || 0;
+    const showValues = !!opts.showValues;
+    const valueSuffix = opts.valueSuffix != null ? opts.valueSuffix : "";
+    const seriesCount = (opts.datasets && opts.datasets.length) || 1;
+    const thicknessSeries = opts.stacked ? 1 : seriesCount;
+    // Compact cards may show Top N; `_wide` stores the full detail snapshot for Wide modal.
+    if (opts._wide) {
+      const w = opts._wide;
+      chartSnapshots[id] = {
+        type: w.type || type,
+        labels: w.labels ? w.labels.slice() : (labels ? labels.slice() : []),
+        values: Array.isArray(w.values) ? w.values.slice() : (w.values != null ? w.values : (Array.isArray(values) ? values.slice() : values)),
+        extra: cloneChartExtra(w.extra != null ? w.extra : opts),
+      };
+    } else {
+      chartSnapshots[id] = {
+        type,
+        labels: labels ? labels.slice() : [],
+        values: Array.isArray(values) ? values.slice() : values,
+        extra: cloneChartExtra(opts),
+      };
+    }
+    sizeChartScrollBox(id, labelCount, horizontal && type === "bar", thicknessSeries);
+
+    const datasetsExtra = { ...opts };
+    delete datasetsExtra.horizontal;
+    delete datasetsExtra.datasets;
+    delete datasetsExtra.legend;
+    delete datasetsExtra.max;
+    delete datasetsExtra.empKeys;
+    delete datasetsExtra.clickable;
+    delete datasetsExtra.showValues;
+    delete datasetsExtra.valueSuffix;
+    delete datasetsExtra.categoryExtras;
+    delete datasetsExtra.rowMeta;
+    delete datasetsExtra.dualValueAxis;
+    delete datasetsExtra.stacked;
+    delete datasetsExtra.cutout;
+    delete datasetsExtra._wide;
+    const softScale = {
+      beginAtZero: true,
+      stacked: !!opts.stacked,
+      ...(opts.max != null && !opts.dualValueAxis ? { max: opts.max } : {}),
+      grid: { color: gridColor, drawBorder: false },
+      ticks: { precision: 0, color: tickColor, font: { size: 11, family: figureFont, weight: "600" } },
+      border: { display: false },
+    };
+    const categoryScale = {
+      stacked: !!opts.stacked,
+      grid: { display: false },
+      ticks: {
+        maxRotation: horizontal ? 0 : 40,
+        autoSkip: false,
+        color: cockpit ? "#b6c2d3" : (horizontal ? "#374151" : "#111111"),
+        font: {
+          size: horizontal ? 10 : 12,
+          family: fontFamily,
+          weight: horizontal ? "600" : "700",
+          lineHeight: 1.2,
+        },
+        padding: horizontal ? 10 : 4,
+        callback(value) {
+          const raw = this.getLabelForValue ? this.getLabelForValue(value) : value;
+          const label = String(raw == null ? "" : raw).trim();
+          const extras = opts.categoryExtras;
+          const idx = Number(value);
+          const extra = Array.isArray(extras) && Number.isFinite(idx) ? extras[idx] : null;
+          if (!horizontal) return label;
+          const short = label.length <= 24 ? label : label.slice(0, 22) + "…";
+          const fit = Number(canvas.dataset.fitRowPx) || 0;
+          // Two-line name+target only when rows are tall enough
+          if (extra && fit >= 28) return [short, String(extra)];
+          return short;
+        },
+      },
+      border: { display: false },
+    };
+    const clickable = !!(opts.clickable && empKeys && empKeys.length);
+    const fitRowPx = Number(canvas.dataset.fitRowPx) || 0;
+    const catPct = horizontal
+      ? (thicknessSeries >= 3 ? 0.88 : thicknessSeries === 2 ? 0.82 : 0.86)
+      : 0.72;
+    const barPct = horizontal ? 0.92 : 0.9;
+    let maxThick = horizontal
+      ? (opts.stacked ? 22 : (thicknessSeries >= 3 ? 12 : thicknessSeries === 2 ? 16 : 22))
+      : 36;
+    if (horizontal && fitRowPx > 0) {
+      maxThick = Math.max(opts.stacked ? 10 : 3, Math.min(maxThick, Math.floor(fitRowPx * 0.7)));
+    }
+    if (horizontal && fitRowPx > 0 && fitRowPx < 30 && !opts.stacked) {
+      categoryScale.ticks.font = {
+        ...categoryScale.ticks.font,
+        size: fitRowPx < 22 ? 8 : 9,
+      };
+      categoryScale.ticks.padding = 4;
+    }
+    if (horizontal && (opts.stacked || fitRowPx >= 30)) {
+      const tight = fitRowPx > 0 && fitRowPx < 24;
+      categoryScale.ticks.font = {
+        ...categoryScale.ticks.font,
+        size: fitRowPx >= 36 ? 12 : (tight ? 9 : 11),
+        weight: "700",
+      };
+      categoryScale.ticks.padding = tight ? 2 : 8;
+      categoryScale.ticks.color = strongTick;
+    }
+    const chartConfig = {
+      type,
+      data: {
+        labels,
+        datasets: (opts.datasets || [{
+          data: values,
+          backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : colors[1]),
+          borderWidth: type === "doughnut" ? 3 : 0,
+          borderColor: type === "doughnut" ? (cockpit ? "#0d1420" : "#fff") : undefined,
+          borderRadius: type === "bar" ? 4 : 0,
+          ...datasetsExtra,
+        }]).map((ds) => ({
+          categoryPercentage: catPct,
+          barPercentage: barPct,
+          maxBarThickness: maxThick,
+          // Do not force a min length — zeros were drawing fake 2px "ticks"
+          ...ds,
+        })),
+      },
+      plugins: [barEndLabelsPlugin, linePointLabelsPlugin],
+      options: {
+        indexAxis: horizontal ? "y" : "x",
+        responsive: true,
+        maintainAspectRatio: false,
+        ...(type === "doughnut" && opts.cutout ? { cutout: opts.cutout } : {}),
+        animation: { duration: 250, easing: "easeOutQuart" },
+        layout: {
+          padding: {
+            left: horizontal ? (opts.categoryExtras ? 8 : 6) : 4,
+            right: (showValues || opts.stacked) && horizontal ? 64 : (type === "line" ? 10 : 8),
+            top: type === "line" ? 28 : (horizontal ? (opts.dualValueAxis ? 10 : 4) : 4),
+            bottom: horizontal ? (opts.dualValueAxis ? 10 : 4) : 4,
+          },
+        },
+        onHover: clickable
+          ? (evt, els) => { evt.native.target.style.cursor = els.length ? "pointer" : "default"; }
+          : undefined,
+        onClick: clickable
+          ? (_evt, els) => {
+              if (!els.length) return;
+              const idx = els[0].index;
+              const key = empKeys[idx];
+              if (key) {
+                closeWideChart();
+                selectEmployee(key);
+              }
+            }
+          : undefined,
+        plugins: {
+          legend: {
+            display: opts.legend === false
+              ? false
+              : (opts.legend === true || type === "doughnut" || !!(opts.datasets && opts.datasets.length > 1)),
+            labels: { color: cockpit ? "#c7d2e0" : "#64748b", font: { size: 12, family: fontFamily }, boxWidth: 12, padding: 14 },
+          },
+          tooltip: {
+            backgroundColor: "rgba(30, 41, 59, 0.92)",
+            titleFont: { family: fontFamily, size: 13, weight: "700" },
+            bodyFont: { family: fontFamily, size: 12 },
+            padding: 12,
+            cornerRadius: 10,
+            callbacks: {
+              label(ctx) {
+                const ds = ctx.dataset || {};
+                const n = Number(ctx.parsed && (ctx.parsed.x != null ? ctx.parsed.x : ctx.parsed.y));
+                if (!Number.isFinite(n)) return ds.label || "";
+                const suf = ds.valueSuffix != null
+                  ? ds.valueSuffix
+                  : (looksLikePercentLabel(ds.label) ? "%" : (valueSuffix || ""));
+                const fig = Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
+                return `${ds.label || "Value"}: ${fig}${suf}`;
+              },
+              ...(clickable ? { footer: () => "Click name to filter · use Wide for full view" } : {}),
+            },
+          },
+          barEndLabels: {
+            display: showValues && type === "bar",
+            suffix: valueSuffix,
+            color: cockpit ? "#e8eef7" : "#111111",
+            fontFamily,
+            figureFont,
+          },
+          linePointLabels: {
+            display: !!(opts.pointLabels && type === "line"),
+            figureFont,
+          },
+        },
+        scales: type === "doughnut"
+          ? {}
+          : (() => {
+              if (type === "line") {
+                return {
+                  y: {
+                    ...softScale,
+                    stacked: false,
+                    ticks: { ...softScale.ticks, precision: 0 },
+                  },
+                  x: {
+                    ...categoryScale,
+                    stacked: false,
+                    ticks: {
+                      ...categoryScale.ticks,
+                      maxRotation: 0,
+                      autoSkip: true,
+                      maxTicksLimit: 16,
+                      font: { size: 10, family: fontFamily, weight: "600" },
+                    },
+                  },
+                };
+              }
+              if (!horizontal) return { y: softScale, x: categoryScale };
+              if (!opts.dualValueAxis) return { x: softScale, y: categoryScale };
+              return {
+                x: {
+                  ...softScale,
+                  position: "bottom",
+                  title: {
+                    display: true,
+                    text: "Volume",
+                    color: "#6b7280",
+                    font: { size: 10, family: fontFamily, weight: "700" },
+                  },
+                },
+                x2: {
+                  ...softScale,
+                  position: "top",
+                  suggestedMax: opts.max != null ? opts.max : 140,
+                  grid: { display: false },
+                  ticks: {
+                    ...softScale.ticks,
+                    callback(v) { return `${v}%`; },
+                  },
+                  title: {
+                    display: true,
+                    text: "%",
+                    color: "#0f766e",
+                    font: { size: 10, family: fontFamily, weight: "700" },
+                  },
+                },
+                y: categoryScale,
+              };
+            })(),
+      },
+    };
+    const existing = charts[id];
+    if (existing && existing.canvas === canvas && existing.config.type === type) {
+      existing.data = chartConfig.data;
+      existing.options = chartConfig.options;
+      if (existing.options) existing.options.animation = { duration: 0 };
+      existing.update();
+      return;
+    }
+    if (existing) existing.destroy();
+    charts[id] = new Chart(canvas, chartConfig);
+  }
+
+  function sumNumeric(arr) {
+    return (arr || []).reduce((s, v) => s + (Number(v) || 0), 0);
+  }
+
+  function formatWideTotal(n) {
+    if (!Number.isFinite(n)) return "—";
+    // Percents often stay under ~200; keep 1 decimal when fractional
+    if (Math.abs(n) < 1000 && Math.abs(n - Math.round(n)) > 0.05) return n.toFixed(1);
+    return formatNumber(Math.round(n * 100) / 100);
+  }
+
+  function looksLikePercentLabel(lab) {
+    const s = String(lab || "");
+    return /%|ach|pace|rate|ratio/i.test(s);
+  }
+
+  function seriesStat(label, data) {
+    const nums = (data || []).map((v) => Number(v) || 0);
+    const n = nums.length;
+    const sum = nums.reduce((a, b) => a + b, 0);
+    if (looksLikePercentLabel(label) && n > 0) {
+      return { lab: `Avg ${label}`, val: formatWideTotal(sum / n) + (/%/.test(String(label)) ? "%" : "") };
+    }
+    return { lab: `Total ${label}`, val: formatWideTotal(sum) };
+  }
+
+  function wideSeriesColumns(snap) {
+    const datasets = (snap.extra && snap.extra.datasets) || null;
+    const suffix = (snap.extra && snap.extra.valueSuffix) || "";
+    if (datasets && datasets.length) {
+      return datasets.map((ds) => ({
+        key: ds.label || "Series",
+        label: ds.label || "Series",
+        data: ds.data || [],
+        suffix: looksLikePercentLabel(ds.label) ? "%" : "",
+      }));
+    }
+    if (Array.isArray(snap.values)) {
+      const label = (snap.extra && snap.extra.label) || "Value";
+      return [{
+        key: label,
+        label,
+        data: snap.values,
+        suffix: suffix || (looksLikePercentLabel(label) ? "%" : ""),
+      }];
+    }
+    return [];
+  }
+
+  function formatWideCell(n, suffix) {
+    if (!Number.isFinite(n)) return "—";
+    const base = formatWideTotal(n);
+    return suffix ? `${base}${suffix}` : base;
+  }
+
+  /** Summary cards + per-row numbers list for Wide view. */
+  function renderWideNumbers(snap) {
+    const totalsEl = $("#pbi-wide-totals");
+    const numsEl = $("#pbi-wide-numbers");
+    const listEl = $("#pbi-wide-numbers-list");
+    const bodyEl = $("#pbi-wide-body");
+    if (!totalsEl || !numsEl || !listEl) return;
+
+    const labels = snap.labels || [];
+    const cols = wideSeriesColumns(snap);
+    const summary = [];
+
+    if (labels.length && snap.type !== "doughnut") {
+      summary.push({ lab: "Items", val: labels.length });
+    }
+
+    if (snap.type === "doughnut" && cols.length === 1) {
+      const data = cols[0].data || [];
+      const total = sumNumeric(data);
+      labels.forEach((lab, i) => {
+        const v = Number(data[i]) || 0;
+        const pct = total > 0 ? ((v / total) * 100).toFixed(1) + "%" : "—";
+        summary.push({ lab: String(lab || "—"), val: formatWideTotal(v), sub: pct });
+      });
+      summary.push({ lab: "Total", val: formatWideTotal(total), sub: "100%" });
+    } else {
+      cols.forEach((col) => summary.push(seriesStat(col.label, col.data)));
+    }
+
+    totalsEl.hidden = !summary.length;
+    totalsEl.innerHTML = summary.map((it) => `
+      <div class="pbi-wide-total">
+        <span class="lab">${escapeHtml(String(it.lab))}</span>
+        <span class="val">${escapeHtml(String(it.val))}</span>
+        ${it.sub != null ? `<span class="sub">${escapeHtml(String(it.sub))}</span>` : ""}
+      </div>`).join("");
+
+    // Detail rows: every label with its number(s)
+    const meta = (snap.extra && snap.extra.rowMeta) || null;
+    const rows = [];
+    if (cols.length && labels.length) {
+      labels.forEach((lab, i) => {
+        const cells = cols.map((col) => {
+          const v = Number(col.data[i]);
+          const text = formatWideCell(Number.isFinite(v) ? v : 0, col.suffix);
+          const tip = cols.length > 1 ? `${col.label}: ${text}` : text;
+          return { text, tip, multi: cols.length > 1, colLabel: col.label };
+        });
+        if (meta && meta[i]) {
+          const m = meta[i];
+          if (m.target != null) {
+            cells.unshift({
+              text: formatNumber(m.target),
+              tip: `Target: ${formatNumber(m.target)}`,
+              multi: true,
+              colLabel: "Target",
+            });
+          }
+          if (m.total != null && cols.length === 1) {
+            cells.unshift({
+              text: formatNumber(m.total),
+              tip: `Total BO: ${formatNumber(m.total)}`,
+              multi: true,
+              colLabel: "Total",
+            });
+          }
+          if (m.confirmed != null) {
+            cells.push({
+              text: formatNumber(m.confirmed),
+              tip: `Confirmed: ${formatNumber(m.confirmed)}`,
+              multi: true,
+              colLabel: "Conf",
+            });
+          }
+          if (m.notConfirmed != null) {
+            cells.push({
+              text: formatNumber(m.notConfirmed),
+              tip: `Not confirmed: ${formatNumber(m.notConfirmed)}`,
+              multi: true,
+              colLabel: "Not",
+            });
+          }
+          if (m.confirmPct != null) {
+            const pct = Number(m.confirmPct);
+            const pctText = Number.isFinite(pct)
+              ? ((pct <= 1 ? pct * 100 : pct).toFixed(1) + "%")
+              : "—";
+            cells.push({
+              text: pctText,
+              tip: `Confirmation rate: ${pctText}`,
+              multi: true,
+              colLabel: "Conf %",
+            });
+          }
+          if (m.avgAging != null) {
+            cells.push({
+              text: formatNumber(m.avgAging) + "d",
+              tip: `Avg aging: ${formatNumber(m.avgAging)} days`,
+              multi: true,
+              colLabel: "Aging",
+            });
+          }
+          if (m.del != null) {
+            cells.push({
+              text: formatNumber(m.del),
+              tip: `Delivery: ${formatNumber(m.del)}`,
+              multi: true,
+              colLabel: "Del",
+            });
+          }
+          if (m.prof != null) {
+            cells.push({
+              text: formatNumber(m.prof),
+              tip: `Proforma: ${formatNumber(m.prof)}`,
+              multi: true,
+              colLabel: "Prof",
+            });
+          }
+          if (m.cancelled != null) {
+            cells.push({
+              text: formatNumber(m.cancelled),
+              tip: `Cancelled BOs: ${formatNumber(m.cancelled)}`,
+              multi: true,
+              colLabel: "Cancelled",
+            });
+          }
+        }
+        rows.push({
+          name: (meta && meta[i] && meta[i].name) || String(lab || "—"),
+          cells,
+        });
+      });
+    }
+
+    if (!rows.length) {
+      numsEl.hidden = true;
+      listEl.innerHTML = "";
+      if (bodyEl) bodyEl.classList.add("pbi-wide-body--chart-only");
+      return;
+    }
+
+    numsEl.hidden = false;
+    if (bodyEl) bodyEl.classList.remove("pbi-wide-body--chart-only");
+
+    const headLabels = [];
+    if (meta && meta.some((m) => m && m.target != null)) headLabels.push("Target");
+    if (meta && meta.some((m) => m && m.total != null) && cols.length === 1) headLabels.push("Total");
+    cols.forEach((c) => headLabels.push(c.label));
+    if (meta && meta.some((m) => m && m.confirmed != null)) headLabels.push("Conf");
+    if (meta && meta.some((m) => m && m.notConfirmed != null)) headLabels.push("Not");
+    if (meta && meta.some((m) => m && m.confirmPct != null)) headLabels.push("Conf %");
+    if (meta && meta.some((m) => m && m.avgAging != null)) headLabels.push("Aging");
+    if (meta && meta.some((m) => m && m.del != null)) headLabels.push("Del");
+    if (meta && meta.some((m) => m && m.prof != null)) headLabels.push("Prof");
+    if (meta && meta.some((m) => m && m.cancelled != null)) headLabels.push("Cancelled");
+    const head = headLabels.length > 1
+      ? `<div class="pbi-wide-num-head"><span>Name</span><span>${headLabels.map((c) => escapeHtml(c)).join(" · ")}</span></div>`
+      : "";
+
+    listEl.innerHTML = head + rows.map((r) => {
+      const nums = r.cells.map((c) => {
+        if (c.multi) {
+          return `<span title="${escapeHtml(c.tip)}"><span class="muted">${escapeHtml(c.colLabel)}</span> ${escapeHtml(c.text)}</span>`;
+        }
+        return `<span>${escapeHtml(c.text)}</span>`;
+      }).join("");
+      return `<div class="pbi-wide-num-row">
+        <span class="name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+        <div class="nums">${nums}</div>
+      </div>`;
+    }).join("");
+    numsEl.classList.toggle("pbi-wide-numbers--named", rows.some((r) => r.name && r.name !== "—"));
+  }
+
+  let lastAccRemainHtml = "";
+
+  function hideWideTableMode() {
+    const wrap = $("#pbi-wide-table-wrap");
+    if (wrap) {
+      wrap.hidden = true;
+      wrap.classList.remove("pbi-wide-table-wrap--with-chart");
+    }
+    const body = $("#pbi-wide-body");
+    if (body) body.hidden = false;
+    const wideBox = $("#pbi-wide-box");
+    if (wideBox) wideBox.classList.remove("pbi-wide-box--empty");
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--accessories");
+      modal.classList.remove("pbi-wide-modal--act-alerts");
+    }
+  }
+
+  function accessoriesSummaryTotals(sr, rows) {
+    const t = (sr && sr.totals) || {};
+    const list = Array.isArray(rows) ? rows : [];
+    const pack = (quota, sold, inProgress, achPct) => {
+      const q = Number(quota) || 0;
+      const s = Number(sold) || 0;
+      const p = Number(inProgress) || 0;
+      const ach = achPct != null ? Number(achPct) : (q > 0 ? s / q : null);
+      const combinedPct = q > 0 ? (s + p) / q : null;
+      const remaining = Math.max(0, q - s - p);
+      return { quota: q, sold: s, inProgress: p, remaining, achPct: ach, combinedPct };
+    };
+    if (srHasSelection() && list.length) {
+      const quota = list.reduce((sum, row) => sum + (Number(row._accQuota) || 0), 0);
+      const sold = list.reduce((sum, row) => sum + (Number(row._accSold) || 0), 0);
+      const inProgress = list.reduce((sum, row) => sum + (Number(row._accInProgress) || 0), 0);
+      return pack(quota, sold, inProgress, quota > 0 ? sold / quota : null);
+    }
+    if (t.accQuota != null || t.accSold != null || t.accInProgress != null) {
+      return pack(
+        t.accQuota,
+        t.accSold,
+        t.accInProgress,
+        t.accAchPct != null ? t.accAchPct : (t.accQuota ? (t.accSold || 0) / t.accQuota : null)
+      );
+    }
+    const acc = (sr && sr.accessories && sr.accessories.totals) || {};
+    return pack(acc.quota, acc.sold, acc.inProgress, acc.achPct);
+  }
+
+  function renderAccessoriesSummaryBoard(sr, rows) {
+    const board = $("#acc-summary-board");
+    if (!board) return;
+    const sum = accessoriesSummaryTotals(sr, rows);
+    const targetEl = $("#acc-sum-target");
+    const soldEl = $("#acc-sum-achieved");
+    const progressEl = $("#acc-sum-progress");
+    const remainingEl = $("#acc-sum-remaining");
+    const remainingHeroEl = $("#acc-sum-remaining-hero");
+    const pctEl = $("#acc-sum-pct");
+    const combinedEl = $("#acc-sum-pct-combined");
+    const fillEl = $("#sr-acc-progress-fill");
+    const fillCombinedEl = $("#sr-acc-progress-fill-combined");
+    const pctNum = sum.achPct == null ? (sum.quota ? 0 : null) : (sum.achPct * 100);
+    const combinedNum = sum.combinedPct == null ? (sum.quota ? 0 : null) : (sum.combinedPct * 100);
+    if (targetEl) targetEl.textContent = formatNumber(sum.quota);
+    if (soldEl) soldEl.textContent = formatNumber(sum.sold);
+    if (progressEl) progressEl.textContent = formatNumber(sum.inProgress || 0);
+    if (remainingEl) {
+      remainingEl.textContent = formatNumber(sum.remaining || 0);
+      remainingEl.title = "Target − Achieved − In Progress";
+    }
+    if (remainingHeroEl) remainingHeroEl.textContent = formatNumber(sum.remaining || 0);
+    if (pctEl) {
+      pctEl.textContent = pctNum == null ? "—" : (pctNum.toFixed(1) + "%");
+      pctEl.title = "Achieved ÷ Target";
+    }
+    if (combinedEl) {
+      combinedEl.textContent = combinedNum == null ? "—" : (combinedNum.toFixed(1) + "%");
+      combinedEl.title = "(Achieved + In Progress) ÷ Target";
+    }
+    if (fillEl) fillEl.style.width = (pctNum == null ? 0 : Math.max(0, Math.min(100, pctNum))).toFixed(1) + "%";
+    if (fillCombinedEl) {
+      const w = combinedNum == null ? 0 : Math.max(0, Math.min(100, combinedNum));
+      fillCombinedEl.style.width = w.toFixed(1) + "%";
+    }
+    board.hidden = !(sum.quota > 0 || sum.sold > 0 || sum.inProgress > 0);
+  }
+
+  function renderWideAccessoriesSummary(sr) {
+    const totalsEl = $("#pbi-wide-totals");
+    if (!totalsEl) return;
+    const rows = filterSrRows((sr && sr.rows) || []);
+    const sum = accessoriesSummaryTotals(sr, rows);
+    const achTxt = sum.achPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.achPct * 100).toFixed(1) + "%");
+    const combTxt = sum.combinedPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.combinedPct * 100).toFixed(1) + "%");
+    totalsEl.hidden = false;
+    totalsEl.classList.add("pbi-wide-totals--acc");
+    totalsEl.innerHTML = `
+      <div class="acc-summary-board acc-summary-board--wide">
+        <div class="acc-summary-pct-hero">
+          <span class="acc-summary-icon" aria-hidden="true">⚙</span>
+          <div class="acc-summary-pct-text">
+            <span class="k">Accessories Ach %</span>
+            <span class="v">${achTxt}</span>
+            <span class="v acc-sum-pct-combined">${combTxt}</span>
+            <span class="k acc-sum-combined-lab">Ach + In Progress</span>
+            <span class="acc-sum-remain-inline" title="Target − Achieved − In Progress">
+              <span class="k">Remaining</span>
+              <span class="v">${formatNumber(sum.remaining || 0)}</span>
+            </span>
+          </div>
+        </div>
+        <div class="acc-summary-cols acc-summary-cols--detail">
+          <div class="acc-summary-cell">
+            <span class="k">Target</span>
+            <span class="v">${formatNumber(sum.quota)}</span>
+          </div>
+          <div class="acc-summary-cell">
+            <span class="k">Achieved</span>
+            <span class="v">${formatNumber(sum.sold)}</span>
+          </div>
+          <div class="acc-summary-cell">
+            <span class="k">In Progress</span>
+            <span class="v">${formatNumber(sum.inProgress || 0)}</span>
+          </div>
+          <div class="acc-summary-cell acc-summary-cell--remain">
+            <span class="k">Remaining</span>
+            <span class="v" title="Target − Achieved − In Progress">${formatNumber(sum.remaining || 0)}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function sizeAccessoriesWideChart(n) {
+    const box = $("#pbi-wide-box");
+    const scroll = $("#pbi-wide-scroll");
+    const wideCanvas = document.getElementById("pbi-wide-canvas");
+    if (!box || !scroll) return;
+    const count = Math.max(1, Number(n) || 1);
+    const pad = 36;
+    const maxH = Math.max(180, Math.min(250, Math.floor(window.innerHeight * 0.26)));
+    const rowPx = Math.max(12, Math.min(20, Math.floor((maxH - pad) / count)));
+    const chartH = Math.min(maxH, Math.max(150, count * rowPx + pad));
+    box.style.height = chartH + "px";
+    box.style.minHeight = chartH + "px";
+    if (wideCanvas) wideCanvas.dataset.fitRowPx = String(rowPx);
+    scroll.style.maxHeight = chartH + "px";
+    scroll.classList.remove("is-scroll");
+  }
+
+  function openWideAccessories() {
+    const snap = chartSnapshots["chart-sr-accessories"];
+    const source = $("#acc-remain-table");
+    const dest = $("#pbi-wide-table");
+    const wrap = $("#pbi-wide-table-wrap");
+    const html = lastAccRemainHtml || (source && source.innerHTML) || "";
+    if (!snap && (!html || !html.trim())) return;
+
+    hideWidePerfExtra();
+    hideWideCancelExtra();
+    hideWideTableMode();
+
+    $("#pbi-wide-title").textContent = "Accessories";
+    const hint = $("#pbi-wide-hint");
+    if (hint) hint.textContent = "Chart, numbers, and the advisor table on one screen · click a name to filter";
+
+    const backdrop = $("#pbi-wide-backdrop");
+    backdrop.hidden = false;
+    backdrop.classList.add("show");
+
+    const body = $("#pbi-wide-body");
+    if (body) {
+      body.hidden = false;
+      body.classList.remove("pbi-wide-body--chart-only");
+    }
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--perf");
+      modal.classList.remove("pbi-wide-modal--cancel");
+      modal.classList.add("pbi-wide-modal--accessories");
+    }
+
+    const sr = (window._data && window._data.salesReport) || null;
+    if (sr) renderWideAccessoriesSummary(sr);
+
+    if (snap) {
+      const n = (snap.labels || []).length;
+      const horizontal = !!(snap.extra && snap.extra.horizontal);
+      const box = $("#pbi-wide-box");
+      const scroll = $("#pbi-wide-scroll");
+      const wideCanvas = document.getElementById("pbi-wide-canvas");
+      if (horizontal && snap.type === "bar" && n > 1) {
+        sizeAccessoriesWideChart(n);
+      } else if (snap.type === "doughnut") {
+        box.style.height = "280px";
+        scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
+        if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
+      } else {
+        box.style.height = "320px";
+        scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
+        if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
+      }
+      renderWideNumbers(snap);
+      if (sr) renderWideAccessoriesSummary(sr);
+      const extra = { ...(snap.extra || {}) };
+      upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
+      if (horizontal && snap.type === "bar" && n > 1) {
+        sizeAccessoriesWideChart(n);
+        if (charts["pbi-wide-canvas"]) charts["pbi-wide-canvas"].resize();
+      }
+    } else {
+      const nums = $("#pbi-wide-numbers");
+      if (nums) nums.hidden = true;
+      if (body) body.classList.add("pbi-wide-body--chart-only");
+    }
+
+    if (wrap && dest && html && html.trim()) {
+      dest.innerHTML = html;
+      wrap.hidden = false;
+      wrap.classList.add("pbi-wide-table-wrap--with-chart");
+    }
+  }
+
+  function openWideAccRemainTable() {
+    openWideAccessories();
+  }
+
+  const SALES_TYPE_ORDER = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
+
+  function salesTypeBucketOf(raw) {
+    const type = String(raw || inferSalesType("", false) || "Other").trim() || "Other";
+    return SALES_TYPE_ORDER.includes(type) ? type : "Other";
+  }
+
+  /** Same delivered-car rows as the Sales Report “Sales Type” card. */
+  function collectSalesReportDeliveries(live, prevMonthKey) {
+    const periodLive = live || window._globalLivePeriod || todayKeys();
+    const pmk = prevMonthKey || toYyyymm(new Date(periodLive.now.getFullYear(), periodLive.now.getMonth() - 1, 1));
+    const selectedKeys = srSelectedList();
+    const groups = Object.create(null);
+    SALES_TYPE_ORDER.forEach((t) => { groups[t] = []; });
+    salesDashboardRows().forEach((r) => {
+      if (!salesIsDeliveryInPeriod(r, periodLive, "month", pmk)) return;
+      const display = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      if (!display) return;
+      if (selectedKeys.length && !selectedKeys.includes(nameKey(display))) return;
+      const bucket = salesTypeBucketOf(r.salesType);
+      if (!groups[bucket]) groups[bucket] = [];
+      groups[bucket].push(r);
+    });
+    return groups;
+  }
+
+  function deliverySalesTypeBreakdown(sr) {
+    const live = (sr && sr.live) || todayKeys();
+    const prevMonthKey = (sr && sr.prevMonthKey) || toYyyymm(new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1));
+    const groups = collectSalesReportDeliveries(live, prevMonthKey);
+    const keys = SALES_TYPE_ORDER.slice();
+    Object.keys(groups).forEach((k) => {
+      if (!keys.includes(k) && groups[k].length) keys.push(k);
+    });
+    return keys.map((type) => ({ type, count: (groups[type] || []).length }));
+  }
+
+  function renderWidePerfSalesType(sr) {
+    const wrap = $("#pbi-wide-perf-extra");
+    const volumeEl = $("#pbi-wide-perf-volume");
+    const legendEl = $("#pbi-wide-salestype-legend");
+    if (!wrap || !volumeEl || !legendEl) return;
+
+    const rows = filterSrRows((sr && sr.rows) || []);
+    const t = (sr && sr.totals) || {};
+    let target = 0;
+    let del = 0;
+    let prof = 0;
+    if (srHasSelection() && rows.length) {
+      target = rows.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      del = rows.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      prof = rows.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+    } else {
+      target = Number(t.target) || 0;
+      del = Number(t.deliveryMonth) || 0;
+      prof = Number(t.proformaMonth) || 0;
+    }
+    const profDel = prof + del;
+    const maxVol = Math.max(1, target, del, profDel);
+    const volRows = [
+      { lab: "Tar", val: target, cls: "is-target" },
+      { lab: "Del", val: del, cls: "is-del" },
+      { lab: "Prof & Del", val: profDel, cls: "is-profdel" },
+    ];
+    volumeEl.innerHTML = `
+      <h3 class="pbi-wide-numbers-title">Volume vs target</h3>
+      <div class="pbi-wide-vol-bars">${volRows.map((r) => {
+        const pct = Math.max(2, Math.round((r.val / maxVol) * 100));
+        return `<div class="pbi-wide-vol-row ${r.cls}">
+          <span class="lab">${escapeHtml(r.lab)}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span class="val">${formatNumber(r.val)}</span>
+        </div>`;
+      }).join("")}</div>
+    `;
+
+    const types = deliverySalesTypeBreakdown(sr);
+    const total = types.reduce((s, x) => s + x.count, 0);
+    const colors = {
+      Cash: "#3b82f6",
+      Bank: "#10b981",
+      ALJUF: "#8b5cf6",
+      Employee: "#f59e0b",
+      Fleet: "#64748b",
+      Other: "#94a3b8",
+    };
+    legendEl.innerHTML = types.map((x) => {
+      const pct = total > 0 ? ((x.count / total) * 100).toFixed(0) : "0";
+      return `<div class="pbi-wide-salestype-item">
+        <span class="swatch" style="background:${colors[x.type] || colors.Other}"></span>
+        <span class="name">${escapeHtml(x.type)}</span>
+        <span class="count">${formatNumber(x.count)}</span>
+        <span class="pct">${pct}%</span>
+      </div>`;
+    }).join("") || `<p class="foot" style="margin:0">No delivered cars in this period.</p>`;
+
+    const labels = types.map((x) => x.type);
+    const values = types.map((x) => x.count);
+    const bg = labels.map((lab) => colors[lab] || colors.Other);
+    if (charts["pbi-wide-salestype-canvas"]) {
+      charts["pbi-wide-salestype-canvas"].destroy();
+      delete charts["pbi-wide-salestype-canvas"];
+    }
+    if (total > 0) {
+      upsertChart("pbi-wide-salestype-canvas", "doughnut", labels, values, {
+        backgroundColor: bg,
+        legend: false,
+      });
+    } else {
+      const canvas = document.getElementById("pbi-wide-salestype-canvas");
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    wrap.hidden = false;
+  }
+
+  function hideWidePerfExtra() {
+    const wrap = $("#pbi-wide-perf-extra");
+    if (wrap) wrap.hidden = true;
+    if (charts["pbi-wide-salestype-canvas"]) {
+      charts["pbi-wide-salestype-canvas"].destroy();
+      delete charts["pbi-wide-salestype-canvas"];
+    }
+  }
+
+  function hideWideCancelExtra() {
+    const wrap = $("#pbi-wide-cancel-extra");
+    if (wrap) wrap.hidden = true;
+    if (charts["pbi-wide-cancelcount-canvas"]) {
+      charts["pbi-wide-cancelcount-canvas"].destroy();
+      delete charts["pbi-wide-cancelcount-canvas"];
+    }
+    const box = $("#pbi-wide-cancelcount-box");
+    if (box) {
+      box.style.height = "";
+      box.style.minHeight = "";
+    }
+  }
+
+  function renderWideCancelCount(snap) {
+    const wrap = $("#pbi-wide-cancel-extra");
+    const box = $("#pbi-wide-cancelcount-box");
+    const scroll = $("#pbi-wide-cancelcount-scroll");
+    const canvas = document.getElementById("pbi-wide-cancelcount-canvas");
+    if (!wrap || !box || !canvas) return;
+
+    const meta = (snap.extra && snap.extra.rowMeta) || [];
+    const empKeys = (snap.extra && snap.extra.empKeys) || [];
+    const entries = meta
+      .map((m, i) => ({
+        name: (m && m.name) || (snap.labels && snap.labels[i]) || "—",
+        count: Number(m && m.cancelled) || 0,
+        key: empKeys[i] || "",
+      }))
+      .filter((e) => e.count > 0)
+      .sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name)));
+
+    if (!entries.length) {
+      hideWideCancelExtra();
+      return;
+    }
+
+    wrap.hidden = false;
+    const n = entries.length;
+    const fit = fitHorizontalChartHeight(n, 1, {
+      preferredRow: 28,
+      minRow: 16,
+      maxViewportFrac: 0.28,
+      chromePx: 40,
+      pad: 40,
+    });
+    box.style.height = fit.height + "px";
+    box.style.minHeight = fit.height + "px";
+    canvas.dataset.fitRowPx = String(fit.rowPx);
+    if (scroll) {
+      scroll.style.maxHeight = "";
+      scroll.classList.remove("is-scroll");
+    }
+
+    upsertChart(
+      "pbi-wide-cancelcount-canvas",
+      "bar",
+      entries.map((e) => shortEmpLabel(e.name)),
+      entries.map((e) => e.count),
+      {
+        horizontal: n > 1,
+        clickable: n > 1,
+        empKeys: entries.map((e) => e.key),
+        label: "Cancelled BOs",
+        backgroundColor: "rgba(235, 10, 30, 0.82)",
+        showValues: true,
+        max: Math.max(1, ...entries.map((e) => e.count)),
+        rowMeta: entries.map((e) => ({ name: e.name, cancelled: e.count })),
+      }
+    );
+    box.style.height = fit.height + "px";
+    box.style.minHeight = fit.height + "px";
+  }
+
+  function openWideChart(sourceId) {
+    if (sourceId === "chart-icc-bubble") {
+      openWideIccBubbleChart();
+      return;
+    }
+    if (sourceId === "acc-remain-table" || sourceId === "chart-sr-accessories") {
+      openWideAccessories();
+      return;
+    }
+    if (sourceId === "act-alerts") {
+      openWideActAlerts();
+      return;
+    }
+    if (sourceId === "chart-sr-cancelcount") sourceId = "chart-cancel";
+    // BO charts: always rebuild full-detail snap so Wide never reuses the compact Top-N card data.
+    let snap = String(sourceId).startsWith("chart-bo-")
+      ? (buildBoWideSnapshot(sourceId) || chartSnapshots[sourceId])
+      : chartSnapshots[sourceId];
+    if (!snap && sourceId === "chart-sr-salestype" && window._data && window._data.salesReport) {
+      const types = deliverySalesTypeBreakdown(window._data.salesReport);
+      snap = {
+        type: "doughnut",
+        labels: types.map((x) => x.type),
+        values: types.map((x) => x.count),
+        extra: { cutout: "58%", legend: false },
+      };
+    }
+    if (!snap) {
+      console.warn("[wide] no snapshot for", sourceId);
+      return;
+    }
+    chartSnapshots[sourceId] = snap;
+    hideWideTableMode();
+    hideWidePerfExtra();
+    hideWideCancelExtra();
+    const totalsReset = $("#pbi-wide-totals");
+    if (totalsReset) totalsReset.classList.remove("pbi-wide-totals--acc");
+    const modal = document.querySelector(".pbi-wide-modal");
+    const isPerf = sourceId === "chart-sr-perf";
+    const isCancel = sourceId === "chart-cancel";
+    const isBo = String(sourceId).startsWith("chart-bo-");
+    if (modal) {
+      modal.classList.toggle("pbi-wide-modal--perf", isPerf);
+      modal.classList.toggle("pbi-wide-modal--cancel", isCancel);
+      modal.classList.toggle("pbi-wide-modal--bo", isBo);
+      modal.classList.remove("pbi-wide-modal--accessories", "pbi-wide-modal--table");
+    }
+    const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
+    const baseTitle = titleEl ? titleEl.textContent : "Chart";
+    const itemN = (snap.labels || []).length;
+    $("#pbi-wide-title").textContent = isCancel
+      ? "Cancellation % · Cancelled BOs"
+      : isBo
+        ? `${baseTitle} · Full detail (${itemN} item${itemN === 1 ? "" : "s"})`
+        : baseTitle;
+    const backdrop = $("#pbi-wide-backdrop");
+    backdrop.hidden = false;
+    backdrop.removeAttribute("hidden");
+    backdrop.classList.add("show");
+    document.body.classList.add("pbi-wide-open");
+
+    const n = (snap.labels || []).length;
+    const horizontal = !!(snap.extra && snap.extra.horizontal);
+    const box = $("#pbi-wide-box");
+    const scroll = $("#pbi-wide-scroll");
+    const wideCanvas = document.getElementById("pbi-wide-canvas");
+    if (horizontal && snap.type === "bar" && n > 1) {
+      const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
+      if (isBo && n > 10) {
+        const rowPx = seriesN >= 2 ? 30 : 26;
+        const height = Math.max(280, n * rowPx + 64);
+        box.style.height = height + "px";
+        box.style.minHeight = height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(rowPx);
+        scroll.style.maxHeight = Math.max(280, Math.floor(window.innerHeight * 0.58)) + "px";
+        scroll.classList.add("is-scroll");
+      } else {
+        const fit = fitHorizontalChartHeight(n, seriesN, {
+          preferredRow: isPerf
+            ? (seriesN >= 2 ? 42 : 32)
+            : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
+          minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
+          maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : (isBo ? 0.7 : 0.78)),
+          chromePx: isPerf ? 90 : (isCancel ? 160 : (isBo ? 110 : 80)),
+          pad: isPerf ? 72 : 56,
+        });
+        box.style.height = fit.height + "px";
+        box.style.minHeight = fit.height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+        scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
+      }
+    } else if (snap.type === "doughnut") {
+      box.style.height = isBo ? "440px" : "380px";
+      scroll.style.maxHeight = "";
+      scroll.classList.remove("is-scroll");
+      if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
+    } else {
+      box.style.height = isBo ? "480px" : "420px";
+      scroll.style.maxHeight = "";
+      scroll.classList.remove("is-scroll");
+      if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
+    }
+    const hint = $("#pbi-wide-hint");
+    const isProfDel = sourceId === "chart-sr-profdel";
+    if (hint) {
+      hint.textContent = isPerf
+        ? "Full team on one screen · names in Numbers · Volume & Sales type below"
+        : isCancel
+          ? "Cancel % & Gap above · Cancelled BOs below · click a bar to filter"
+          : isProfDel
+            ? "Daily Proforma (Col P) vs Delivery (Col V) · day of month"
+          : isBo
+            ? "Full list with Confirmed / Not Confirmed / aging · scroll if needed · Numbers on the right"
+          : horizontal && n > 1
+            ? "All names on one screen · Numbers on the right · click a bar to filter"
+        : "Numbers beside the chart · Close or press Esc";
+    }
+    renderWideNumbers(snap);
+    const extra = { ...(snap.extra || {}) };
+    upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
+    box.classList.toggle(
+      "pbi-wide-box--empty",
+      snap.type === "doughnut" && !(Array.isArray(snap.values) && snap.values.some((v) => Number(v) > 0))
+    );
+    if (horizontal && snap.type === "bar" && n > 1) {
+      const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
+      if (!(isBo && n > 10)) {
+        const fit = fitHorizontalChartHeight(n, seriesN, {
+          preferredRow: isPerf
+            ? (seriesN >= 2 ? 42 : 32)
+            : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
+          minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
+          maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : (isBo ? 0.7 : 0.78)),
+          chromePx: isPerf ? 90 : (isCancel ? 160 : (isBo ? 110 : 80)),
+          pad: isPerf ? 72 : 56,
+        });
+        box.style.height = fit.height + "px";
+        box.style.minHeight = fit.height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+      }
+      if (charts["pbi-wide-canvas"] && typeof charts["pbi-wide-canvas"].resize === "function") {
+        charts["pbi-wide-canvas"].resize();
+      }
+    }
+    if (isPerf) {
+      const sr = (window._data && window._data.salesReport) || null;
+      if (sr) renderWidePerfSalesType(sr);
+    }
+    if (isCancel) renderWideCancelCount(snap);
+  }
+
+  function closeWideChart() {
+    const backdrop = $("#pbi-wide-backdrop");
+    if (!backdrop) return;
+    backdrop.classList.remove("show");
+    backdrop.hidden = true;
+    document.body.classList.remove("pbi-wide-open");
+    const totals = $("#pbi-wide-totals");
+    if (totals) {
+      totals.hidden = true;
+      totals.innerHTML = "";
+      totals.classList.remove("pbi-wide-totals--acc");
+    }
+    const nums = $("#pbi-wide-numbers");
+    const list = $("#pbi-wide-numbers-list");
+    if (nums) nums.hidden = true;
+    if (list) list.innerHTML = "";
+    const body = $("#pbi-wide-body");
+    if (body) {
+      body.hidden = false;
+      body.classList.add("pbi-wide-body--chart-only");
+    }
+    hideWideTableMode();
+    hideWidePerfExtra();
+    hideWideCancelExtra();
+    const table = $("#pbi-wide-table");
+    if (table) table.innerHTML = "";
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--bo", "pbi-wide-modal--accessories", "pbi-wide-modal--table", "pbi-wide-modal--act-alerts");
+    }
+    const box = $("#pbi-wide-box");
+    if (box) {
+      box.classList.remove("icc-wide-cars");
+      box.style.height = "";
+      box.style.minHeight = "";
+    }
+    const scroll = $("#pbi-wide-scroll");
+    if (scroll) {
+      scroll.classList.remove("is-scroll");
+      scroll.style.maxHeight = "";
+    }
+    if (charts["pbi-wide-canvas"]) {
+      charts["pbi-wide-canvas"].destroy();
+      delete charts["pbi-wide-canvas"];
+    }
+  }
+
+  function renderCharts(d) {
+    const stockBy = countBy(d.stock.length ? d.stock : d.rtl.concat(d.central), "product");
+    upsertChart("chart-stock", "bar", stockBy.map((x) => x[0]), stockBy.map((x) => x[1]));
+    const sm = countBy(d.bos, "salesman");
+    upsertChart("chart-salesman", "bar", sm.map((x) => x[0]), sm.map((x) => x[1]));
+    const hi = d.matched.filter((b) => b.matchScore >= 80).length;
+    const mid = d.matched.filter((b) => b.matchScore >= 60 && b.matchScore < 80).length;
+    const low = Math.max(0, d.matched.length - hi - mid);
+    upsertChart("chart-match", "doughnut", ["≥80%", "60–79%", "No match"], [hi, mid, low]);
+    const salesBy = d.sales.some((r) => r.amount)
+      ? sumBy(d.sales, "product", "amount")
+      : countBy(d.sales, "product");
+    upsertChart("chart-sales", "bar", salesBy.map((x) => x[0]), salesBy.map((x) => x[1]));
+  }
+
+  const PANEL_DEFS = [
+    { id: "summary", label: "Summary · Del vs Prof" },
+    { id: "salesreport", label: "Sales Dashboard" },
+    { id: "gec", label: "GEC Dashboard" },
+    { id: "plantracker", label: "Plan Tracker" },
+    { id: "zonetracker", label: "Zone Tracker" },
+    { id: "ytdsales", label: "YTD Sales" },
+    { id: "contact", label: "Contact Performance" },
+    { id: "evaluation", label: "Evaluation Criteria" },
+    { id: "delivery", label: "Delivery" },
+    { id: "lexus", label: "Lexus Tracker" },
+    { id: "b2c", label: "B2C Tracker" },
+    { id: "bodashboard", label: "BO Dashboard" },
+    { id: "boerrors", label: "BO Errors" },
+    { id: "boallocstock", label: "Allocation" },
+    { id: "stockdashboard", label: "Stock Dashboard" },
+    { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
+    { id: "dashboard", label: "Stock & BO Dashboard" },
+  ];
+  const GEC_VIEW_SLOTS = new Set(["gec", "gecVisitors", "sales", "backorder"]);
+  /** lexusb2ctracker.html → index.html?view=lexus: Lexus Tracker only. The tracker loads its own files and reloads on every Admin Push. */
+  const LEXUS_VIEW = new URLSearchParams(location.search).get("view") === "lexus";
+  /* Opens the first dashboard of PANEL_DEFS the user can see: "summary" is tried first, and the
+     existing fallbacks (buildDashboard / Auth.fetchAccess) pick the next visible one in the same order. */
+  let activePanel = GEC_VIEW ? "gec" : LEXUS_VIEW ? "lexus" : "summary";
+  let panelBeforeGec = "";
+  let panelBeforeLexus = "";
+  let panelBeforeB2c = "";
+  let panelBeforeSummary = "";
+  /** Date changed inside the Sales Control Center; other panels rebuild when the user leaves it. */
+  let globalDateStale = false;
+
+  function hasSalesRaw() {
+    return slotHasRows("sales");
+  }
+
+  function hasCancelledBO() {
+    return slotHasRows("cancelled");
+  }
+
+  function hasBackOrder() {
+    return slotHasRows("backorder");
+  }
+
+  function hasReservedVehiclesInputs() {
+    return Array.isArray(slots.central?.reservedRows) && slots.central.reservedRows.length > 0;
+  }
+
+  function hasSalesReportInputs() {
+    return hasSalesRaw();
+  }
+
+  function hasSummaryInputs() {
+    return hasSalesRaw() || hasBackOrder() || hasStockFiles();
+  }
+
+  function visiblePanels() {
+    return PANEL_DEFS.filter((p) => {
+      if (p.id === "stockdashboard" || p.id === "dashboard") return false; // hidden from nav; panel code kept
+      if (GEC_VIEW) return p.id === "gec";
+      if (Auth && !Auth.canViewPanel(p.id, currentUser)) return false;
+      if (p.id === "salesreport" || p.id === "summary") return true;
+      if (p.id === "reservedvehicles") return true;
+      if (p.id === "plantracker") return true;
+      if (p.id === "zonetracker") return true;
+      if (p.id === "gec") return true;
+      if (p.id === "delivery") return true;
+      if (p.id === "boerrors") return true;
+      // BO + Allocation always visible — empty state when files missing
+      return true;
+    });
+  }
+
+  function setNavLinkVisible(el, show) {
+    if (!el) return;
+    el.hidden = !show;
+    el.style.display = show ? "" : "none";
+  }
+
+  function paintAuthChrome() {
+    Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
+    const showAdminTools = Auth.isAdmin(currentUser);
+    setNavLinkVisible(document.getElementById("nav-admin-push"), showAdminTools);
+    setNavLinkVisible(document.getElementById("nav-data-uploader"), showAdminTools);
+    const logout = document.getElementById("logout-btn");
+    if (logout) logout.onclick = () => Auth.logout();
+  }
+  paintAuthChrome();
+  function paintNoAccessState(panels) {
+    const tabs = $("#panel-tabs");
+    if (!tabs) return;
+    if (panels.length) return;
+    tabs.innerHTML = `<div class="empty" style="padding:14px;color:var(--muted);font-size:13px;line-height:1.45">
+      <strong style="display:block;color:inherit;margin-bottom:4px">No dashboards assigned</strong>
+      Ask Khayri to open Admin Push → Viewer access and select dashboards for you.
+    </div>`;
+    const dash = $("#dashboard");
+    const wait = $("#wait-section");
+    if (dash) {
+      dash.classList.remove("show");
+      dash.style.display = "none";
+    }
+    if (wait) {
+      wait.style.display = "";
+      wait.innerHTML = `<h2>No dashboards assigned</h2><p style="color:var(--muted);font-size:.9rem;margin:0">Ask Khayri to assign dashboards for your account in Admin Push → Viewer access.</p>`;
+    }
+    PANEL_DEFS.forEach((p) => {
+      const el = document.getElementById("panel-" + p.id);
+      if (el) el.style.display = "none";
+    });
+  }
+
+  Auth.fetchAccess().then(() => {
+    paintAuthChrome();
+    const panels = visiblePanels();
+    if (!panels.length) {
+      paintNoAccessState(panels);
+      return;
+    }
+    if (!panels.some((p) => p.id === activePanel)) {
+      activePanel = panels[0].id;
+    }
+    if (typeof switchPanel === "function") switchPanel(activePanel);
+  }).catch(() => {
+    paintAuthChrome();
+  });
+
+  function clearSalesReportUi() {
+    ["#sr-day-kpis", "#sr-kpis"].forEach((sel) => {
+      const el = $(sel);
+      if (el) { el.innerHTML = ""; el.style.display = "none"; }
+    });
+    ["#sr-day-table-wrap", "#sr-table-wrap"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.innerHTML = `<p class="foot" style="padding:16px">Push <b>Sales Raw Data</b> from Admin to build the Sales Report.</p>`;
+    });
+    ["#sr-day-table-foot", "#sr-table-foot"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.textContent = "Sales Report needs Sales Raw Data";
+    });
+    const hint = $("#sr-live-hint");
+    if (hint) hint.textContent = "Sales Report needs Sales Raw from Admin Push · Cancelled BO optional";
+  }
+
+  const TAB_DEFS = [
+    { id: "backorder", label: "Back Orders" },
+    { id: "rtl", label: "RTL Stock" },
+    { id: "central", label: "Central Stock" },
+    { id: "sales", label: "Sales Raw" },
+    { id: "cancelled", label: "Cancelled BOs" },
+    { id: "matches", label: "VIN Matches" },
+  ];
+
+  function pickDefaultStockTab(d) {
+    if (d.sales && d.sales.length && !(d.bos && d.bos.length)) return "sales";
+    if (d.bos && d.bos.length) return "backorder";
+    if (d.sales && d.sales.length) return "sales";
+    if (d.cancelled && d.cancelled.length) return "cancelled";
+    if (d.rtl && d.rtl.length) return "rtl";
+    if (d.central && d.central.length) return "central";
+    return "backorder";
+  }
+
+  function salesRawDisplayRows() {
+    const raw = slots.sales.rows || [];
+    return raw.map((r) => {
+      const row = {
+        Salesman: cellToString(r.salesman).trim(),
+        Plant: cellToString(r.plant || "").trim(),
+        Code: cellToString(r.salesmanCode || "").trim(),
+        "Proforma Date": r.proformaDate ? cellToString(r.proformaDate) : "",
+        "Delivery Date": r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        VIN: cellToString(r.vin || "").trim(),
+      };
+      const skip = new Set([
+        "salesman", "plant", "salesmancode", "proformadate", "deliverydate", "vin", "_sheet",
+      ]);
+      Object.keys(r).forEach((k) => {
+        if (String(k).startsWith("_")) return;
+        const compact = normHeader(k).replace(/\s+/g, "");
+        if (skip.has(compact)) return;
+        if (/^column\d+$/i.test(compact)) return;
+        const val = cellToString(r[k]).trim();
+        if (!val) return;
+        if (row[k] == null) row[k] = val;
+      });
+      return row;
+    });
+  }
+
+  function rowsForTab(d, tab) {
+    if (tab === "rtl") return d.rtl.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
+    if (tab === "central") return d.central.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
+    if (tab === "sales") return salesRawDisplayRows();
+    if (tab === "cancelled") {
+      return d.cancelled.map((r) => ({
+        VIN: r.vin || "",
+        "BO Number": r.boNumber,
+        Product: r.product,
+        Salesman: r.salesman,
+        Reason: r.reason || "Cancelled BO",
+        Date: r.date,
+      }));
+    }
+    if (tab === "matches") return d.matched.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, VIN: r.matchVin, Score: r.matchScore ? r.matchScore + "%" : "", Source: r.matchSource, Aging: r.aging != null ? r.aging + "d" : "" }));
+    return d.bos.map((r) => ({ "BO Number": r.boNumber, Customer: r.customer, Salesman: r.salesman, Product: r.product, Year: r.year, Exterior: r.ext, Interior: r.int, Aging: r.aging != null ? r.aging + "d" : "", Paid: r.paid ? "Paid" : "Unpaid", VIN: r.vin }));
+  }
+
+  function renderTabs() {
+    $("#tabs").innerHTML = TAB_DEFS.map((t) =>
+      `<button class="tab${view.tab === t.id ? " active" : ""}" data-tab="${t.id}">${t.label}</button>`
+    ).join("");
+    const extra = $("#filter-extra");
+    extra.innerHTML = view.tab === "backorder"
+      ? `<option value="">All payment</option><option value="Paid">Paid</option><option value="Unpaid">Unpaid</option>`
+      : view.tab === "matches"
+        ? `<option value="">All scores</option><option value="high">≥80%</option><option value="mid">60–79%</option><option value="none">No match</option>`
+        : `<option value="">All rows</option>`;
+    extra.value = view.extra;
+  }
+
+  function renderTable(d) {
+    if (view.tab === "cancelled") {
+      let rawRows = allCancelledRawRows();
+      const q = view.search.trim().toLowerCase();
+      if (q) {
+        rawRows = rawRows.filter((r) =>
+          Object.keys(r).some((k) => {
+            if (String(k).startsWith("_")) return false;
+            return String(cellToString(r[k])).toLowerCase().includes(q);
+          })
+        );
+      }
+      if (!rawRows.length) {
+        $("#table-wrap").innerHTML = `<p class="foot" style="padding:16px">No cancelled BO rows · upload Cancelled BOs in Admin (Col I = VIN).</p>`;
+        $("#table-foot").textContent = "0 rows";
+        window._exportRows = [];
+        return;
+      }
+      $("#table-wrap").innerHTML = renderCancelledFileTableHtml(rawRows);
+      $("#table-foot").textContent = `${formatNumber(rawRows.length)} cancelled rows · all Excel columns · duplicates included`;
+      window._exportRows = rawRows.map((r) => {
+        const cols = boFileColumns(r);
+        const out = {};
+        cols.forEach((c) => { out[c.label] = cellToString(boFileCell(r, c)); });
+        return out;
+      });
+      return;
+    }
+
+    let rows = rowsForTab(d, view.tab);
+    const q = view.search.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) => Object.values(r).some((v) => String(v).toLowerCase().includes(q)));
+    }
+    if (view.tab === "backorder" && view.extra) {
+      rows = rows.filter((r) => r.Paid === view.extra);
+    }
+    if (view.tab === "matches" && view.extra) {
+      rows = rows.filter((r) => {
+        const n = parseInt(String(r.Score), 10) || 0;
+        if (view.extra === "high") return n >= 80;
+        if (view.extra === "mid") return n >= 60 && n < 80;
+        return n < 60;
+      });
+    }
+    if (!rows.length) {
+      $("#table-wrap").innerHTML = `<p class="foot" style="padding:16px">No rows to show for this file/filter.</p>`;
+      $("#table-foot").textContent = "0 rows";
+      return;
+    }
+    const headers = Object.keys(rows[0]);
+    const body = rows.slice(0, MAX_ROWS).map((r) => {
+      const cells = headers.map((h) => {
+        let val = escapeHtml(r[h]);
+        if (h === "Paid") val = `<span class="badge ${r[h] === "Paid" ? "ok" : "warn"}">${val}</span>`;
+        if (h === "Score") {
+          const n = parseInt(String(r[h]), 10) || 0;
+          val = `<span class="badge ${n >= 80 ? "ok" : n >= 60 ? "warn" : "bad"}">${val || "0%"}</span>`;
+        }
+        return `<td>${val}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+    $("#table-wrap").innerHTML = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    $("#table-foot").textContent = `${formatNumber(rows.length)} rows` + (rows.length > MAX_ROWS ? ` · showing first ${formatNumber(MAX_ROWS)}` : "");
+    window._exportRows = rows;
+  }
+
+  function exportCsv() {
+    const rows = window._exportRows || [];
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = view.tab + "-export.csv";
+    a.click();
+  }
+
+  function excelFileStamp() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  }
+
+  function appendObjectSheet(wb, name, rows) {
+    const used = wb._sheetNamesUsed || (wb._sheetNamesUsed = new Set());
+    let safe = String(name || "Sheet").replace(/[\\/?*[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 31);
+    if (!safe) safe = "Sheet";
+    let unique = safe;
+    let n = 2;
+    while (used.has(unique.toLowerCase())) {
+      const suffix = ` (${n})`;
+      unique = (safe.slice(0, Math.max(1, 31 - suffix.length)) + suffix).slice(0, 31);
+      n += 1;
+    }
+    used.add(unique.toLowerCase());
+    if (!rows || !rows.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["(no rows)"]]), unique);
+      return;
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), unique);
+  }
+
+  function appendKpiSheet(wb, name, cards) {
+    appendObjectSheet(wb, name, (cards || []).map((k) => ({
+      Metric: k.label || k.lab || k.Metric || "",
+      Value: k.val != null ? k.val : (k.Value != null ? k.Value : ""),
+      Detail: k.sub || k.Detail || "",
+    })));
+  }
+
+  function downloadWorkbook(wb, fileName) {
+    const name = /\.xlsx$/i.test(fileName) ? fileName : `${fileName}.xlsx`;
+    XLSX.writeFile(wb, name);
+  }
+
+  function exportBoDashboardExcel() {
+    const d = window._data;
+    if (!d || !hasBackOrder()) {
+      setStatus("No Back Order data to export", "err");
+      return;
+    }
+    const list = filteredBos(d);
+    const m = boMetrics(list);
+    const aggs = productAgg(list);
+    const detail = list.map((b) => ({
+      "BO Number": b.boNumber || "",
+      Customer: b.customer || "",
+      Salesman: b.salesman || "",
+      Product: b.product || "",
+      Category: b.category || "",
+      Year: b.year || "",
+      SFX: b.sfx || b.suffix || "",
+      Exterior: b.ext || "",
+      Interior: b.int || "",
+      Confirmed: b.confirmed ? "Yes" : "No",
+      "Sales Type": b.salesType || "",
+      Channel: b.salesChannel || "",
+      Scope: b.salesScope || "",
+      Paid: b.paid ? "Paid" : "Unpaid",
+      Aging: b.aging != null ? b.aging : "",
+      "Order Date": b.orderDate || "",
+      VIN: b.vin || "",
+    }));
+    const byProduct = aggs.map((r) => ({
+      Product: r.product,
+      Category: r.category,
+      "BO Total": r.total,
+      Confirmed: r.confirmed,
+      "Not Confirmed": r.notConfirmed,
+      "Confirm %": `${(r.confirmPct * 100).toFixed(1)}%`,
+      "Avg Aging": r.avgAging,
+      "Over 30d": r.over30,
+      "Over 60d": r.over60,
+    }));
+    const bySfx = [...groupBoBy(list, (b) => b.sfx || "—").entries()]
+      .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total)
+      .map((r) => ({
+        SFX: r.sfx,
+        "BO Total": r.total,
+        Confirmed: r.confirmed,
+        "Not Confirmed": r.notConfirmed,
+        "Confirm %": `${(r.confirmPct * 100).toFixed(1)}%`,
+        "Avg Aging": r.avgAging,
+      }));
+    const bySalesType = [...groupBoBy(list, (b) => b.salesType || "—").entries()]
+      .map(([type, items]) => ({ type, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total)
+      .map((r) => ({
+        "Sales Type": r.type,
+        "BO Total": r.total,
+        Confirmed: r.confirmed,
+        "Not Confirmed": r.notConfirmed,
+        "Confirm %": `${(r.confirmPct * 100).toFixed(1)}%`,
+        "Avg Aging": r.avgAging,
+      }));
+    const strategic = STRATEGIC_PRODUCTS.map((name) => {
+      const items = list.filter((b) => productKeysEqual(b.product, name) || upperTrim(b.product).includes(upperTrim(name)));
+      const mm = boMetrics(items);
+      return {
+        Product: name,
+        "BO Total": mm.total,
+        Confirmed: mm.confirmed,
+        "Not Confirmed": mm.notConfirmed,
+        "Confirm %": mm.total ? `${(mm.confirmPct * 100).toFixed(1)}%` : "",
+        "Avg Aging": mm.avgAging,
+      };
+    });
+    const topBacklog = byProduct.slice(0, 10);
+    const insights = [];
+    if (aggs[0]) insights.push({ Insight: `Largest backlog: ${aggs[0].product}`, Value: aggs[0].total });
+    insights.push({ Insight: "Overall confirmation %", Value: `${(m.confirmPct * 100).toFixed(1)}%` });
+    insights.push({ Insight: "Orders >30 days", Value: m.over30 });
+    insights.push({ Insight: "Orders >60 days", Value: m.over60 });
+    insights.push({ Insight: "Average aging (days)", Value: m.avgAging });
+
+    const wb = XLSX.utils.book_new();
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total Back Orders", val: m.total, sub: "open orders" },
+      { label: "Confirmed", val: m.confirmed, sub: "allocated" },
+      { label: "Not Confirmed", val: m.notConfirmed, sub: "waiting allocation" },
+      { label: "Confirmation %", val: `${(m.confirmPct * 100).toFixed(1)}%`, sub: "confirmed ÷ total" },
+      { label: "Orders >30 Days", val: m.over30, sub: "aging risk" },
+      { label: "Orders >60 Days", val: m.over60, sub: "critical aging" },
+      { label: "Average Aging", val: m.avgAging, sub: "days" },
+    ]);
+    appendObjectSheet(wb, "Executive Insights", insights);
+    appendObjectSheet(wb, "Strategic Products", strategic);
+    appendObjectSheet(wb, "Each Product", byProduct);
+    appendObjectSheet(wb, "Top 10 Product Backlog", topBacklog);
+    appendObjectSheet(wb, "Confirmation by Product", byProduct.map((r) => ({
+      Product: r.Product,
+      Confirmed: r.Confirmed,
+      "Not Confirmed": r["Not Confirmed"],
+      "Confirm %": r["Confirm %"],
+    })));
+    appendObjectSheet(wb, "Average Aging by Product", byProduct.map((r) => ({
+      Product: r.Product,
+      "Avg Aging": r["Avg Aging"],
+      "Over 30d": r["Over 30d"],
+      "Over 60d": r["Over 60d"],
+      "BO Total": r["BO Total"],
+    })));
+    appendObjectSheet(wb, "Sales Type Confirmed vs Not", bySalesType);
+    appendObjectSheet(wb, "By SFX", bySfx);
+    const pct20 = build20PctCars(list);
+    appendObjectSheet(wb, "20% Cars", pct20.rows.map((r) => ({
+      Product: r.product,
+      Total: r.total,
+      Paid: r.paid,
+      "Not Paid": r.notPaid,
+      B2C: r.b2c,
+      Telesales: r.telesales,
+    })).concat([{
+      Product: "TOTAL",
+      Total: pct20.totals.total,
+      Paid: pct20.totals.paid,
+      "Not Paid": pct20.totals.notPaid,
+      B2C: pct20.totals.b2c,
+      Telesales: pct20.totals.telesales,
+    }]));
+    appendObjectSheet(wb, "BO Detail", detail);
+    downloadWorkbook(wb, `BO-Dashboard-${excelFileStamp()}`);
+    setStatus(`BO Dashboard Excel exported · ${formatNumber(detail.length)} detail rows · section sheets`, "ok");
+  }
+
+  function exportStockDashboardExcel() {
+    if (!hasStockFiles()) {
+      setStatus("No Stock data to export", "err");
+      return;
+    }
+    const list = filteredStockInv();
+    const detail = list.map((s) => ({
+      Source: s.source || "",
+      Product: s.product || "",
+      VIN: s.vin || "",
+      Suffix: s.suffix || "",
+      Year: s.year || "",
+      Exterior: s.ext || "",
+      Interior: s.int || "",
+      Ageing: s.ageing != null ? s.ageing : "",
+      Usage: s.usage || "",
+      Location: s.location || "",
+      Status: s.status || "",
+      "Vehicle Search Area": s.searchAreaDesc || "",
+    }));
+    const byProduct = stockProductAgg(list).map((r) => ({
+      Product: r.product,
+      Units: r.total,
+      VINs: r.vins,
+      "Avg Ageing": r.avgAging,
+      Suffixes: r.suffixCount,
+      RTL: r.rtl,
+      Central: r.central,
+    }));
+    const rtl = list.filter((s) => s.source === "RTL").length;
+    const central = list.filter((s) => /central|e-sales/i.test(String(s.source || ""))).length;
+    const agingVals = list.map((s) => s.ageing).filter((n) => n != null && Number.isFinite(n));
+    const avgAge = agingVals.length ? Math.round(agingVals.reduce((a, b) => a + b, 0) / agingVals.length) : 0;
+
+    const wb = XLSX.utils.book_new();
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total Units", val: list.length, sub: "filtered stock" },
+      { label: "RTL", val: rtl, sub: "retail stock" },
+      { label: "Central / E-Sales", val: central, sub: "central stock" },
+      { label: "Products", val: byProduct.length, sub: "unique products" },
+      { label: "Avg Ageing", val: avgAge, sub: "days" },
+    ]);
+    const insights = [];
+    if (byProduct[0]) insights.push({ Insight: `Largest stock share: ${byProduct[0].Product}`, Value: byProduct[0].Units });
+    const highestAging = byProduct.slice().sort((a, b) => (b["Avg Ageing"] || 0) - (a["Avg Ageing"] || 0))[0];
+    if (highestAging) insights.push({ Insight: `Highest avg ageing: ${highestAging.Product}`, Value: `${highestAging["Avg Ageing"]} days` });
+    insights.push({ Insight: "Total inventory", Value: list.length });
+    insights.push({ Insight: "RTL / Central split", Value: `${rtl} / ${central}` });
+
+    appendObjectSheet(wb, "Stock Inventory", detail);
+    appendObjectSheet(wb, "Executive Insights", insights);
+    appendObjectSheet(wb, "Each Product", byProduct);
+    appendObjectSheet(wb, "Top 10 Product Stock", byProduct.slice(0, 10));
+    appendObjectSheet(wb, "Average Ageing by Product", byProduct.map((r) => ({
+      Product: r.Product,
+      "Avg Ageing": r["Avg Ageing"],
+      Units: r.Units,
+    })));
+    appendObjectSheet(wb, "RTL vs Central", byProduct.map((r) => ({
+      Product: r.Product,
+      RTL: r.RTL,
+      Central: r.Central,
+      Units: r.Units,
+    })));
+    if (hasBackOrder()) {
+      const matched = filteredMatchedAllocRows(
+        buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || [])
+      );
+      appendObjectSheet(wb, "Matched Cars Fulfillable", matched.map((r) => {
+        const out = {};
+        MATCHED_CAR_COLS.forEach((h) => { out[h] = r[h] != null ? r[h] : ""; });
+        return out;
+      }));
+    }
+    downloadWorkbook(wb, `Stock-Dashboard-${excelFileStamp()}`);
+    setStatus(`Stock Dashboard Excel exported · ${formatNumber(detail.length)} units · section sheets`, "ok");
+  }
+
+  function basRowsToExcel(rows) {
+    return (rows || []).map((r) => ({
+      Seg: r.seg || "",
+      Product: r.product || "",
+      SFX: r.sfx || "",
+      Allocation: r.allocation,
+      "Back Orders": r.boCount,
+      Stock: r.stockCount,
+      Gap: r.gap,
+      Status: basGapLabel(r.status),
+      "Plan + Stock - BO": r.netCover,
+    }));
+  }
+
+  function basGapHighlightRows(rows, boWord) {
+    const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap).slice(0, 20);
+    const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap).slice(0, 20);
+    return [
+      ...below.map((r) => ({
+        Type: `Shortfall · ${boWord} above allocation`,
+        Product: r.product,
+        SFX: r.sfx,
+        Allocation: r.allocation,
+        "Back Orders": r.boCount,
+        Gap: r.gap,
+      })),
+      ...above.map((r) => ({
+        Type: `Surplus · allocation above ${boWord}`,
+        Product: r.product,
+        SFX: r.sfx,
+        Allocation: r.allocation,
+        "Back Orders": r.boCount,
+        Gap: r.gap,
+      })),
+    ];
+  }
+
+  function matchedAllocRowsToExcel(rows) {
+    return (rows || []).map((r) => ({
+      "BO Number": r.boNumber || "",
+      Product: r.product || "",
+      Salesman: r.salesman || "",
+      VIN: r.vin || "",
+      Score: r.matchScore != null ? r.matchScore : "",
+      Source: r.source || "",
+      Aging: r.ageing != null ? r.ageing : "",
+      Suffix: r.sfx || r.boSuffix || "",
+      "Stock Ext": r.stockExt || "",
+      "Stock Int": r.stockInt || "",
+      "Match Pair": r.matchPair != null ? r.matchPair : "",
+      "BO Ext": r.boExt || "",
+      "BO Int": r.boInt || "",
+      "Sales Status": r.salesStatus || "",
+      "Secondary Status": r.secondaryStatus || "",
+      "Primary Status": r.status || "",
+      Usage: r.usage || "",
+      "Allocated Location": r.location || "",
+      "Vehicle Search Area": r.vehicleSearchArea || "",
+      "Sharing Level": r.sharingLevel || "",
+      "Order Date": r.orderDate || "",
+    }));
+  }
+
+  function exportBasDashboardExcel() {
+    if (!hasBackOrder() || !hasStockFiles()) {
+      setStatus("No Back Order / Stock data to export", "err");
+      return;
+    }
+    const allocList = filteredBasAllocatedRows(buildBasAllocatedVehicles());
+    const wb = XLSX.utils.book_new();
+    appendObjectSheet(wb, "Matched Vehicles", matchedAllocRowsToExcel(allocList));
+    downloadWorkbook(wb, `Matched-Vehicles-${excelFileStamp()}`);
+    setStatus(`Matched vehicles exported · ${formatNumber(allocList.length)} rows`, "ok");
+  }
+
+  function exportStockBoDashboardExcel() {
+    const d = window._data;
+    if (!d) {
+      setStatus("No dashboard data to export", "err");
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    TAB_DEFS.forEach((t) => {
+      let rows = rowsForTab(d, t.id);
+      if (t.id === "cancelled") {
+        rows = allCancelledRawRows().map((r) => {
+          const cols = boFileColumns(r);
+          const out = {};
+          cols.forEach((c) => { out[c.label] = cellToString(boFileCell(r, c)); });
+          return out;
+        });
+      }
+      appendObjectSheet(wb, t.label, rows);
+    });
+    downloadWorkbook(wb, `Stock-BO-Dashboard-${excelFileStamp()}`);
+    setStatus("Stock & BO Dashboard Excel exported · sheet per section", "ok");
+  }
+
+  /** Bridge helpers for Plan Tracker module (Data Uploader rtl-daily snapshots). */
+  function renderPlanTrackerPanel(force) {
+    window.ensureRtlActiveMonth = ensureRtlActiveMonth;
+    window.getCachedRtlActiveMonth = getCachedRtlActiveMonth;
+    window.basMonthContext = basMonthContext;
+    window.mapRtlDailyVehicle = mapRtlDailyVehicle;
+    window.dayVehicleSearchArea = dayVehicleSearchArea;
+    window.dayVehicleAgDate = dayVehicleAgDate;
+    window.escapeHtml = escapeHtml;
+    window.formatNumber = formatNumber;
+    window.parseDate = parseDate;
+    window.extractVinValue = extractVinValue;
+    window.allocationSalesRawColumnV = allocationSalesRawColumnV;
+    window.normHeader = normHeader;
+    window.setStatus = setStatus;
+    window.matchRtlToAllocLeaf = matchRtlToAllocLeaf;
+    window.ALLOCATION_ROWS = ALLOCATION_ROWS;
+    window.allocationValues = allocationValues;
+    if (typeof formatRvDate === "function") window.formatRvDate = formatRvDate;
+    if (!window.PlanTracker || typeof window.PlanTracker.render !== "function") {
+      const empty = $("#pt-empty");
+      const dash = $("#pt-dash");
+      if (empty) {
+        empty.hidden = false;
+        empty.innerHTML = `<h2>Plan Tracker</h2><p class="foot">plan-tracker.js failed to load.</p>`;
+      }
+      if (dash) dash.hidden = true;
+      return;
+    }
+    window.PlanTracker.render({ force: !!force }).catch((err) => {
+      console.warn("Plan Tracker render failed", err);
+      if (typeof setStatus === "function") setStatus(err.message || "Plan Tracker failed", "err");
+    });
+  }
+
+  /** Bridge helpers for Zone Tracker module (same rtl-daily snapshots and RES rules as Plan Tracker). */
+  function renderZoneTrackerPanel(force) {
+    Object.assign(window, {
+      ensureRtlActiveMonth,
+      getCachedRtlActiveMonth,
+      basMonthContext,
+      mapRtlDailyVehicle,
+      dayVehicleSearchArea,
+      dayVehicleAgDate,
+      dayVehicleField,
+      extractVinValue,
+      upperTrim,
+      normHeader,
+      parseDate,
+      escapeHtml,
+      formatNumber,
+      setStatus,
+      matchRtlToAllocLeaf,
+      ALLOCATION_ROWS,
+      allocationValues,
+      basAgSameAsFileDay,
+      basScheduleDayFromAg,
+      inferCollectionDateFromAge,
+      basDaySalesBucket,
+      buildSalesVinLookup,
+      buildBasMonthlyData,
+      appendObjectSheet,
+      downloadWorkbook,
+      excelFileStamp,
+    });
+    if (!window.ZoneTracker || typeof window.ZoneTracker.render !== "function") {
+      const empty = $("#zt-empty");
+      if (empty) {
+        empty.hidden = false;
+        empty.innerHTML = `<h2>Zone Tracker</h2><p class="foot">zone-tracker.js failed to load.</p>`;
+      }
+      const dash = $("#zt-dash");
+      if (dash) dash.hidden = true;
+      return;
+    }
+    window.ZoneTracker.render({ force: !!force }).catch((err) => {
+      console.warn("Zone Tracker render failed", err);
+      if (typeof setStatus === "function") setStatus(err.message || "Zone Tracker failed", "err");
+    });
+  }
+
+  function renderGecPanel() {
+    const host = $("#gec-host");
+    if (!host || !window.GecDashboard) return;
+    if (host.parentNode !== document.body) document.body.appendChild(host);
+    window.GecDashboard.render(host, (slots.gec && slots.gec.gec) || null, {
+      visitors: (slots.gecVisitors && slots.gecVisitors.visitors) || null,
+      sales: (slots.sales && slots.sales.rows) || null,
+      backorder: (slots.backorder && slots.backorder.rows) || null,
+      control: Store.readGecControl(),
+      lastUpdated: Number(Store.readDataPushStamp().at) || 0,
+      onRefresh: () => refreshFromAdmin("Refreshed", { force: true }),
+      onExit: GEC_VIEW ? null : () => {
+        const others = visiblePanels().filter((p) => p.id !== "gec").map((p) => p.id);
+        switchPanel(others.includes(panelBeforeGec) ? panelBeforeGec : (others[0] || "dashboard"));
+      },
+    });
+  }
+
+  // Admin → GEC CONTROL saved (this laptop via storage event, others via live sync): re-classify without re-parsing.
+  const onGecControlUpdated = () => { if (activePanel === "gec") renderGecPanel(); };
+  window.addEventListener("gec-control-updated", onGecControlUpdated);
+  window.addEventListener("bo-error-rules-updated", () => {
+    if (activePanel === "boerrors") renderBoErrorsDashboard();
+  });
+  window.addEventListener("storage", (e) => { if (e.key === Store.GEC_CONTROL_KEY) onGecControlUpdated(); });
+
+  function switchPanel(panelId) {
+    const panels = visiblePanels();
+    if (!panels.some((p) => p.id === panelId)) {
+      if (!panels.length) {
+        paintNoAccessState(panels);
+        return;
+      }
+      panelId = panels[0].id;
+    }
+    const leavingDelivery = activePanel === "delivery" && panelId !== "delivery";
+    if (panelId === "gec" && activePanel !== "gec") panelBeforeGec = activePanel;
+    if (panelId === "lexus" && activePanel !== "lexus") panelBeforeLexus = activePanel;
+    if (panelId === "b2c" && activePanel !== "b2c") panelBeforeB2c = activePanel;
+    if (panelId === "summary" && activePanel !== "summary") panelBeforeSummary = activePanel;
+    if (activePanel === "boerrors" && panelId !== "boerrors") {
+      const boeWrap = document.getElementById("boe-table-wrap");
+      if (boeWrap) boeWrap.textContent = "";
+      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "zonetracker", "contact", "evaluation"];
+      if (!window._data && typeof hasAnyPushedFiles === "function" && !hasAnyPushedFiles() && !keepsDashboard.includes(panelId)) {
+        const dash = $("#dashboard");
+        const wait = $("#wait-section");
+        if (dash) {
+          dash.classList.remove("show");
+          dash.style.display = "none";
+        }
+        if (wait) wait.style.display = "";
+      }
+    }
+    activePanel = panelId;
+    document.body.classList.toggle("gec-mode", panelId === "gec");
+    document.body.classList.toggle("lx-mode", panelId === "lexus");
+    document.body.classList.toggle("tb-mode", panelId === "b2c");
+    document.body.classList.toggle("sc-mode", panelId === "summary");
+    document.body.classList.toggle("sr-mode", panelId === "salesreport");
+    document.body.classList.toggle("ytd-mode", panelId === "ytdsales");
+    document.body.classList.toggle("pt-wide-mode", panelId === "plantracker");
+    document.body.classList.toggle("zt-mode", panelId === "zonetracker");
+    document.body.classList.toggle("boe-mode", panelId === "boerrors");
+    document.body.classList.toggle("alloc-mode", panelId === "boallocstock");
+    document.body.classList.toggle("bo-dash-mode", panelId === "bodashboard");
+    document.body.classList.toggle("delivery-mode", panelId === "delivery");
+    document.body.classList.toggle("cp-mode", panelId === "contact");
+    document.body.classList.toggle("ev-mode", panelId === "evaluation");
+    document.body.classList.toggle("rv-mode", panelId === "reservedvehicles");
+    if (panelId !== "salesreport") setSrSheet("");
+    if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
+    PANEL_DEFS.forEach((p) => {
+      const el = document.getElementById("panel-" + p.id);
+      if (el) el.style.display = p.id === panelId ? "" : "none";
+    });
+    const iconMap = {
+      summary: "◫",
+      salesreport: "▣",
+      ytdsales: "Y",
+      gec: "✦",
+      contact: "☎",
+      evaluation: "★",
+      delivery: "D",
+      lexus: "L",
+      b2c: "T",
+      bodashboard: "▤",
+      boerrors: "⚠",
+      boallocstock: "▦",
+      plantracker: "▣",
+      zonetracker: "⌖",
+      stockdashboard: "◈",
+      reservedvehicles: "◎",
+      dashboard: "◉",
+    };
+    $("#panel-tabs").innerHTML = panels.map((p) =>
+      `<button type="button" class="tab side-nav-item${p.id === activePanel ? " active" : ""}" data-panel="${p.id}" title="${escapeHtml(p.label)}">
+        <span class="side-nav-icon" aria-hidden="true">${iconMap[p.id] || "•"}</span>
+        <span class="side-nav-label">${escapeHtml(p.label)}</span>
+      </button>`
+    ).join("");
+    const titleEl = $("#app-page-title");
+    if (titleEl) {
+      const cur = panels.find((p) => p.id === panelId);
+      titleEl.textContent = cur ? cur.label : "Dashboard";
+    }
+    const dateEl = $("#app-page-date");
+    if (dateEl) {
+      const now = new Date();
+      const d = now.toLocaleDateString("en-GB", {
+        weekday: "short", day: "numeric", month: "short",
+      });
+      dateEl.textContent = `TOYOTA · ${d}`;
+    }
+    if (panelId === "summary") renderSummaryDashboard();
+    if (panelId === "ytdsales") renderYtdSales();
+    if (panelId === "boerrors") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.add("show");
+        dash.style.display = "";
+      }
+      if (wait) wait.style.display = "none";
+    }
+    if (panelId === "delivery") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.add("show");
+        dash.style.display = "";
+      }
+      if (wait) wait.style.display = "none";
+      const frame = document.getElementById("delivery-view-frame");
+      if (frame && (!frame.getAttribute("src") || frame.getAttribute("src") === "about:blank")) {
+        frame.setAttribute("src", "https://delivery-operation-production.up.railway.app/delivery-transformation/admin.html?view=1");
+      }
+    } else if (leavingDelivery && !window._data) {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.remove("show");
+        dash.style.display = "none";
+      }
+      if (wait) wait.style.display = "";
+    }
+    if (panelId === "gec") renderGecPanel();
+    if (panelId === "contact") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.add("show");
+        dash.style.display = "";
+      }
+      if (wait) wait.style.display = "none";
+      if (window.ContactPerformance) window.ContactPerformance.mount(document.getElementById("contact-performance-host"));
+    }
+    if (panelId === "evaluation") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) { dash.classList.add("show"); dash.style.display = ""; }
+      if (wait) wait.style.display = "none";
+      const evHost = document.getElementById("evaluation-host");
+      if (window.EvaluationCriteria) window.EvaluationCriteria.mount(evHost);
+      else if (evHost && !evHost.children.length) evHost.innerHTML = '<p style="padding:24px;color:#8b9ab1">Evaluation Criteria files (evaluation.js, evaluation-data.js, evaluation.css) were not found next to index.html.</p>';
+    }
+    if (panelId === "lexus" && window.LexusTracker) {
+      const lxHost = $("#lexus-tracker-host");
+      if (lxHost.parentNode !== document.body) document.body.appendChild(lxHost);
+      window.LexusTracker.mount(lxHost);
+      window.LexusTracker.show({
+        onExit: LEXUS_VIEW ? null : () => {
+          const others = visiblePanels().filter((p) => p.id !== "lexus").map((p) => p.id);
+          switchPanel(others.includes(panelBeforeLexus) ? panelBeforeLexus : (others[0] || "dashboard"));
+        },
+      });
+    }
+    if (panelId === "b2c" && window.ToyotaB2cTracker) {
+      const tbHost = $("#toyota-b2c-tracker-host");
+      if (tbHost.parentNode !== document.body) document.body.appendChild(tbHost);
+      window.ToyotaB2cTracker.mount(tbHost);
+      window.ToyotaB2cTracker.show({
+        onExit: () => {
+          const others = visiblePanels().filter((p) => p.id !== "b2c").map((p) => p.id);
+          switchPanel(others.includes(panelBeforeB2c) ? panelBeforeB2c : (others[0] || "dashboard"));
+        },
+      });
+    }
+    if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
+    if (panelId === "plantracker") renderPlanTrackerPanel();
+    if (panelId === "zonetracker") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) { dash.classList.add("show"); dash.style.display = ""; }
+      if (wait) wait.style.display = "none";
+      renderZoneTrackerPanel();
+    }
+    if (panelId === "boerrors" && window._data) renderBoErrorsDashboard(window._data);
+    if (panelId === "boallocstock" && window._data) {
+      renderBoAllocStockDashboard(window._data);
+    }
+    if (panelId === "bodashboard" && window._data) renderBoDashboard(window._data);
+    if (panelId === "dashboard") ensureMainDashboard();
+    if (panelId === "stockdashboard" && window._data && stockDashRenderedFor !== window._data) {
+      stockDashRenderedFor = window._data;
+      renderStockDashboard();
+    }
+  }
+  window.switchReportPanel = switchPanel;
+
+  var mainDashRenderedFor = null;
+  var stockDashRenderedFor = null;
+  function renderMainDashboard(d) {
+    mainDashRenderedFor = d;
+    renderKpis(d);
+    renderCharts(d);
+    renderTabs();
+    renderTable(d);
+  }
+  function ensureMainDashboard() {
+    if (window._data && mainDashRenderedFor !== window._data) renderMainDashboard(window._data);
+  }
+
+  const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
+  const SR_DATE_FILTER_KEY = "toyota_sr_date_filter_v1";
+
+  function loadGlobalDateFilter() {
+    try {
+      const raw = localStorage.getItem(GLOBAL_DATE_FILTER_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const preset = String(parsed.preset || "today");
+        const valid = ["today", "this_month", "last_month", "all", "custom"];
+        return {
+          preset: valid.includes(preset) ? preset : "today",
+          from: String(parsed.from || ""),
+          to: String(parsed.to || ""),
+        };
+      }
+      const legacy = localStorage.getItem(SR_DATE_FILTER_KEY);
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (parsed.mode === "custom") {
+          return { preset: "custom", from: String(parsed.from || ""), to: String(parsed.to || "") };
+        }
+      }
+    } catch { /* ignore */ }
+    return { preset: "today", from: "", to: "" };
+  }
+
+  function saveGlobalDateFilter() {
+    try {
+      localStorage.setItem(GLOBAL_DATE_FILTER_KEY, JSON.stringify(globalDateFilter));
+    } catch { /* ignore */ }
+  }
+
+  let globalDateFilter = loadGlobalDateFilter();
+
+  function loadSrDateFilter() {
+    return globalDateFilter;
+  }
+
+  function saveSrDateFilter() {
+    saveGlobalDateFilter();
+  }
+
+  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "", selectedKeys: [], plant: "", status: "", salesman: "", page: 1, pageSize: 10, schedulePeriod: "month" };
+
+  function srSelectedList() {
+    const raw = Array.isArray(srView.selectedKeys) ? srView.selectedKeys.slice() : [];
+    if (!raw.length && srView.selectedKey) raw.push(srView.selectedKey);
+    return [...new Set(raw.map((key) => nameKey(key) || key).filter(Boolean))];
+  }
+
+  function srHasSelection() {
+    return srSelectedList().length > 0;
+  }
+
+  function srRowSelected(key) {
+    const keys = srSelectedList();
+    if (!keys.length || !key) return false;
+    const resolved = nameKey(key) || key;
+    return keys.includes(resolved) || keys.includes(key);
+  }
+
+  function srWithoutSelection(run) {
+    const prevKey = srView.selectedKey;
+    const prevKeys = srView.selectedKeys;
+    srView.selectedKey = "";
+    srView.selectedKeys = [];
+    try {
+      return run();
+    } finally {
+      srView.selectedKey = prevKey;
+      srView.selectedKeys = prevKeys;
+    }
+  }
+
+  function srSelectedRows() {
+    const byKey = window._srRowsByKey || {};
+    return srSelectedList().map((key) => byKey[key]).filter(Boolean);
+  }
+
+  function globalDatePresetLabel(preset) {
+    if (preset === "today") return "Today";
+    if (preset === "this_month") return "This month (1st → today)";
+    if (preset === "last_month") return "Last month";
+    if (preset === "all") return "All dates";
+    if (preset === "custom") return "Custom range";
+    return preset;
+  }
+
+  function syncGlobalDateControls(live) {
+    const preset = globalDateFilter.preset || "today";
+    const custom = preset === "custom";
+    ["#sr-date-preset", "#bas-date-preset"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.value = preset;
+    });
+    ["#sr-date-from", "#bas-date-from"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.value = globalDateFilter.from || "";
+      el.disabled = !custom;
+    });
+    ["#sr-date-to", "#bas-date-to"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.value = globalDateFilter.to || "";
+      el.disabled = !custom;
+    });
+    const applyBas = $("#bas-date-apply");
+    if (applyBas) applyBas.disabled = !custom;
+
+    // Sales Dashboard From → To is always editable and shows the range in effect.
+    const srFrom = $("#sr-date-from");
+    const srTo = $("#sr-date-to");
+    if (srFrom && srTo) {
+      srFrom.disabled = false;
+      srTo.disabled = false;
+      if (!custom && live) {
+        const shownFrom = preset === "today" ? live.now : live.rangeFrom;
+        const shownTo = preset === "today" ? live.now : live.rangeTo;
+        const isoFrom = toIsoDateInput(shownFrom);
+        const isoTo = toIsoDateInput(shownTo);
+        if (isoFrom) srFrom.value = isoFrom;
+        if (isoTo) srTo.value = isoTo;
+      }
+    }
+    const applySr = $("#sr-date-apply");
+    if (applySr) {
+      applySr.disabled = false;
+      applySr.classList.remove("is-dirty");
+    }
+    const srRange = $("#sr-date-range");
+    if (srRange) srRange.classList.toggle("is-active", custom);
+
+    const bounds = salesDateBounds(slots.sales.rows || []);
+    ["#sr-date-from", "#sr-date-to", "#bas-date-from", "#bas-date-to"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      if (bounds.min) el.min = toIsoDateInput(bounds.min);
+      if (bounds.max) el.max = toIsoDateInput(bounds.max);
+    });
+
+    const hintText = live
+      ? `${globalDatePresetLabel(preset)} · ${live.rangeLabel || ""}`
+      : globalDatePresetLabel(preset);
+    const srHint = $("#sr-date-hint");
+    const basHint = $("#bas-date-hint");
+    if (srHint) {
+      const dayDate = (live && live.now) ? live.now : new Date();
+      const dayLabel = dayDate.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+      srHint.textContent = dayLabel;
+      srHint.title = hintText;
+      document.querySelectorAll(".sr-range-pill").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.getAttribute("data-sr-range") === preset);
+      });
+    }
+    if (basHint) {
+      if (preset === "this_month") {
+        basHint.textContent = live && live.rangeLabel
+          ? `This month · ${live.rangeLabel} (1st through today)`
+          : "This month · 1st through today";
+      } else {
+        basHint.textContent = hintText;
+      }
+    }
+
+    document.querySelectorAll(".sr-date-custom").forEach((el) => {
+      el.style.display = custom ? "" : "none";
+    });
+    document.querySelectorAll(".bas-date-custom").forEach((el) => {
+      el.style.display = custom ? "inline-flex" : "none";
+    });
+  }
+
+  function applyGlobalDateFilter(reason) {
+    const preset = ($("#sr-date-preset") && $("#sr-date-preset").value)
+      || ($("#bas-date-preset") && $("#bas-date-preset").value)
+      || globalDateFilter.preset
+      || "today";
+    globalDateFilter.preset = preset;
+    if (preset === "custom") {
+      globalDateFilter.from = ($("#sr-date-from") && $("#sr-date-from").value || $("#bas-date-from") && $("#bas-date-from").value || "").trim();
+      globalDateFilter.to = ($("#sr-date-to") && $("#sr-date-to").value || $("#bas-date-to") && $("#bas-date-to").value || "").trim();
+      const from = parseIsoDateInput(globalDateFilter.from);
+      const to = parseIsoDateInput(globalDateFilter.to);
+      if (!from || !to) {
+        setStatus("Select both From and To dates", "err");
+        return;
+      }
+      if (startOfDay(from).getTime() > startOfDay(to).getTime()) {
+        setStatus("From date must be on or before To date", "err");
+        return;
+      }
+    } else {
+      globalDateFilter.from = "";
+      globalDateFilter.to = "";
+    }
+    saveGlobalDateFilter();
+    rebuildForGlobalDate();
+    setStatus(reason || `Date filter · ${globalDatePresetLabel(globalDateFilter.preset)}`, "ok");
+  }
+
+  /** Rebuild every date-dependent panel for the current globalDateFilter. */
+  function rebuildForGlobalDate() {
+    globalDateStale = false;
+    window._globalLivePeriod = ensureGlobalLivePeriod();
+    if (window._data) {
+      if (hasSalesReportInputs()) rebuildSalesReport();
+      else if (hasSalesRaw()) {
+        window._data = data();
+        window._globalLivePeriod = window._data.salesReport && window._data.salesReport.live
+          ? window._data.salesReport.live
+          : ensureGlobalLivePeriod();
+      }
+      invalidateIccCache();
+      if (hasSummaryInputs()) renderSummaryDashboard();
+      if (activePanel === "boallocstock") renderBoAllocStockDashboard(window._data);
+    }
+    syncGlobalDateControls(window._globalLivePeriod);
+  }
+
+  function resetGlobalDateFilter() {
+    globalDateFilter = { preset: "today", from: "", to: "" };
+    saveGlobalDateFilter();
+    if (window._data) {
+      if (hasSalesReportInputs()) rebuildSalesReport();
+      invalidateIccCache();
+      if (hasSummaryInputs()) renderSummaryDashboard();
+      if (activePanel === "boallocstock") renderBoAllocStockDashboard(window._data);
+    }
+    syncGlobalDateControls(window._globalLivePeriod);
+    setStatus("Date filter reset to Today", "ok");
+  }
+
+  const SR_COLS = [
+    { key: "No", label: "#" },
+    { key: "Plant", label: "Plant" },
+    { key: "Salesman", label: "Salesman ID" },
+    { key: "Sales Employee", label: "Sales Employee" },
+    { key: "Proforma", label: "Proforma" },
+    { key: "Delivery", label: "Delivery" },
+    { key: "Target", label: "Target" },
+    { key: "Ach%", label: "Ach%" },
+    { key: "Del+VSND", label: "Del+VSND" },
+    { key: "Ach% (Sales)", label: "Ach%" },
+    { key: "Diff", label: "Diff" },
+    { key: "Cancelled BOs", label: "Cancelled BOs", divide: true },
+    { key: "Cancellation %", label: "Cancellation %" },
+    { key: "Can. Target 30%", label: "Can. Target 30%" },
+    { key: "Gap +/-", label: "Gap +/-" },
+  ];
+
+  function scheduleRowStatus(r) {
+    const full = r._full || r;
+    if (full._vacation || r._vacation || String(r.Target || "").toUpperCase() === "VACATION") return "vacation";
+    const name = String(r["Sales Employee"] || "").trim();
+    if (/^not\s*assigned$/i.test(name)) return "unassigned";
+    const achRaw = r["Ach%"];
+    if (achRaw === "#DIV/0!") return "below";
+    const ach = parseFloat(String(achRaw)) || 0;
+    return ach >= 100 ? "ontrack" : "below";
+  }
+
+  function scheduleStatusBadge(status) {
+    const map = {
+      ontrack: { lab: "On Track", cls: "is-on" },
+      below: { lab: "Below Target", cls: "is-below" },
+      vacation: { lab: "Vacation", cls: "is-vac" },
+      unassigned: { lab: "Not Assigned", cls: "is-na" },
+    };
+    const m = map[status] || map.below;
+    return `<span class="sr-status ${m.cls}"><i></i>${m.lab}</span>`;
+  }
+
+  function filterSrRows(baseRows) {
+    let rows = baseRows.slice();
+    const selectedKeys = srSelectedList();
+    if (selectedKeys.length) {
+      rows = rows.filter((r) => selectedKeys.includes(r._key) || selectedKeys.includes(nameKey(r._key)));
+    }
+    const q = srView.search.trim().toLowerCase();
+    if (q) {
+      const qKey = normalizeNameLoose(q);
+      rows = rows.filter((r) => {
+        const emp = String(r["Sales Employee"] || "");
+        const plant = String(r.Plant || "");
+        const code = String(r.Salesman || "");
+        const notes = String(r.Notes || "");
+        return emp.toLowerCase().includes(q)
+          || plant.toLowerCase().includes(q)
+          || code.toLowerCase().includes(q)
+          || notes.toLowerCase().includes(q)
+          || normalizeNameLoose(emp).includes(qKey)
+          || (r._key && String(r._key).includes(qKey));
+      });
+    }
+    if (srView.plant) {
+      rows = rows.filter((r) => String(r.Plant || "") === srView.plant);
+    }
+    if (srView.salesman) {
+      rows = rows.filter((r) => String(r._key || "") === srView.salesman || String(r.Salesman || "") === srView.salesman);
+    }
+    if (srView.status) {
+      rows = rows.filter((r) => scheduleRowStatus(r) === srView.status);
+    }
+    if (srView.filter === "above" || srView.filter === "below") {
+      rows = rows.filter((r) => {
+        const ach = r["Ach%"];
+        if (ach === "#DIV/0!") return srView.filter === "below";
+        const n = parseFloat(String(ach)) || 0;
+        return srView.filter === "above" ? n >= 100 : n < 100;
+      });
+    }
+    return rows;
+  }
+
+  function mapPeriodRow(r, period) {
+    const block = period === "day" ? (r.day || {}) : (r.month || r);
+    return {
+      No: r.No,
+      Plant: r.Plant,
+      Salesman: r.Salesman,
+      "Sales Employee": r["Sales Employee"],
+      Proforma: block.Proforma,
+      Delivery: block.Delivery,
+      Target: block.Target,
+      "Ach%": block["Ach%"],
+      "Del+VSND": block["Del+VSND"],
+      "Ach% (Sales)": block["Ach% (Sales)"],
+      Diff: block.Diff,
+      "Cancelled BOs": block["Cancelled BOs"],
+      "Cancellation %": block["Cancellation %"],
+      "Can. Target 30%": block["Can. Target 30%"] || "30%",
+      "Gap +/-": block["Gap +/-"],
+      Notes: block.Notes || r.Notes || "",
+      _key: r._key,
+      _vins: r._vins,
+      _full: r,
+      _vacation: !!r._vacation,
+      _period: period,
+    };
+  }
+
+  function renderXlTable(rows, totalsObj, tableSel, footSel, footText) {
+    const YELLOW = new Set(["Proforma", "Delivery"]);
+    const PINK = new Set(["Diff", "Gap +/-"]);
+    const DIV0_KEYS = new Set(["Ach%", "Ach% (Sales)", "Cancellation %", "Gap +/-"]);
+    const tableEl = $(tableSel);
+    const footEl = $(footSel);
+    if (!tableEl) return;
+
+    const pageSize = Math.max(1, Number(srView.pageSize) || 10);
+    const total = rows.length;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize) || 1);
+    if (srView.page > maxPage) srView.page = maxPage;
+    if (srView.page < 1) srView.page = 1;
+    const start = (srView.page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    const countEl = $("#sr-sched-count");
+    const dayCountEl = $("#sr-day-sched-count");
+    const countText = formatNumber(total) + " Employees";
+    if (tableSel === "#sr-day-table-wrap") {
+      if (dayCountEl) dayCountEl.textContent = countText;
+    } else if (countEl) {
+      countEl.textContent = countText;
+    }
+
+    if (!rows.length) {
+      tableEl.innerHTML = '<p class="foot" style="padding:16px">No rows to show.</p>';
+      if (footEl) footEl.textContent = "0 rows";
+      renderSchedulePager(0, 0, 0);
+      return;
+    }
+
+    const cols = SR_COLS.concat([
+      { key: "_status", label: "Status" },
+      { key: "_actions", label: "Actions" },
+    ]);
+
+    const cellHtml = (r, col, idx) => {
+      const h = col.key;
+      if (h === "_status") {
+        return '<td class="tl">' + scheduleStatusBadge(scheduleRowStatus(r)) + "</td>";
+      }
+      if (h === "_actions") {
+        return '<td class="num"><button type="button" class="sr-row-more" data-emp-key="' + escapeHtml(r._key || "") + '" aria-label="Open employee">···</button></td>';
+      }
+      let raw = h === "No" ? (start + idx + 1) : r[h];
+      let val = escapeHtml(raw == null || raw === "" ? (h === "Notes" ? "" : "—") : raw);
+      let cls = YELLOW.has(h) ? "col-yellow num" : (h === "Plant" || h === "Sales Employee" || h === "Notes" ? "tl" : "num");
+      if (PINK.has(h)) cls += " col-pink";
+      if (col.divide) cls += " col-divide";
+      if (h === "Notes") cls += " note";
+      if (h === "Target" && (r._vacation || (r._full && r._full._vacation))) {
+        val = '<span class="xl-vacation">VACATION</span>';
+        cls = "tl note";
+      }
+      if (DIV0_KEYS.has(h) && String(raw) === "#DIV/0!") {
+        val = '<span class="xl-div0">#DIV/0!</span>';
+        cls = (col.divide ? "col-divide " : "") + "num" + (PINK.has(h) ? " col-pink" : "");
+      }
+      if (h === "Cancellation %") {
+        const pct = parsePct(raw);
+        if (pct != null && pct > 30) cls += " is-cancel-over";
+      }
+      if (h === "Sales Employee") {
+        val = '<span class="emp-name">' + escapeHtml(r["Sales Employee"]) + '</span><span class="emp-hint">Click for VINs</span>';
+        cls = "tl";
+      }
+      if (h === "No" || h === "Salesman") cls = "num";
+      return '<td class="' + cls + '">' + val + "</td>";
+    };
+
+    const body = pageRows.map((r, idx) =>
+      '<tr class="emp-row status-' + scheduleRowStatus(r) + '" data-emp-key="' + escapeHtml(r._key || "") + '">' + cols.map((c) => cellHtml(r, c, idx)).join("") + "</tr>"
+    ).join("");
+
+    const totalsRow = '<tr class="sr-total-row">' + cols.map((c) => {
+      if (c.key === "_status" || c.key === "_actions") return "<td></td>";
+      let cls = YELLOW.has(c.key) ? "col-yellow num" : (c.key === "Plant" || c.key === "Notes" ? "tl" : "num");
+      if (PINK.has(c.key)) cls += " col-pink";
+      if (c.divide) cls += " col-divide";
+      if (c.key === "Cancellation %") {
+        const pct = parsePct(totalsObj[c.key]);
+        if (pct != null && pct > 30) cls += " is-cancel-over";
+      }
+      return '<td class="' + cls + '">' + escapeHtml(String(totalsObj[c.key] ?? "")) + "</td>";
+    }).join("") + "</tr>";
+
+    tableEl.innerHTML = '<table class="xl-table sr-sched-table"><thead><tr>' + cols.map((c) =>
+      '<th class="' + (c.divide ? "col-divide" : "") + (YELLOW.has(c.key) ? " col-yellow" : "") + (PINK.has(c.key) ? " col-pink" : "") + '">' + escapeHtml(c.label) + "</th>"
+    ).join("") + "</tr></thead><tbody>" + body + "</tbody><tfoot>" + totalsRow + "</tfoot></table>";
+    const from = total ? start + 1 : 0;
+    const to = Math.min(start + pageSize, total);
+    if (footEl) footEl.textContent = footText || ("Showing " + from + "–" + to + " of " + formatNumber(total) + " employees");
+    renderSchedulePager(from, to, total);
+  }
+
+  function renderSchedulePager(from, to, total) {
+    const el = $("#sr-sched-pages");
+    if (!el) return;
+    const pageSize = Math.max(1, Number(srView.pageSize) || 10);
+    const maxPage = Math.max(1, Math.ceil(total / pageSize) || 1);
+    const page = Math.min(Math.max(1, srView.page || 1), maxPage);
+    srView.page = page;
+    let html = "";
+    html += '<button type="button" class="sr-page-btn" data-sr-page="' + (page - 1) + '"' + (page <= 1 ? " disabled" : "") + ' aria-label="Previous page">‹</button>';
+    const limit = Math.min(maxPage, 7);
+    for (let p = 1; p <= limit; p++) {
+      html += '<button type="button" class="sr-page-btn' + (p === page ? " is-active" : "") + '" data-sr-page="' + p + '">' + p + "</button>";
+    }
+    if (maxPage > 7) {
+      html += '<span class="sr-page-ellipsis">…</span>';
+      html += '<button type="button" class="sr-page-btn' + (page === maxPage ? " is-active" : "") + '" data-sr-page="' + maxPage + '">' + maxPage + "</button>";
+    }
+    html += '<button type="button" class="sr-page-btn" data-sr-page="' + (page + 1) + '"' + (page >= maxPage ? " disabled" : "") + ' aria-label="Next page">›</button>';
+    el.innerHTML = html;
+  }
+
+  function syncSchedulePeriodUi() {
+    // Day + month KPIs and tables stay visible together.
+    const dayKpi = $("#sr-day-kpis");
+    const monthKpi = $("#sr-kpis");
+    const dayWrap = $("#sr-day-table-wrap");
+    const monthWrap = $("#sr-table-wrap");
+    const dayFoot = $("#sr-day-table-foot");
+    const monthFoot = $("#sr-table-foot");
+    const dayTitle = $("#sr-day-title");
+    const monthTitle = $("#sr-month-title");
+    if (dayKpi) { dayKpi.hidden = false; dayKpi.style.display = ""; }
+    if (monthKpi) { monthKpi.hidden = false; monthKpi.style.display = ""; }
+    if (dayWrap) dayWrap.hidden = false;
+    if (monthWrap) monthWrap.hidden = false;
+    if (dayFoot) dayFoot.hidden = false;
+    if (monthFoot) monthFoot.hidden = false;
+    if (dayTitle) dayTitle.hidden = false;
+    if (monthTitle) monthTitle.hidden = false;
+    const periodSel = $("#sr-sched-period");
+    if (periodSel) periodSel.value = srView.schedulePeriod === "day" ? "day" : "month";
+  }
+
+  function jumpToSchedulePeriod(period) {
+    srView.schedulePeriod = period === "day" ? "day" : "month";
+    syncSchedulePeriodUi();
+    const target = period === "day"
+      ? ($("#sr-day-schedule-card") || $("#sr-day-kpi-block") || $("#sr-day-kpis"))
+      : ($("#sr-month-schedule-card") || $("#sr-kpis"));
+    if (target && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function fillScheduleFilterOptions(sr) {
+    const plantSel = $("#sr-sched-plant");
+    const salesSel = $("#sr-sched-salesman");
+    const rows = (sr && sr.rows) || [];
+    if (plantSel) {
+      const plants = [...new Set(rows.map((r) => String(r.Plant || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      const cur = srView.plant || "";
+      plantSel.innerHTML = '<option value="">All plants</option>' + plants.map((p) =>
+        '<option value="' + escapeHtml(p) + '"' + (p === cur ? " selected" : "") + ">" + escapeHtml(p) + "</option>"
+      ).join("");
+    }
+    if (salesSel) {
+      const cur = srView.salesman || "";
+      salesSel.innerHTML = '<option value="">All salesmen</option>' + rows.map((r) => {
+        const key = r._key || "";
+        const label = shortEmpLabel(r["Sales Employee"] || "—") + (r.Salesman ? (" · " + r.Salesman) : "");
+        return '<option value="' + escapeHtml(key) + '"' + (key === cur ? " selected" : "") + ">" + escapeHtml(label) + "</option>";
+      }).join("");
+    }
+    const statusSel = $("#sr-sched-status");
+    if (statusSel) statusSel.value = srView.status || "";
+    const sizeSel = $("#sr-sched-pagesize");
+    if (sizeSel) sizeSel.value = String(srView.pageSize || 10);
+  }
+
+  function buildTotalsObj(sr, period) {
+    const t = sr.totals;
+    if (period === "day") {
+      const totDelivery = t.deliveryDay || 0;
+      const totTarget = t.dayTarget || 0;
+      const totDelVsnd = t.delVsndDay || 0;
+      const cancelBase = totDelivery + (t.cancelledDay || 0);
+      return {
+        No: "",
+        Plant: "TOTAL",
+        Salesman: "",
+        "Sales Employee": "",
+        Proforma: t.proformaDay,
+        Delivery: totDelivery,
+        Target: totTarget,
+        "Ach%": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+        "Del+VSND": totDelVsnd,
+        "Ach% (Sales)": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+        Diff: t.diffDay,
+        "Cancelled BOs": t.cancelledDay || 0,
+        "Cancellation %": cancelBase ? Math.round(((t.cancelledDay || 0) / cancelBase) * 100) + "%" : "#DIV/0!",
+        "Can. Target 30%": "30%",
+        "Gap +/-": cancelBase ? Math.round((0.30 - ((t.cancelledDay || 0) / cancelBase)) * 100) + "%" : "#DIV/0!",
+        Notes: "",
+      };
+    }
+    const totDelivery = t.deliveryMonth || 0;
+    const totTarget = t.target || 0;
+    const totDelVsnd = t.delVsnd || 0;
+    const cancelBase = totDelivery + (t.cancelled || 0);
+    return {
+      No: "",
+      Plant: "TOTAL",
+      Salesman: "",
+      "Sales Employee": "",
+      Proforma: t.proformaMonth,
+      Delivery: totDelivery,
+      Target: totTarget,
+      "Ach%": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+      "Del+VSND": totDelVsnd,
+      "Ach% (Sales)": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+      Diff: t.diff,
+      "Cancelled BOs": t.cancelled,
+      "Cancellation %": cancelBase ? Math.round(((t.cancelled || 0) / cancelBase) * 100) + "%" : "#DIV/0!",
+      "Can. Target 30%": "30%",
+      "Gap +/-": cancelBase ? Math.round((0.30 - ((t.cancelled || 0) / cancelBase)) * 100) + "%" : "#DIV/0!",
+      Notes: "",
+    };
+  }
+
+  function renderKpiStrip(el, sr, period) {
+    if (!el) return;
+    if (!sr.rows.length) { el.style.display = "none"; return; }
+    el.style.display = "";
+    const t = sr.totals;
+    const isDay = period === "day";
+    const target = isDay ? (t.dayTarget || 0) : (t.target || 0);
+    const delivery = isDay ? (t.deliveryDay || 0) : (t.deliveryMonth || 0);
+    const proforma = isDay ? (t.proformaDay || 0) : (t.proformaMonth || 0);
+    const delVsnd = isDay ? (t.delVsndDay || 0) : (t.delVsnd || 0);
+    const diff = isDay ? (t.diffDay || 0) : (t.diff || 0);
+    const cancelPct = Math.round(((isDay ? t.cancelPctDay : t.cancelPct) || 0) * 100);
+    const cancelOver = cancelPct > 30;
+    const gapLabel = isDay ? "Today Gap" : "Month Gap";
+    const gapVal = target - delivery;
+    const remainTotal = Math.max(0, target - delVsnd);
+    const remainConfirm = Math.max(0, target - delivery);
+    const allocGap = Math.abs(proforma - delivery);
+
+    const cards = [
+      { tone: "red", ico: "◎", lab: "Total Target", val: formatNumber(target), sub: isDay ? "Daily sales target" : "Monthly sales target" },
+      { tone: "blue", ico: "△", lab: gapLabel, val: formatNumber(gapVal), sub: "Gap to target" },
+      { tone: "green", ico: "▣", lab: "Del + VSND", val: formatNumber(delVsnd), sub: isDay ? "Proforma + Delivery today" : "Proforma + Delivery MTD" },
+      { tone: "rose", ico: "⇄", lab: "Total / Confirm", val: formatNumber(remainTotal) + " / " + formatNumber(remainConfirm), sub: "Remaining of allocation" },
+      { tone: "violet", ico: "∑", lab: "Difference of Sales", val: formatNumber(diff), sub: "Target vs actual" },
+      { tone: "orange", ico: "!", lab: "Gap (Allocation vs Actual)", val: formatNumber(allocGap), sub: "Difference" },
+      { tone: cancelOver ? "warn" : "teal", ico: "%", lab: "Cancelled BOs (<30%)", val: cancelPct + "%", sub: "Cancellation rate", over: cancelOver },
+    ];
+    el.innerHTML = cards.map((c) =>
+      '<div class="sr-sched-kpi tone-' + c.tone + (c.over ? " is-over" : "") + '">' +
+        '<div class="sr-sched-kpi-top"><span class="sr-sched-kpi-ico" aria-hidden="true">' + c.ico + '</span><span class="lab">' + escapeHtml(c.lab) + "</span></div>" +
+        '<div class="val">' + c.val + "</div>" +
+        '<div class="sub">' + escapeHtml(c.sub) + "</div>" +
+      "</div>"
+    ).join("");
+  }
+
+  function renderSalesReportTable(sr) {
+    const live = sr.live || todayKeys();
+    const hint = $("#sr-live-hint");
+    if (hint) {
+      let periodNote;
+      if (live.filterMode === "custom" || live.filterMode === "preset") {
+        periodNote = `${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${live.rangeLabel || ""}`;
+      } else if (live.source === "file") {
+        periodNote = `Showing ${live.reportMonthLabel || live.monthKey} from uploaded file`;
+      } else {
+        periodNote = "Current calendar month/day";
+      }
+      hint.textContent = `Proforma=Col P + Col V blank · Delivery=Col V in period · ${periodNote} · Target=Admin · Del+VSND=Proforma+Delivery · Ach%=Del+VSND÷Target`;
+      const diag = sr.diag || {};
+      if (diag.unmatchedNames > 0 && typeof console !== "undefined" && console.info) {
+        console.info("[Sales name match]", {
+          matchedRoster: diag.matchedRoster,
+          unmatchedNames: diag.unmatchedNames,
+          sampleUnmatched: diag.sampleUnmatched,
+        });
+      }
+    }
+    const dayTitle = $("#sr-day-title");
+    if (dayTitle) {
+      if (live.preset === "today") {
+        dayTitle.textContent = `Day to Date · ${live.label}`;
+      } else if (live.filterMode === "custom" || live.dayUsesRange) {
+        dayTitle.textContent = `Period · ${live.rangeLabel || live.label}`;
+      } else {
+        dayTitle.textContent = `Day to Date · ${live.label}`;
+      }
+    }
+    const monthTitle = $("#sr-month-title");
+    if (monthTitle) {
+      const monthLabel = live.reportMonthLabel
+        || (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
+      if (live.preset === "today" || live.preset === "this_month") {
+        monthTitle.textContent = `Month to Date · ${monthLabel}`;
+      } else if (live.filterMode === "custom" || live.filterMode === "preset") {
+        monthTitle.textContent = `Selected period · ${monthLabel}`;
+      } else {
+        monthTitle.textContent = `Month to Date · ${monthLabel}`;
+      }
+    }
+
+    const diag = sr.diag || {};
+    const diagEl = $("#sr-diag-banner");
+    if (diagEl) {
+      diagEl.hidden = true;
+      diagEl.style.display = "none";
+      diagEl.classList.remove("show");
+      diagEl.innerHTML = "";
+    }
+
+    fillScheduleFilterOptions(sr);
+    syncSchedulePeriodUi();
+    const dateLbl = $("#sr-sched-date-lbl");
+    if (dateLbl) {
+      const d = (sr.live && sr.live.now) ? sr.live.now : new Date();
+      dateLbl.textContent = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    }
+    const dayRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "day")));
+    const monthRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "month")));
+
+    const dayFoot = live.filterMode === "custom"
+      ? `${formatNumber(dayRows.length)} employees · Col P/V on end date (${live.label})`
+      : live.source === "file"
+        ? `${formatNumber(dayRows.length)} employees · Col P/V filtered to latest day in file (${live.label})`
+        : `${formatNumber(dayRows.length)} employees · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma+Delivery`;
+    renderXlTable(
+      dayRows,
+      buildTotalsObj(sr, "day"),
+      "#sr-day-table-wrap",
+      "#sr-day-table-foot",
+      dayFoot
+    );
+    renderXlTable(
+      monthRows,
+      buildTotalsObj(sr, "month"),
+      "#sr-table-wrap",
+      "#sr-table-foot",
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P + Col V blank · Delivery=Col V · Del+VSND=Proforma+Delivery · Ach%=Del+VSND÷Target · Diff=Target−Del+VSND`
+    );
+
+    window._srExportRows = [
+      ...dayRows.map(({ _key, _vins, _full, _period, ...rest }) => ({ Period: "Day", ...rest })),
+      ...monthRows.map(({ _key, _vins, _full, _period, ...rest }) => ({ Period: "Month", ...rest })),
+    ];
+    window._srRowsByKey = Object.fromEntries(sr.rows.map((r) => [r._key, r]));
+  }
+
+  function renderVinCard(rec) {
+    const tags = [];
+    if (rec.flags?.proformaDay) tags.push('<span class="vin-tag pro">Proforma today</span>');
+    else if (rec.flags?.proformaMonth) tags.push('<span class="vin-tag pro">Proforma month</span>');
+    if (rec.flags?.deliveryDay) tags.push('<span class="vin-tag del">Delivery today</span>');
+    else if (rec.flags?.deliveryMonth) tags.push('<span class="vin-tag del">Delivery month</span>');
+
+    const rows = [];
+    rows.push(["Proforma (Col P)", rec.proformaDate || "—"]);
+    rows.push(["Delivery (Col V)", rec.deliveryDate || "—"]);
+    if (rec.product) rows.push(["Product", rec.product]);
+    if (rec.plant) rows.push(["Plant", rec.plant]);
+    if (rec.salesmanCode) rows.push(["Salesman code", rec.salesmanCode]);
+    (rec.extra || []).forEach((x) => {
+      if (/proforma|delivery|vin|salesman name|^salesman$/i.test(String(x.key))) return;
+      rows.push([x.key, x.value]);
+    });
+
+    return `<div class="vin-item">
+      <div class="vin-code">${escapeHtml(rec.vin || "No VIN")}</div>
+      <div class="vin-tags">${tags.join("") || '<span class="vin-tag">Sales Raw</span>'}</div>
+      <div class="vin-details">
+        ${rows.map(([k, v]) => `<div><span class="dk">${escapeHtml(k)}</span><span class="dv">${escapeHtml(v)}</span></div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  function renderVinSection(title, list) {
+    return `
+      <div class="vin-section-title">${escapeHtml(title)} <span class="count">${formatNumber(list.length)}</span></div>
+      ${list.length
+        ? `<div class="vin-list">${list.map(renderVinCard).join("")}</div>`
+        : `<p class="foot" style="margin:0 0 8px">No matching Sales Raw rows.</p>`}
+    `;
+  }
+
+  function openEmployeeDrawer(key) {
+    const row = window._srRowsByKey && window._srRowsByKey[key];
+    if (!row) return;
+    const live = (window._data && window._data.salesReport && window._data.salesReport.live) || todayKeys();
+    const day = row.day || {};
+    const month = row.month || row;
+    $("#emp-drawer-name").textContent = row["Sales Employee"] || row.Salesman;
+    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · Excel rows from Sales Raw`;
+
+    const rawRows = salesDashboardRows().filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
+    const records = row._records || [];
+    const proformaMonth = records.filter((r) => r.flags?.proformaMonth);
+    const deliveryMonth = records.filter((r) => r.flags?.deliveryMonth);
+    const proformaDay = records.filter((r) => r.flags?.proformaDay);
+    const deliveryDay = records.filter((r) => r.flags?.deliveryDay);
+    const vins = row._vins || [];
+
+    $("#emp-drawer-body").innerHTML = `
+      <h4 style="margin:0 0 8px;font-size:.85rem;color:#64748b">Day to Date</h4>
+      <div class="emp-stat-grid">
+        <div class="emp-stat"><div class="k">Proforma</div><div class="v">${formatNumber(day.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Delivery</div><div class="v">${formatNumber(day.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Target (Admin)</div><div class="v">${formatNumber(day.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(day["Ach%"] || "—")}</div></div>
+        <div class="emp-stat"><div class="k">Del+VSND</div><div class="v">${formatNumber(day["Del+VSND"])}</div></div>
+        <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(day.Diff)}</div></div>
+      </div>
+      <h4 style="margin:12px 0 8px;font-size:.85rem;color:#64748b">Month to Date</h4>
+      <div class="emp-stat-grid">
+        <div class="emp-stat"><div class="k">Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Ach% (Delivery)</div><div class="v">${escapeHtml(month["Ach%"])}</div></div>
+        <div class="emp-stat"><div class="k">Del + VSND</div><div class="v">${formatNumber(month["Del+VSND"])}</div></div>
+        <div class="emp-stat"><div class="k">Ach% (Sales)</div><div class="v">${escapeHtml(month["Ach% (Sales)"])}</div></div>
+        <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(month.Diff)}</div></div>
+        <div class="emp-stat"><div class="k">Unique VINs</div><div class="v">${formatNumber(vins.length)}</div></div>
+      </div>
+
+      <h4 style="margin:16px 0 6px;font-size:.95rem">All Excel rows for this employee <span class="count-pill">${formatNumber(rawRows.length)}</span></h4>
+      <p class="foot" style="margin:0 0 8px">Full Sales Raw lines matching this name (Col A).</p>
+      ${renderEmployeeRawTable(rawRows)}
+
+      <h4 style="margin:18px 0 4px;font-size:.95rem">Counted in Day / Month formulas</h4>
+      ${renderVinSection("Proforma today (Col P)", proformaDay)}
+      ${renderVinSection("Delivery today (Col V)", deliveryDay)}
+      ${renderVinSection("Proforma this month (Col P)", proformaMonth)}
+      ${renderVinSection("Delivery this month (Col V)", deliveryMonth)}
+    `;
+    $("#emp-backdrop").classList.add("show");
+    $("#emp-drawer").classList.add("open");
+    $("#emp-drawer").setAttribute("aria-hidden", "false");
+  }
+
+  function renderEmployeeRawTable(rawRows) {
+    if (!rawRows.length) {
+      return `<p class="foot" style="padding:12px;background:var(--surface-2);border-radius:10px">No Sales Raw rows found for this name. Check Admin target name matches Col A exactly.</p>`;
+    }
+    const preferred = [
+      "VIN", "Product", "Model", "Proforma Date", "Delivery Date", "Plant",
+      "Customer", "Amount", "Status", "Year", "Suffix", "Exterior", "Interior",
+    ];
+    const skip = new Set(["salesman", "salesmancode", "_sheet"]);
+    const keySet = new Set();
+    rawRows.forEach((r) => {
+      Object.keys(r).forEach((k) => {
+        if (String(k).startsWith("_")) return;
+        const compact = normHeader(k).replace(/\s+/g, "");
+        if (skip.has(compact)) return;
+        if (/^column\d+$/i.test(compact)) return;
+        const val = cellToString(r[k]).trim();
+        if (!val) return;
+        keySet.add(k);
+      });
+    });
+    const keys = [...keySet].sort((a, b) => {
+      const ia = preferred.findIndex((p) => normHeader(a).includes(normHeader(p)));
+      const ib = preferred.findIndex((p) => normHeader(b).includes(normHeader(p)));
+      if (ia < 0 && ib < 0) return String(a).localeCompare(String(b));
+      if (ia < 0) return 1;
+      if (ib < 0) return -1;
+      return ia - ib;
+    }).slice(0, 14);
+
+    const cols = ["#", "Proforma (P)", "Delivery (V)", "VIN", ...keys.filter((k) => {
+      const n = normHeader(k);
+      return !n.includes("proforma") && !n.includes("delivery") && n !== "vin";
+    }).slice(0, 10)];
+
+    const body = rawRows.slice(0, 800).map((r, i) => {
+      const vin = extractVinValue(r.vin) || extractVinValue(Object.values(r).find((v) => extractVinValue(v))) || "";
+      const cells = [
+        String(i + 1),
+        r.proformaDate ? cellToString(r.proformaDate) : "",
+        r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        vin,
+        ...cols.slice(4).map((k) => cellToString(r[k]).trim()),
+      ];
+      return `<tr>${cells.map((c) => `<td>${escapeHtml(c || "—")}</td>`).join("")}</tr>`;
+    }).join("");
+
+    return `<div class="emp-raw-wrap">
+      <table class="emp-raw-table">
+        <thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+      ${rawRows.length > 800 ? `<p class="foot">Showing first 800 of ${formatNumber(rawRows.length)} rows</p>` : ""}
+    </div>`;
+  }
+
+  function closeEmployeeDrawer() {
+    $("#emp-backdrop").classList.remove("show");
+    $("#emp-drawer").classList.remove("open");
+    $("#emp-drawer").setAttribute("aria-hidden", "true");
+  }
+
+  function renderSalesReportKpis(sr) {
+    renderKpiStrip($("#sr-day-kpis"), sr, "day");
+    renderKpiStrip($("#sr-kpis"), sr, "month");
+  }
+
+  function shortEmpLabel(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length <= 2) return parts.join(" ");
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  }
+
+  function parsePct(v) {
+    if (v == null || v === "#DIV/0!") return null;
+    const n = parseFloat(String(v).replace(/%/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Cancel% = Cancelled ÷ (Delivery + Cancelled) */
+  function cancelPctRatio(cancelled, delivery) {
+    const c = Number(cancelled) || 0;
+    const d = Number(delivery) || 0;
+    const base = d + c;
+    if (!base) return null;
+    return c / base;
+  }
+
+  function renderCancelPctPanel(sr) {
+    const el = $("#sr-cancel-pct-panel");
+    if (!el) return;
+    const t = sr.totals || {};
+    let cancelled = t.cancelled || 0;
+    let delivery = t.deliveryMonth || 0;
+    let scope = "Team MTD";
+
+    const pickedCancel = srSelectedRows();
+    if (pickedCancel.length) {
+      cancelled = pickedCancel.reduce((sum, row) => sum + (Number((row.month || row)["Cancelled BOs"]) || 0), 0);
+      delivery = pickedCancel.reduce((sum, row) => sum + (Number((row.month || row).Delivery) || 0), 0);
+      scope = pickedCancel.length === 1
+        ? shortEmpLabel(pickedCancel[0]["Sales Employee"] || "Employee")
+        : `${pickedCancel.length} selected`;
+    }
+
+    const ratio = cancelPctRatio(cancelled, delivery);
+    const pct = ratio == null ? null : Math.round(ratio * 1000) / 10;
+    const over = pct != null && pct > 30;
+    const empty = pct == null;
+    const base = cancelled + delivery;
+    el.className = "cancel-pct-panel sr-cancel-mock" + (empty ? " is-empty" : over ? " is-over" : " is-ok");
+    const pctText = pct == null ? "—" : `${pct}%`;
+    const deg = pct == null ? 0 : Math.max(0, Math.min(180, (pct / 100) * 180));
+
+    el.innerHTML = `
+      <div class="sr-cancel-mock-body">
+        <div class="sr-cancel-donut" style="--cancel-deg:${deg}deg;--cancel-ring:${(deg * 2).toFixed(1)}deg" aria-hidden="true">
+          <div class="sr-cancel-donut-hole">
+            <strong>${escapeHtml(pctText)}</strong>
+            <span>Cancellation Rate</span>
+          </div>
+        </div>
+        <div class="sr-cancel-legend">
+          <div class="sr-cancel-leg is-cancel"><span class="dot"></span><span class="lab">Cancelled</span><strong>${formatNumber(cancelled)}</strong></div>
+          <div class="sr-cancel-leg is-del"><span class="dot"></span><span class="lab">Delivery</span><strong>${formatNumber(delivery)}</strong></div>
+          <div class="sr-cancel-leg is-base"><span class="dot"></span><span class="lab">Base</span><strong>${formatNumber(base)}</strong></div>
+        </div>
+      </div>
+      <div class="sr-cancel-banner${over ? " is-warn" : empty ? "" : " is-ok"}">
+        ${empty
+          ? "No cancellation data for this selection."
+          : over
+            ? "Over 30% of target. Take action to reduce cancellations and improve conversion."
+            : `${escapeHtml(scope)} · Within 30% cancellation target.`}
+      </div>
+    `;
+  }
+
+  /** Sales Type · Delivered Cars on main Sales Dashboard (same data as Performance wide). */
+  function renderSrSalesTypeDelivered(sr) {
+    const canvas = $("#chart-sr-salestype");
+    const legendEl = $("#sr-salestype-legend");
+    if (!canvas) return;
+    const types = deliverySalesTypeBreakdown(sr);
+    const colors = {
+      Cash: "#3b82f6",
+      Bank: "#10b981",
+      ALJUF: "#8b5cf6",
+      Employee: "#f59e0b",
+      Fleet: "#64748b",
+      Other: "#94a3b8",
+    };
+    const labels = types.map((x) => x.type);
+    const values = types.map((x) => x.count);
+    const bg = labels.map((lab) => colors[lab] || colors.Other);
+    const total = values.reduce((a, b) => a + (Number(b) || 0), 0);
+    if (legendEl) {
+      const items = types.map((x) => ({
+        ...x,
+        color: colors[x.type] || colors.Other,
+        pct: total > 0 ? Math.round((x.count / total) * 100) : 0,
+      }));
+      const shown = items.filter((x) => x.count > 0);
+      legendEl.innerHTML = types.length
+        ? `<div class="sr-st-dist">
+            <div class="sr-st-total"><span>Total</span><strong>${formatNumber(total)}</strong></div>
+            <div class="sr-st-bar" role="img" aria-label="${escapeHtml(items.map((x) => `${x.type} ${x.pct}%`).join(", "))}">
+              ${shown.map((x) => `<span class="sr-st-seg" style="flex-grow:${x.count};background:${x.color}" title="${escapeHtml(x.type)} · ${formatNumber(x.count)} · ${x.pct}%">${x.pct >= 7 ? `${x.pct}%` : ""}</span>`).join("")}
+            </div>
+          </div>
+          <div class="sr-st-legend">
+            ${items.map((x) => `<div class="pbi-wide-salestype-item${x.count ? "" : " is-zero"}">
+                <span class="swatch" style="background:${x.color}"></span>
+                <span class="name">${escapeHtml(x.type)}</span>
+                <span class="count">${formatNumber(x.count)}</span>
+                <span class="pct">${x.pct}%</span>
+              </div>`).join("")}
+          </div>`
+        : `<p class="foot" style="margin:0">No delivered cars in this period.</p>`;
+    }
+    if (total > 0) {
+      upsertChart("chart-sr-salestype", "doughnut", labels, values, {
+        backgroundColor: bg,
+        cutout: "62%",
+        legend: false,
+        _wide: {
+          labels,
+          values,
+          extra: {
+            backgroundColor: bg,
+            cutout: "58%",
+            legend: true,
+          },
+        },
+      });
+    } else if (charts["chart-sr-salestype"]) {
+      charts["chart-sr-salestype"].destroy();
+      delete charts["chart-sr-salestype"];
+      delete chartSnapshots["chart-sr-salestype"];
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function syncSrDateControls(sr) {
+    const bar = $("#sr-date-bar");
+    if (bar) bar.style.display = hasSalesReportInputs() ? "" : "none";
+    syncGlobalDateControls(sr && sr.live ? sr.live : window._globalLivePeriod);
+  }
+
+  function rebuildSalesReport() {
+    if (!window._data || !hasSalesReportInputs()) return;
+    const fresh = data();
+    window._data = fresh;
+    window._srRowsByKey = Object.fromEntries((fresh.salesReport.rows || []).map((r) => [r._key, r]));
+    renderSalesReportKpis(fresh.salesReport);
+    if (activePanel === "ytdsales") renderYtdSales();
+    syncSrDateControls(fresh.salesReport);
+    refreshSalesSelection();
+  }
+
+  function applySrDateFilter() {
+    const sel = $("#sr-date-preset");
+    if (sel) sel.value = "custom";
+    const fromEl = $("#sr-date-from");
+    const toEl = $("#sr-date-to");
+    const bas = { from: $("#bas-date-from"), to: $("#bas-date-to") };
+    if (bas.from && fromEl) bas.from.value = fromEl.value;
+    if (bas.to && toEl) bas.to.value = toEl.value;
+    const from = fromEl ? fromEl.value : "";
+    const to = toEl ? toEl.value : "";
+    const label = from && to
+      ? (from === to ? `Sales Dashboard · ${from}` : `Sales Dashboard · ${from} → ${to}`)
+      : "Sales report updated for selected dates";
+    applyGlobalDateFilter(label);
+  }
+
+  function resetSrDateFilter() {
+    resetGlobalDateFilter();
+  }
+
+  function selectEmployee(key) {
+    if (!key) {
+      clearEmployeeFilter();
+      return;
+    }
+    const resolved = nameKey(key) || key;
+    const keys = srSelectedList();
+    const next = keys.filter((item) => item !== resolved && item !== key);
+    if (next.length === keys.length) next.push(resolved);
+    srView.selectedKeys = next;
+    srView.selectedKey = next.length === 1 ? next[0] : "";
+    refreshSalesSelection();
+  }
+
+  function clearEmployeeFilter() {
+    srView.selectedKey = "";
+    srView.selectedKeys = [];
+    refreshSalesSelection();
+  }
+
+  function refreshSalesSelection() {
+    const sr = window._data && window._data.salesReport;
+    if (!sr) return;
+    const picked = srSelectedRows();
+    const clearBtn = $("#sr-clear-sel");
+    if (clearBtn) {
+      clearBtn.hidden = !picked.length;
+      clearBtn.disabled = !picked.length;
+    }
+    const bar = $("#sr-filter-bar");
+    const nameEl = $("#sr-filter-name");
+    if (bar && nameEl) {
+      if (picked.length === 1) {
+        bar.hidden = false;
+        nameEl.textContent = picked[0]["Sales Employee"] || srSelectedList()[0];
+      } else if (picked.length > 1) {
+        bar.hidden = false;
+        nameEl.textContent = `${picked.length} employees`;
+      } else {
+        bar.hidden = true;
+        nameEl.textContent = "—";
+      }
+    }
+    renderSrLastUpdated();
+    renderNameList(sr);
+    renderPaceBoard(sr);
+    renderPbiKpis(sr);
+    renderCancelPctPanel(sr);
+    renderSrSalesTypeDelivered(sr);
+    renderSalesReportCharts(sr);
+    renderDailyTargetPanel(sr);
+    renderSelectedDetail(sr);
+    renderSalesReportTable(sr);
+    const hint = $("#sr-live-hint");
+    if (hint) {
+      hint.textContent = picked.length
+        ? `Showing ${picked.length} employee${picked.length === 1 ? "" : "s"} · numbers are their combined total · click a name again to remove it`
+        : "Click names to select one or more employees";
+    }
+  }
+
+  // ---------- Sales Dashboard cockpit · presentation helpers (no business logic) ----------
+
+  const SR_AVATAR_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#6366f1"];
+
+  function srInitials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    const a = parts[0][0] || "";
+    const b = parts.length > 1 ? parts[parts.length - 1][0] : (parts[0][1] || "");
+    return (a + b).toUpperCase();
+  }
+
+  function srAvatarColor(name) {
+    let h = 0;
+    const s = String(name || "");
+    for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return SR_AVATAR_COLORS[h % SR_AVATAR_COLORS.length];
+  }
+
+  /** Daily Proforma / Delivery series is used by the KPI sparklines and the Prof + Del chart · build once per report + selection. */
+  const srDailySeriesCache = new WeakMap();
+  function srDailySeries(sr, selectedKey) {
+    if (!sr || typeof sr !== "object") return buildDailyProfDelSeries(sr, selectedKey);
+    let byKey = srDailySeriesCache.get(sr);
+    if (!byKey) { byKey = new Map(); srDailySeriesCache.set(sr, byKey); }
+    const explicit = selectedKey != null ? String(selectedKey) : "";
+    const k = explicit || srSelectedList().slice().sort().join("|");
+    if (!byKey.has(k)) byKey.set(k, buildDailyProfDelSeries(sr, k));
+    return byKey.get(k);
+  }
+
+  function srSparkSvg(values, color) {
+    const nums = (values || []).map((v) => Number(v) || 0);
+    if (nums.length < 2 || !nums.some((v) => v > 0)) {
+      return `<svg class="sr-kpi-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="28" x2="100" y2="28" stroke="${color}" stroke-opacity=".35" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+    }
+    const max = Math.max(...nums);
+    const step = 100 / (nums.length - 1);
+    const pts = nums.map((v, i) => `${(i * step).toFixed(2)},${(28 - (v / max) * 24).toFixed(2)}`);
+    return `<svg class="sr-kpi-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+      <polygon points="0,30 ${pts.join(" ")} 100,30" fill="${color}" fill-opacity=".14"/>
+      <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+  }
+
+  function srMeterHtml(pct, color, markPct) {
+    const w = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+    return `<div class="sr-kpi-meter" aria-hidden="true"><i style="width:${w.toFixed(1)}%;background:${color}"></i>${markPct != null ? `<b style="left:${markPct}%"></b>` : ""}</div>`;
+  }
+
+  const SR_KPI_ICONS = {
+    truck: '<path d="M3 7h11v8H3zM14 10h4l3 3v2h-7"/><circle cx="7" cy="17" r="1.8"/><circle cx="17" cy="17" r="1.8"/>',
+    doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+    layers: '<path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>',
+    clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    pct: '<path d="M6 18L18 6"/><circle cx="7.5" cy="7.5" r="2"/><circle cx="16.5" cy="16.5" r="2"/>',
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',
+    x: '<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
+    people: '<circle cx="9" cy="9" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="10" r="2.4"/><path d="M15.5 14.5A4.5 4.5 0 0 1 21 19"/>',
+  };
+
+  function setSrSheet(name) {
+    const panel = document.getElementById("panel-salesreport");
+    if (!panel) return;
+    if (name === "ytd") {
+      switchPanel("ytdsales");
+      return;
+    }
+    const next = name === "pace" || name === "schedule" ? name : "";
+    if (next) panel.dataset.srSheet = next;
+    else delete panel.dataset.srSheet;
+    const fold = next === "pace" ? $("#sr-pace-fold") : next === "schedule" ? $("#sr-emp-fold") : null;
+    if (fold) fold.open = true;
+    document.querySelectorAll("[data-sr-sheet]").forEach((b) => b.classList.toggle("is-active", b.dataset.srSheet === next));
+  }
+
+  const YTD_TARGET_KEY = "ytd-employee-targets";
+  let ytdTargets = { months: {} };
+  let ytdYear = new Date().getFullYear();
+  let ytdOpenMonth = "";
+  let ytdInspect = false;
+  let ytdTargetsLoaded = false;
+  let ytdDirtyMonths = new Set();
+  let ytdSaveMessage = { text: "Targets are stored on the server for each employee and month.", cls: "" };
+  const ytdSaveChain = new Map();
+  let ytdMonthChart = null;
+
+  function ytdLoadLocal() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(YTD_TARGET_KEY) || "{}");
+      return raw && raw.months && typeof raw.months === "object" ? { months: raw.months } : { months: {} };
+    } catch (e) {
+      return { months: {} };
+    }
+  }
+
+  function ytdSaveLocal() {
+    try { localStorage.setItem(YTD_TARGET_KEY, JSON.stringify(ytdTargets)); } catch (e) { /* ignore quota */ }
+  }
+
+  function ytdSetSaveNote(text, cls) {
+    ytdSaveMessage = { text, cls: cls || "" };
+    const note = $("#ytd-save-note");
+    if (!note) return;
+    note.textContent = text;
+    note.className = "ytd-save" + (cls ? " " + cls : "");
+  }
+
+  async function ytdEnsureTargets(force) {
+    if (ytdTargetsLoaded && !force) return;
+    try {
+      const res = await fetch("/api/report-sheet/ytd-targets", { cache: "no-store" });
+      if (!res.ok) throw new Error("targets unavailable");
+      const data = await res.json();
+      const serverMonths = data && data.months && typeof data.months === "object" ? data.months : {};
+      ytdDirtyMonths.forEach((month) => {
+        if (ytdTargets.months && ytdTargets.months[month]) serverMonths[month] = ytdTargets.months[month];
+      });
+      ytdTargets = { months: serverMonths };
+      ytdSaveLocal();
+    } catch (e) {
+      if (!ytdTargetsLoaded) ytdTargets = ytdLoadLocal();
+    }
+    ytdTargetsLoaded = true;
+  }
+
+  let ytdMonthsLoaded = false;
+  // Past-month YTD figures are pushed month by month from the Admin page
+  // (POST /api/report-sheet/ytd-months). There is no YTD upload on this dashboard.
+  async function ytdLoadMonths(force) {
+    if (ytdMonthsLoaded && !force) return;
+    try {
+      const res = await fetch("/api/report-sheet/ytd-months", { cache: "no-store" });
+      if (!res.ok) throw new Error("ytd months unavailable");
+      const data = await res.json();
+      const pushed = data && data.months && typeof data.months === "object" ? data.months : {};
+      const months = {};
+      let fileName = "";
+      let latestAt = 0;
+      Object.keys(pushed).sort().forEach((key) => {
+        const entry = pushed[key] || {};
+        (entry.employees || []).forEach((emp) => {
+          ytdPutFileValue(months, key, emp.name || "", "target", emp.target == null ? null : Number(emp.target));
+          ytdPutFileValue(months, key, emp.name || "", "total", emp.sales == null ? null : Number(emp.sales));
+        });
+        if (Number(entry.at) >= latestAt) { latestAt = Number(entry.at) || 0; fileName = entry.fileName || fileName; }
+      });
+      window._ytdFile = { filename: fileName, months };
+    } catch (e) {
+      if (!window._ytdFile) window._ytdFile = { filename: "", months: {} };
+    }
+    ytdMonthsLoaded = true;
+  }
+
+  function ytdMonthKey(year, monthIndex) {
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  }
+
+  function ytdAch(actual, target) {
+    const t = Number(target);
+    const a = Number(actual);
+    if (!Number.isFinite(t) || t <= 0 || !Number.isFinite(a)) return null;
+    const pct = (a / t) * 100;
+    return Number.isFinite(pct) ? pct : null;
+  }
+
+  function ytdPctText(pct) {
+    return pct == null ? "—" : `${pct.toFixed(1)}%`;
+  }
+
+  function ytdStatus(pct, hasTarget) {
+    if (!hasTarget) return { label: "No Target", cls: "is-none" };
+    if (pct >= 100) return { label: "Above target", cls: "is-above" };
+    if (pct >= 80) return { label: "On track", cls: "is-on" };
+    return { label: "Below target", cls: "is-below" };
+  }
+
+  function ytdCleanVin(vin) {
+    return String(vin || "").replace(/\s+/g, "").toUpperCase();
+  }
+
+  function ytdIsUnassigned(name) {
+    const loose = normalizeNameLoose(name);
+    return loose === "not assigned" || loose === "unassigned" || nameKey(name) === nameKey("Not assigned");
+  }
+
+  const YTD_MONTH_NAMES = [
+    ["january", "jan"], ["february", "feb"], ["march", "mar"], ["april", "apr"],
+    ["may"], ["june", "jun"], ["july", "jul"], ["august", "aug"],
+    ["september", "sep", "sept"], ["october", "oct"], ["november", "nov"], ["december", "dec"],
+  ];
+
+  function ytdParseNumber(value) {
+    if (value == null || String(value).trim() === "") return null;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const n = Number(String(value).replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function ytdMonthToken(text) {
+    const n = normHeader(text);
+    if (!n) return null;
+    let month = null;
+    let year = null;
+    const iso = n.match(/\b(20\d{2})\D{0,2}(0?[1-9]|1[0-2])\b/);
+    const rev = n.match(/\b(0?[1-9]|1[0-2])\D{0,2}(20\d{2})\b/);
+    if (iso) { year = Number(iso[1]); month = Number(iso[2]) - 1; }
+    else if (rev) { month = Number(rev[1]) - 1; year = Number(rev[2]); }
+    YTD_MONTH_NAMES.forEach((names, index) => {
+      if (names.some((name) => n === name || n.startsWith(name + " ") || n.endsWith(" " + name) || n.includes(" " + name + " "))) month = index;
+    });
+    const yearWord = n.match(/\b(20\d{2})\b/);
+    if (year == null && yearWord) year = Number(yearWord[1]);
+    return month == null ? null : { month, year };
+  }
+
+  function ytdMetricKind(text) {
+    const n = normHeader(text);
+    if (!n) return "";
+    if (/\btarget\b|\bهدف\b/.test(n)) return "target";
+    if (/\b(total|actual|achieved|achievement|count|qty|quantity|sales)\b/.test(n)) return "total";
+    return "";
+  }
+
+  function ytdGuessYear(matrix, filename) {
+    const blob = [filename].concat((matrix || []).slice(0, 8).flat().map((cell) => cellToString(cell))).join(" ");
+    const years = [...blob.matchAll(/\b(20\d{2})\b/g)].map((hit) => Number(hit[1]));
+    if (!years.length) return new Date().getFullYear();
+    const tally = new Map();
+    years.forEach((year) => tally.set(year, (tally.get(year) || 0) + 1));
+    return [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  }
+
+  function ytdNameColumn(rows) {
+    for (let r = 0; r < rows.length; r += 1) {
+      const idx = (rows[r] || []).findIndex((cell) => {
+        const n = normHeader(cell);
+        return n === "employee" || n === "employee name" || n === "sales employee" || n === "salesman" || n === "salesman name" || n === "advisor" || n === "consultant" || n === "name";
+      });
+      if (idx >= 0) return idx;
+    }
+    return 0;
+  }
+
+  function ytdPutFileValue(months, monthKey, rawName, metric, value) {
+    const nameText = String(rawName || "").trim();
+    if (!nameText || /^(total|grand total|sum)$/i.test(nameText) || ytdMonthToken(nameText)) return;
+    const name = resolveSalesmanName(nameText) || nameText;
+    const key = nameKey(name) || nameText.toLowerCase();
+    if (!key || value == null) return;
+    if (!months[monthKey]) months[monthKey] = {};
+    if (!months[monthKey][key]) months[monthKey][key] = { name, target: null, total: null };
+    months[monthKey][key][metric === "target" ? "target" : "total"] = value;
+    if (name) months[monthKey][key].name = name;
+  }
+
+  function ytdReadLongSheet(matrix, months, filename) {
+    let headerIdx = -1;
+    let nameIdx = -1;
+    let monthIdx = -1;
+    let targetIdx = -1;
+    let totalIdx = -1;
+    const scan = Math.min(matrix.length, 20);
+    for (let i = 0; i < scan; i += 1) {
+      const headers = matrix[i] || [];
+      const found = { name: -1, month: -1, target: -1, total: -1 };
+      headers.forEach((cell, index) => {
+        const n = normHeader(cell);
+        if (!n) return;
+        if (found.name < 0 && (n === "employee" || n === "employee name" || n === "salesman" || n === "salesman name" || n === "advisor" || n === "name")) found.name = index;
+        if (found.month < 0 && (n === "month" || n === "period" || n === "month name")) found.month = index;
+        if (found.target < 0 && ytdMetricKind(n) === "target" && !ytdMonthToken(n)) found.target = index;
+        if (found.total < 0 && ytdMetricKind(n) === "total" && !ytdMonthToken(n)) found.total = index;
+      });
+      if (found.name >= 0 && found.month >= 0 && (found.target >= 0 || found.total >= 0)) {
+        headerIdx = i; nameIdx = found.name; monthIdx = found.month; targetIdx = found.target; totalIdx = found.total;
+        break;
+      }
+    }
+    if (headerIdx < 0) return false;
+    const yearFallback = ytdGuessYear(matrix, filename);
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      const token = ytdMonthToken(cellToString(line[monthIdx]));
+      if (!token) continue;
+      const monthKey = ytdMonthKey(token.year || yearFallback, token.month);
+      if (targetIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "target", ytdParseNumber(line[targetIdx]));
+      if (totalIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "total", ytdParseNumber(line[totalIdx]));
+    }
+    return true;
+  }
+
+  function ytdReadWideSheet(matrix, months, sheetMonth, filename) {
+    let headerIdx = -1;
+    let monthHits = 0;
+    for (let i = 0; i < Math.min(matrix.length, 15); i += 1) {
+      const hits = (matrix[i] || []).filter((cell) => ytdMonthToken(cellToString(cell))).length;
+      if (hits > monthHits) { monthHits = hits; headerIdx = i; }
+    }
+    if (headerIdx < 0 || monthHits < 1) return ytdReadMonthSheet(matrix, months, sheetMonth, filename);
+    const top = matrix[headerIdx] || [];
+    const below = matrix[headerIdx + 1] || [];
+    const metricRow = below.filter((cell) => ytdMetricKind(cellToString(cell))).length >= 1;
+    const yearFallback = ytdGuessYear(matrix, filename);
+    const columns = [];
+    let carry = null;
+    top.forEach((cell, index) => {
+      const own = ytdMonthToken(cellToString(cell));
+      if (own) carry = own;
+      const token = own || carry;
+      const metric = (metricRow ? ytdMetricKind(cellToString(below[index])) : "") || ytdMetricKind(cellToString(cell)) || (token && !metricRow ? "total" : "");
+      if (!token || !metric) return;
+      columns.push({ index, key: ytdMonthKey(token.year || yearFallback, token.month), metric });
+    });
+    if (!columns.length) return false;
+    const nameIdx = ytdNameColumn(metricRow ? [below, top] : [top]);
+    for (let r = headerIdx + (metricRow ? 2 : 1); r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      columns.forEach((col) => ytdPutFileValue(months, col.key, line[nameIdx], col.metric, ytdParseNumber(line[col.index])));
+    }
+    return true;
+  }
+
+  function ytdReadMonthSheet(matrix, months, sheetMonth, filename) {
+    if (!sheetMonth) return false;
+    let headerIdx = -1;
+    const scan = Math.min(matrix.length, 20);
+    for (let i = 0; i < scan; i += 1) {
+      const cells = (matrix[i] || []).map((cell) => normHeader(cell));
+      const hasName = cells.some((n) => n === "employee" || n === "employee name" || n === "salesman" || n === "name" || n === "advisor");
+      const hasMetric = cells.some((n) => ytdMetricKind(n));
+      if (hasName && hasMetric) { headerIdx = i; break; }
+    }
+    if (headerIdx < 0) return false;
+    const headers = matrix[headerIdx] || [];
+    const nameIdx = ytdNameColumn([headers]);
+    let targetIdx = -1;
+    let totalIdx = -1;
+    headers.forEach((cell, index) => {
+      const kind = ytdMetricKind(cellToString(cell));
+      if (kind === "target" && targetIdx < 0) targetIdx = index;
+      if (kind === "total" && totalIdx < 0) totalIdx = index;
+    });
+    if (targetIdx < 0 && totalIdx < 0) return false;
+    const monthKey = ytdMonthKey(sheetMonth.year || ytdGuessYear(matrix, filename), sheetMonth.month);
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (targetIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "target", ytdParseNumber(line[targetIdx]));
+      if (totalIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "total", ytdParseNumber(line[totalIdx]));
+    }
+    return true;
+  }
+
+  function ytdReadWorkbook(workbook, filename) {
+    const months = {};
+    ((workbook && workbook.SheetNames) || []).forEach((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) return;
+      const matrix = sheetMatrixFromColA(sheet);
+      if (!matrix || !matrix.length) return;
+      const sheetMonth = ytdMonthToken(sheetName);
+      if (ytdReadLongSheet(matrix, months, filename)) return;
+      ytdReadWideSheet(matrix, months, sheetMonth, filename);
+    });
+    return { filename: filename || "", months };
+  }
+
+  function ytdMonthPhase(key) {
+    const now = new Date();
+    const current = ytdMonthKey(now.getFullYear(), now.getMonth());
+    if (key < current) return "closed";
+    if (key === current) return "current";
+    return "future";
+  }
+
+  function ytdFilePeople(monthKey) {
+    const file = window._ytdFile;
+    if (!file || !file.months || !file.months[monthKey]) return {};
+    return file.months[monthKey];
+  }
+
+  function ytdBuild() {
+    const months = {};
+    for (let i = 0; i < 12; i += 1) {
+      const key = ytdMonthKey(ytdYear, i);
+      months[key] = { key, month: i, phase: ytdMonthPhase(key), employees: new Map(), records: [] };
+    }
+    ((slots.sales && slots.sales.rows) || []).forEach((row) => {
+      const date = salesRawColumnVDate(salesRawColumnVCell(row));
+      if (!(date instanceof Date) || date.getFullYear() !== ytdYear) return;
+      const bucket = months[ytdMonthKey(ytdYear, date.getMonth())];
+      if (!bucket) return;
+      const rawName = String(row.salesman || row._salesmanRaw || "").trim();
+      const name = resolveSalesmanName(rawName) || rawName || "Not assigned";
+      const key = nameKey(name) || name.toLowerCase();
+      if (!bucket.employees.has(key)) {
+        bucket.employees.set(key, { key, name, id: row.salesmanCode || "", actual: 0, aside: ytdIsUnassigned(name) });
+      }
+      const emp = bucket.employees.get(key);
+      emp.actual += 1;
+      if (row.salesmanCode && !emp.id) emp.id = row.salesmanCode;
+      if (bucket.records.length < 400) {
+        bucket.records.push({ name, date, vin: row.vin || "" });
+      }
+    });
+    Object.values(months).forEach((bucket) => {
+      ytdSavedTargets(bucket.key).forEach((row, key) => {
+        if (bucket.employees.has(key)) return;
+        bucket.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0, aside: false });
+      });
+      if (bucket.phase === "closed") {
+        Object.entries(ytdFilePeople(bucket.key)).forEach(([key, row]) => {
+          if (row.target == null || bucket.employees.has(key)) return;
+          bucket.employees.set(key, { key, name: row.name || key, id: "", actual: 0, aside: ytdIsUnassigned(row.name) });
+        });
+      }
+      if (bucket.phase === "current" && !ytdSavedTargets(bucket.key).size) {
+        (employeeTargets || []).forEach((person) => {
+          const name = person && person.name;
+          const key = nameKey(name);
+          if (!key || isPlaceholderName(name) || bucket.employees.has(key)) return;
+          bucket.employees.set(key, { key, name, id: "", actual: 0, aside: false });
+        });
+      }
+    });
+    return months;
+  }
+
+  /** Monthly targets pushed from Admin → YTD sales, keyed the same way as the column V counts. */
+  function ytdSavedTargets(monthKey) {
+    const out = new Map();
+    const saved = (ytdTargets.months && ytdTargets.months[monthKey]) || {};
+    Object.entries(saved).forEach(([savedKey, row]) => {
+      const target = Number(row && row.target);
+      if (!row || !Number.isFinite(target)) return;
+      const name = resolveSalesmanName(row.name || "") || row.name || savedKey;
+      const key = nameKey(name) || savedKey;
+      out.set(key, { name, id: row.id || "", target });
+    });
+    return out;
+  }
+
+  function ytdEmployeeRows(bucket) {
+    const saved = ytdSavedTargets(bucket.key);
+    const filePeople = bucket.phase === "closed" ? ytdFilePeople(bucket.key) : {};
+    const useLiveTargets = bucket.phase === "current" && !saved.size;
+    return [...bucket.employees.values()].map((emp) => {
+      let target = null;
+      const stored = saved.get(emp.key);
+      const file = filePeople[emp.key];
+      if (stored) target = stored.target;
+      else if (file && file.target != null) target = Number(file.target);
+      else if (useLiveTargets) {
+        const admin = (employeeTargets || []).find((person) => nameKey(person && person.name) === emp.key);
+        if (admin) target = effectiveEmployeeTarget(admin) || null;
+      }
+      return { ...emp, target, ach: ytdAch(emp.actual, target) };
+    }).filter((emp) => emp.actual > 0 || (emp.target != null && emp.target > 0))
+      .sort((a, b) => (a.aside - b.aside) || (b.actual - a.actual) || String(a.name).localeCompare(String(b.name)));
+  }
+
+  function ytdMonthTotals(bucket) {
+    const people = ytdEmployeeRows(bucket);
+    const counted = people.filter((emp) => !emp.aside);
+    const target = counted.reduce((sum, emp) => sum + (emp.target == null ? 0 : emp.target), 0);
+    const hasTarget = target > 0;
+    const actual = counted.reduce((sum, emp) => sum + emp.actual, 0);
+    const unassigned = people.reduce((sum, emp) => sum + (emp.aside ? emp.actual : 0), 0);
+    const advisors = counted.filter((emp) => emp.actual > 0).length;
+    return { people, target, actual, unassigned, advisors, hasTarget, ach: ytdAch(actual, hasTarget ? target : 0) };
+  }
+
+  function ytdMonthBadge(bucket, totals) {
+    if (bucket.phase === "future" && !totals.actual && !totals.hasTarget) return { text: "Later", cls: "is-live" };
+    if (!totals.hasTarget) return { text: "No target", cls: "is-miss" };
+    if (totals.ach >= 100) return { text: "Target hit", cls: "is-match" };
+    if (totals.ach >= 80) return { text: "On track", cls: "is-live" };
+    return { text: "Below target", cls: "is-miss" };
+  }
+
+  function paintYtd() {
+    const yearEl = $("#ytd-year");
+    const monthsEl = $("#ytd-months");
+    const annualEl = $("#ytd-annual");
+    if (!yearEl || !monthsEl || !annualEl) return;
+    const years = new Set([new Date().getFullYear(), ytdYear]);
+    Object.keys((window._ytdFile && window._ytdFile.months) || {}).forEach((key) => {
+      const year = Number(String(key).slice(0, 4));
+      if (year) years.add(year);
+    });
+    ((slots.sales && slots.sales.rows) || []).forEach((row) => {
+      const date = salesRawColumnVDate(salesRawColumnVCell(row));
+      if (date instanceof Date) years.add(date.getFullYear());
+    });
+    yearEl.innerHTML = [...years].sort((a, b) => b - a).map((year) => `<option value="${year}"${year === ytdYear ? " selected" : ""}>${year}</option>`).join("");
+    const updated = $("#ytd-updated");
+    if (updated && typeof Store !== "undefined" && Store.readDataPushStamp) {
+      const at = Number(Store.readDataPushStamp().at) || 0;
+      updated.textContent = at
+        ? new Date(at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+        : "—";
+    }
+    const months = ytdBuild();
+    window._ytdMonths = months;
+    let yearActual = 0;
+    let yearUnassigned = 0;
+    let yearTarget = 0;
+    let targetMonths = 0;
+    let hitMonths = 0;
+    const yearAdvisors = new Set();
+    monthsEl.innerHTML = Object.values(months).map((bucket) => {
+      const totals = ytdMonthTotals(bucket);
+      yearActual += totals.actual;
+      yearUnassigned += totals.unassigned;
+      totals.people.forEach((emp) => { if (!emp.aside && emp.actual > 0) yearAdvisors.add(emp.key); });
+      if (totals.hasTarget) {
+        yearTarget += totals.target;
+        targetMonths += 1;
+        if (totals.ach >= 100) hitMonths += 1;
+      }
+      const status = ytdStatus(totals.ach, totals.hasTarget);
+      const gap = totals.hasTarget ? totals.target - totals.actual : null;
+      const gapText = gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
+      const width = totals.ach == null ? 0 : Math.max(0, Math.min(100, totals.ach));
+      const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
+      const shortLabel = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" });
+      const badge = ytdMonthBadge(bucket, totals);
+      const reconCls = badge.cls;
+      const reconText = badge.text;
+      const barCls = totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss";
+      const progress = totals.hasTarget
+        ? `<div class="ytd-progress"><div class="ytd-bar ${barCls}" role="img" aria-label="Achievement ${ytdPctText(totals.ach)}"><i style="width:${width.toFixed(1)}%"></i></div><p class="ytd-gap">${gapText}</p></div>`
+        : "";
+      const aside = totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : "";
+      return `<article class="ytd-card ${status.cls} ${reconCls}${bucket.phase === "closed" ? " is-past" : ""}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
+        <div class="ytd-card-top">
+          <div class="ytd-card-name"><strong><span class="ytd-month-long">${label}</span><span class="ytd-month-short">${shortLabel}</span></strong><small>${ytdYear}</small></div>
+          <div class="ytd-badges">
+            <span class="ytd-recon ${reconCls}">${reconText}</span>
+          </div>
+        </div>
+        <div class="ytd-card-metrics">
+          <span class="is-target"><em>Target</em><b class="${totals.hasTarget ? "" : "is-empty"}">${totals.hasTarget ? formatNumber(totals.target) : "No Target"}</b></span>
+          <span class="is-report"><em>Advisors</em><b class="${totals.advisors ? "" : "is-empty"}">${totals.advisors ? formatNumber(totals.advisors) : "—"}</b></span>
+          <span class="is-actual"><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
+          <span class="is-ach"><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
+        </div>
+        ${progress}
+        <div class="ytd-card-foot">${aside}<button type="button" class="ytd-set" data-ytd-set="${bucket.key}">Open month</button></div>
+      </article>`;
+    }).join("");
+    const yearAch = ytdAch(yearActual, yearTarget);
+    const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
+    const allHit = targetMonths > 0 && hitMonths === targetMonths;
+    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? `${formatNumber(targetMonths)} month${targetMonths === 1 ? "" : "s"} pushed from Admin` : "Push monthly targets from Admin"}</em></article>
+      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Advisors</span><strong>${yearAdvisors.size ? formatNumber(yearAdvisors.size) : "—"}</strong><em>With at least one column V sale this year</em></article>
+      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Actual · Column V</span><strong>${formatNumber(yearActual)}</strong><em>Sales Raw rows with a date in column V${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
+      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
+      <article class="ytd-kpi ${allHit ? "is-actual" : "is-excluded"}"><span class="ytd-kpi-ico" aria-hidden="true">${allHit ? "✓" : "!"}</span><span>Months on Target</span><strong>${targetMonths ? `${formatNumber(hitMonths)} / ${formatNumber(targetMonths)}` : "—"}</strong><em>Months with a target that reached 100%</em></article>`;
+    paintYtdChart(Object.values(months));
+    paintYtdDetail();
+  }
+
+  function paintYtdChart(buckets) {
+    const canvas = document.getElementById("ytd-month-chart");
+    if (!canvas || typeof Chart === "undefined") return;
+    if (ytdMonthChart) {
+      ytdMonthChart.destroy();
+      ytdMonthChart = null;
+    }
+    const labels = buckets.map((bucket) => new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" }));
+    const totals = buckets.map((bucket) => ytdMonthTotals(bucket));
+    const datasets = [
+      { label: "Actual", data: totals.map((row) => row.actual), backgroundColor: "rgba(52, 211, 153, 0.88)", borderRadius: 4, maxBarThickness: 16 },
+    ];
+    if (totals.some((row) => row.unassigned > 0)) {
+      datasets.push({ label: "Not assigned", data: totals.map((row) => row.unassigned || 0), backgroundColor: "rgba(245, 158, 11, 0.88)", borderRadius: 4, maxBarThickness: 16 });
+    }
+    if (totals.some((row) => row.hasTarget)) {
+      datasets.push({
+        type: "line",
+        label: "Target",
+        data: totals.map((row) => (row.hasTarget ? row.target : null)),
+        borderColor: "#4f9dff",
+        backgroundColor: "#4f9dff",
+        tension: 0.25,
+        spanGaps: false,
+        pointRadius: 3,
+        borderWidth: 2,
+      });
+    }
+    ytdMonthChart = new Chart(canvas, {
+      type: "bar",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        onClick(evt, elements) {
+          if (!elements.length) return;
+          const card = document.querySelectorAll("#ytd-months [data-ytd-month]")[elements[0].index];
+          if (card) card.click();
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            align: "end",
+            labels: { color: "#8d9bb0", boxWidth: 10, boxHeight: 10, padding: 10, font: { size: 11, family: "Manrope, Inter, sans-serif" } },
+          },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const value = ctx.parsed.y;
+                return value == null ? `${ctx.dataset.label}: —` : `${ctx.dataset.label}: ${formatNumber(value)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: "#8d9bb0", font: { size: 11 } } },
+          y: {
+            beginAtZero: true,
+            grid: { color: "rgba(148, 163, 184, 0.12)" },
+            ticks: { color: "#8d9bb0", font: { size: 11 }, callback: (value) => formatNumber(value) },
+          },
+        },
+      },
+    });
+  }
+
+  function ytdRowState(emp) {
+    const hasTarget = emp.target != null && emp.target > 0;
+    const status = ytdStatus(emp.ach, hasTarget);
+    const cls = emp.aside ? "is-aside" : status.cls === "is-below" ? "is-below" : "";
+    return { status, cls };
+  }
+
+  function paintYtdDetail() {
+    const el = $("#ytd-detail");
+    if (!el) return;
+    const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
+    const panel = $("#panel-ytdsales");
+    if (panel) panel.classList.toggle("is-detail-open", !!bucket);
+    if (!bucket) { el.hidden = true; el.innerHTML = ""; return; }
+    const totals = ytdMonthTotals(bucket);
+    const badge = ytdMonthBadge(bucket, totals);
+    const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+    const gap = totals.hasTarget ? totals.target - totals.actual : null;
+    const gapLabel = gap == null ? "Remaining" : gap < 0 ? "Above by" : "Remaining";
+    const gapText = gap == null ? "—" : formatNumber(Math.abs(gap));
+    const rows = totals.people.map((emp, index) => {
+      const state = ytdRowState(emp);
+      const empGap = emp.target != null && emp.target > 0 ? emp.target - emp.actual : null;
+      return `<tr class="${state.cls}" data-ytd-row="${escapeHtml(emp.key)}">
+      <td class="ytd-rank">${emp.aside ? "" : index + 1}</td>
+      <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
+      <td>${emp.target != null && emp.target > 0 ? formatNumber(emp.target) : "—"}</td>
+      <td><b>${formatNumber(emp.actual)}</b></td>
+      <td>${empGap == null ? "—" : empGap > 0 ? formatNumber(empGap) : empGap < 0 ? `+${formatNumber(Math.abs(empGap))}` : "0"}</td>
+      <td>${ytdAchMarkup(emp)}</td>
+      <td><span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span></td>
+    </tr>`;
+    }).join("");
+    const inspectRows = ytdInspect ? `
+      <div class="ytd-inspect">
+        <h4>Sales Raw · column V · ${formatNumber(bucket.records.length)} row${bucket.records.length === 1 ? "" : "s"}</h4>
+        <table><thead><tr><th>Advisor</th><th>Column V</th><th>VIN</th></tr></thead><tbody>
+          ${bucket.records.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.date instanceof Date ? row.date.toLocaleDateString("en-GB") : "—")}</td><td>${escapeHtml(row.vin || "—")}</td></tr>`).join("") || `<tr><td colspan="3">No column V dates in this month.</td></tr>`}
+        </tbody></table>
+      </div>` : "";
+    const note = totals.hasTarget
+      ? "Target is pushed from Admin → YTD sales. Actual counts the Sales Raw rows whose column V date falls in this month. Ach% = Actual ÷ Target."
+      : "No target pushed for this month yet. Push it from Admin → YTD sales. Actual counts the Sales Raw rows whose column V date falls in this month.";
+    el.hidden = false;
+    el.innerHTML = `<div class="ytd-detail-head">
+        <div class="ytd-detail-title">
+          <h3>${label}</h3>
+          <span class="ytd-recon ${badge.cls}">${badge.text}</span>
+        </div>
+        <div class="ytd-detail-actions">
+          <button type="button" class="ytd-text-btn${ytdInspect ? " is-on" : ""}" data-ytd-inspect>${ytdInspect ? "Hide records" : "Sales Raw rows"}</button>
+          <button type="button" class="ytd-text-btn" data-ytd-close>Close</button>
+        </div>
+      </div>
+      <div class="ytd-month-kpis">
+        <article class="is-target"><span>Target</span><strong>${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
+        <article class="is-actual"><span>Actual</span><strong>${formatNumber(totals.actual)}</strong></article>
+        <article class="is-report"><span>Ach%</span><strong>${ytdPctText(totals.ach)}</strong></article>
+        <article class="is-diff ${gap != null && gap <= 0 ? "is-match" : gap != null ? "is-miss" : ""}"><span>${gapLabel}</span><strong>${gapText}</strong></article>
+        <article class="is-status"><span>Advisors</span><strong>${formatNumber(totals.advisors)}</strong></article>
+      </div>
+      <p class="ytd-save" id="ytd-save-note">${escapeHtml(note)}</p>
+      <div class="ytd-table-wrap"><table class="ytd-table">
+        <thead><tr><th>#</th><th>Advisor</th><th>Target</th><th>Actual</th><th>Remaining</th><th>Ach%</th><th>Status</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="7">No sales or targets for this month.</td></tr>`}</tbody>
+        <tfoot><tr><td></td><td>Month total</td><td>${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td>${gap == null ? "—" : gap > 0 ? formatNumber(gap) : gap < 0 ? `+${formatNumber(Math.abs(gap))}` : "0"}</td><td>${ytdPctText(totals.ach)}</td><td>${badge.text}</td></tr></tfoot>
+      </table></div>
+      ${inspectRows}`;
+  }
+
+  function ytdDetailStatusText(status) {
+    if (status.cls === "is-on") return "On Track";
+    if (status.cls === "is-below") return "Below Target";
+    if (status.cls === "is-above") return "Above Target";
+    return status.label;
+  }
+
+  function ytdAchMarkup(emp) {
+    const text = ytdPctText(emp.ach);
+    if (emp.ach == null) return `<div class="ytd-ach"><span class="ytd-ach-num">${text}</span></div>`;
+    const width = Math.max(0, Math.min(100, emp.ach));
+    const cls = emp.ach >= 100 ? "is-hit" : emp.ach >= 80 ? "is-on" : "is-miss";
+    return `<div class="ytd-ach"><span class="ytd-ach-num">${text}</span><span class="ytd-ach-track ${cls}" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></span></div>`;
+  }
+
+  async function renderYtdSales() {
+    await Promise.all([ytdEnsureTargets(true), ytdLoadMonths(true)]);
+    paintYtd();
+  }
+
+  async function ytdCommitNow(month) {
+    if (!month) return true;
+    if (!ytdDirtyMonths.has(month)) return true;
+    const employees = { ...((ytdTargets.months && ytdTargets.months[month]) || {}) };
+    const snapshot = JSON.stringify(employees);
+    ytdSetSaveNote("Saving targets…", "is-wait");
+    try {
+      const res = await fetch("/api/report-sheet/ytd-targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, employees }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      const latest = JSON.stringify((ytdTargets.months && ytdTargets.months[month]) || {});
+      if (latest !== snapshot) return ytdCommitNow(month);
+      if (!ytdTargets.months) ytdTargets.months = {};
+      ytdTargets.months[month] = data.employees && typeof data.employees === "object" ? data.employees : employees;
+      ytdDirtyMonths.delete(month);
+      ytdSaveLocal();
+      ytdSetSaveNote("Targets saved.", "is-ok");
+      return true;
+    } catch (err) {
+      ytdSetSaveNote("Could not save targets. They are not stored yet.", "is-err");
+      return false;
+    }
+  }
+
+  function ytdCommit(month) {
+    const prev = ytdSaveChain.get(month) || Promise.resolve();
+    const job = prev.catch(() => {}).then(() => ytdCommitNow(month));
+    ytdSaveChain.set(month, job);
+    return job;
+  }
+
+  function renderSrLastUpdated() {
+    const el = $("#sr-last-updated");
+    if (!el) return;
+    const at = Number(Store.readDataPushStamp().at) || 0;
+    el.textContent = at
+      ? new Date(at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : "—";
+  }
+
+  function renderNameList(sr) {
+    const el = $("#sr-name-list");
+    if (!el) return;
+    const rows = srWithoutSelection(() => chartRowsForMode(sr.rows || []));
+
+    const q = srView.search.trim().toLowerCase();
+    const list = q
+      ? rows.filter((r) => String(r["Sales Employee"]).toLowerCase().includes(q) || String(r.Plant || "").toLowerCase().includes(q))
+      : rows;
+    const picked = rows.filter((r) => srRowSelected(r._key));
+    const sumPro = picked.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+    const sumDel = picked.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+
+    const sumBar = picked.length
+      ? `<div class="sr-emp-sum" role="status"><span>${picked.length} selected · Sum</span><span class="sr-emp-counts" title="Proforma – Delivery">${formatNumber(sumPro)}-${formatNumber(sumDel)}</span></div>`
+      : "";
+    el.innerHTML = sumBar + (list.map((r) => {
+      const active = srRowSelected(r._key);
+      const del = Number(r["Delivery (Month)"]) || 0;
+      const pro = Number(r["Proforma (Month)"]) || 0;
+      const label = shortEmpLabel(r["Sales Employee"]);
+      return `<button type="button" class="pbi-name sr-emp-row${active ? " active" : ""}" data-emp-key="${escapeHtml(r._key)}" role="option" aria-selected="${active ? "true" : "false"}">
+        <span class="sr-emp-av" style="--av:${srAvatarColor(label)}" aria-hidden="true">${escapeHtml(srInitials(label))}</span>
+        <span class="nm">${escapeHtml(label)}</span>
+        <span class="sr-emp-counts" title="Proforma – Delivery">${formatNumber(pro)}-${formatNumber(del)}</span>
+        <span class="sr-emp-chev" aria-hidden="true">›</span>
+      </button>`;
+    }).join("") || `<p class="foot" style="margin:8px">No employees match.</p>`);
+
+    const meta = $("#sr-name-list-meta");
+    if (meta) {
+      meta.classList.toggle("is-sum", picked.length > 0);
+      meta.textContent = picked.length
+        ? `${picked.length} selected · ${formatNumber(sumPro)}-${formatNumber(sumDel)}`
+        : `${list.length} names · Click to select`;
+    }
+  }
+
+  function buildPaceBoardMetrics(sr) {
+    const t = (sr && sr.totals) || {};
+    const dt = (sr && sr.dailyTarget) || {};
+    const workDays = Math.max(0, Number(dt.workingDays) || Number(workingDays) || 0);
+    const calPassed = Number(sr.daysPassed) || 0;
+    const daysPassed = workDays > 0
+      ? Math.max(0, Math.min(calPassed, workDays))
+      : calPassed;
+    const daysRemaining = workDays > 0
+      ? Math.max(0, workDays - daysPassed)
+      : Math.max(0, Number(sr.daysRemaining) || 0);
+
+    let target = Number(t.target) || 0;
+    let prof = Number(t.proformaMonth) || 0;
+    let del = Number(t.deliveryMonth) || 0;
+    let agents = (sr.rows || []).filter((r) => !r._vacation && rowTargetNum(r) > 0).length;
+
+    const pickedPace = srSelectedRows();
+    if (pickedPace.length) {
+      target = pickedPace.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      prof = pickedPace.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+      del = pickedPace.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      agents = pickedPace.filter((row) => !row._vacation && rowTargetNum(row) > 0).length;
+    }
+
+    const aveDaily = workDays > 0 ? target / workDays : 0;
+    const remProf = Math.max(0, target - prof);
+    const remDel = Math.max(0, target - del);
+    const reqProfDay = daysRemaining > 0 ? remProf / daysRemaining : remProf;
+    const reqDelDay = daysRemaining > 0 ? remDel / daysRemaining : remDel;
+    const aveProdAgent = agents > 0 ? del / agents : 0;
+
+    return {
+      workDays,
+      aveDaily,
+      daysPassed,
+      daysRemaining,
+      remProf,
+      remDel,
+      reqProfDay,
+      reqDelDay,
+      aveProdAgent,
+      agents,
+      target,
+      prof,
+      del,
+    };
+  }
+
+  function formatPaceNum(n, decimals) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return "—";
+    if (decimals == null) return formatNumber(Math.round(v));
+    const fixed = v.toFixed(decimals);
+    return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  }
+
+  function buildDailyProfDelSeries(sr, selectedKey) {
+    const live = (sr && sr.live) || window._globalLivePeriod || ensureGlobalLivePeriod();
+    const prevMonthKey = sr && sr.prevMonthKey;
+    let days = Math.max(1, Number(live.daysInMonth) || 31);
+    if (live.rangeFrom && live.rangeTo) {
+      const span = Math.round((startOfDay(live.rangeTo).getTime() - startOfDay(live.rangeFrom).getTime()) / 86400000) + 1;
+      if (span > 0 && span <= 62) days = span;
+    }
+    const labels = [];
+    const proforma = Array(days).fill(0);
+    const delivery = Array(days).fill(0);
+    for (let d = 1; d <= days; d += 1) labels.push(String(d));
+
+    const keyFilter = String(selectedKey || "").split("|").filter(Boolean);
+    salesDashboardRows().forEach((r) => {
+      if (keyFilter.length) {
+        const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
+        if (!keyFilter.includes(nameKey(name))) return;
+      }
+      if (r.proformaDate && salesPeriodMatch(r.proformaDate, live, "month", prevMonthKey)) {
+        const di = proformaDayIndex(r.proformaDate, live);
+        if (di >= 1 && di <= days) proforma[di - 1] += 1;
+      }
+      if (r.deliveryDate && salesPeriodMatch(r.deliveryDate, live, "month", prevMonthKey)) {
+        const di = proformaDayIndex(r.deliveryDate, live);
+        if (di >= 1 && di <= days) delivery[di - 1] += 1;
+      }
+    });
+
+    return {
+      labels,
+      proforma,
+      delivery,
+      days,
+      totProforma: proforma.reduce((s, n) => s + n, 0),
+      totDelivery: delivery.reduce((s, n) => s + n, 0),
+    };
+  }
+
+  function renderProfDelDailyChart(sr, rows) {
+    const series = srDailySeries(sr, srView.selectedKey || "");
+    const maxY = Math.max(5, ...series.proforma, ...series.delivery);
+    upsertChart("chart-sr-profdel", "line", series.labels, null, {
+      legend: true,
+      pointLabels: true,
+      max: Math.ceil(maxY * 1.15),
+      datasets: [
+        {
+          type: "bar",
+          label: "Proforma",
+          data: series.proforma,
+          backgroundColor: "rgba(109, 124, 255, 0.78)",
+          hoverBackgroundColor: "rgba(129, 142, 255, 0.95)",
+          borderColor: "rgba(109, 124, 255, 1)",
+          pointLabelBg: "#5b5ff0",
+          borderWidth: 0,
+          borderRadius: 4,
+          maxBarThickness: 22,
+          order: 2,
+        },
+        {
+          label: "Delivery",
+          data: series.delivery,
+          borderColor: "#ff2d44",
+          backgroundColor: "rgba(255, 45, 68, 0.14)",
+          pointLabelBg: "#c8102e",
+          pointBackgroundColor: "#ff2d44",
+          pointBorderColor: "#0b1220",
+          pointBorderWidth: 1.5,
+          pointRadius: 3.5,
+          pointHoverRadius: 5,
+          borderWidth: 2.5,
+          tension: 0.3,
+          fill: true,
+          order: 1,
+        },
+      ],
+    });
+  }
+
+  function renderProfDelSummaryStrip(sr, rows) {
+    renderProfDelDailyChart(sr, rows);
+  }
+
+  function renderPaceBoard(sr) {
+    const grid = $("#sr-pace-grid");
+    const board = $("#sr-pace-board");
+    const hint = $("#sr-pace-board-hint");
+    if (!grid || !board) return;
+    if (!sr || !(sr.rows || []).length) {
+      grid.innerHTML = "";
+      return;
+    }
+    const m = buildPaceBoardMetrics(sr);
+    if (hint) {
+      hint.textContent = srHasSelection()
+        ? `Filtered to ${srSelectedList().length} advisor${srSelectedList().length === 1 ? "" : "s"} · remaining vs their combined target`
+        : `Team plan · ${formatNumber(m.agents)} active agents · target ${formatNumber(m.target)}`;
+    }
+    const cells = [
+      { lab: "No. of working days", val: formatPaceNum(m.workDays), tip: "Admin working days this month" },
+      { lab: "Ave. daily prof. & del./day", val: formatPaceNum(m.aveDaily, 2), tip: "Target ÷ working days" },
+      { lab: "Days passed", val: formatPaceNum(m.daysPassed), tip: "Working days elapsed" },
+      { lab: "Days remaining", val: formatPaceNum(m.daysRemaining), tip: "Working days left" },
+      { lab: "Remaining balance (Prof.)", val: formatPaceNum(m.remProf), tip: "Target − Proforma MTD" },
+      { lab: "Remaining balance (Del.)", val: formatPaceNum(m.remDel), tip: "Target − Delivery MTD" },
+      { lab: "Actual Prof. required/day", val: formatPaceNum(m.reqProfDay, 2), tip: "Remaining Prof ÷ days remaining" },
+      { lab: "Actual Del. required/day", val: formatPaceNum(m.reqDelDay, 2), tip: "Remaining Del ÷ days remaining" },
+      { lab: "Ave. Prod./agent (Overall)", val: formatPaceNum(m.aveProdAgent, 2), tip: "Delivery MTD ÷ active agents" },
+    ];
+    grid.innerHTML = cells.map((c) => `
+      <div class="sr-pace-cell" title="${escapeHtml(c.tip)}">
+        <span class="lab">${escapeHtml(c.lab)}</span>
+        <span class="val">${escapeHtml(c.val)}</span>
+      </div>`).join("");
+  }
+
+  function momDeltaPct(cur, prev) {
+    const c = Number(cur);
+    const p = Number(prev);
+    if (!Number.isFinite(c) || !Number.isFinite(p) || p === 0) return null;
+    return ((c - p) / Math.abs(p)) * 100;
+  }
+
+  function trendHtml(delta, opts) {
+    const o = opts || {};
+    if (delta == null || !Number.isFinite(delta)) {
+      return `<span class="sr-trend is-flat">${o.flatLabel || "0%"}</span>`;
+    }
+    const abs = Math.abs(delta);
+    const txt = `${abs >= 10 ? abs.toFixed(0) : abs.toFixed(1)}%`;
+    if (Math.abs(delta) < 0.05) return `<span class="sr-trend is-flat">0%</span>`;
+    const badUp = !!o.badWhenUp;
+    const up = delta > 0;
+    const cls = up ? (badUp ? "is-down" : "is-up") : (badUp ? "is-up" : "is-down");
+    const arrow = up ? "↑" : "↓";
+    return `<span class="sr-trend ${cls}">${arrow} ${txt}</span>`;
+  }
+
+  function renderPbiKpis(sr) {
+    const el = $("#sr-pbi-kpis");
+    if (!el) return;
+    const rows = filterSrRows(sr.rows || []);
+    const t = sr.totals || {};
+    let cards;
+    if (srHasSelection() && rows.length) {
+      let del = 0;
+      let pro = 0;
+      let delPrev = 0;
+      let proPrev = 0;
+      let cancelN = 0;
+      let target = 0;
+      let except = 0;
+      let lexus = 0;
+      const lexusMap = sr.lexusDeliveryByKey || {};
+      rows.forEach((r) => {
+        const m = r.month || r;
+        del += Number(m.Delivery) || Number(r["Delivery (Month)"]) || 0;
+        pro += Number(m.Proforma) || Number(r["Proforma (Month)"]) || 0;
+        delPrev += Number(r["Delivery (Prev)"]) || 0;
+        proPrev += Number(r["Proforma (Prev)"]) || 0;
+        cancelN += Number(m["Cancelled BOs"]) || 0;
+        if (!r._vacation) target += rowTargetNum(r);
+        except += Number(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0);
+        lexus += Number(lexusMap[r._key]) || 0;
+      });
+      const ratio = cancelPctRatio(cancelN, del);
+      const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
+      const cancelOver = ratio != null && ratio * 100 > 30;
+      const delPctVal = target ? (del / target) * 100 : null;
+      const who = rows.length === 1
+        ? shortEmpLabel(rows[0]["Sales Employee"] || "Selected employee")
+        : `${rows.length} selected · combined`;
+      cards = [
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars", spark: "delivery", lexus },
+        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued", spark: "proforma" },
+        { lab: "Prof + Del", val: formatNumber(pro + del), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
+        { lab: "Proforma Except This Month", val: formatNumber(except), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
+        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null, desc: "Delivery ÷ Target", meter: delPctVal },
+        { lab: "TARGET", val: formatNumber(target || 0), ico: "target", tone: "teal", trend: 0, desc: rows.length === 1 ? "Employee monthly target" : "Combined monthly target", meter: target ? ((pro + del) / target) * 100 : null },
+        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, desc: "Cancelled ÷ (Delivery + Cancelled) · limit 30%", meter: ratio == null ? null : ratio * 100, mark: 30 },
+        { lab: "EMPLOYEES", val: formatNumber(rows.length), ico: "people", tone: "blue", trend: 0, desc: who },
+      ];
+    } else {
+      const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0);
+      const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
+      const cancelOver = ratio != null && ratio * 100 > 30;
+      const del = Number(t.deliveryMonth) || 0;
+      const pro = Number(t.proformaMonth) || 0;
+      const delPrev = Number(t.deliveryPrev) || 0;
+      const proPrev = Number(t.proformaPrev) || 0;
+      const delPctVal = t.target ? ((t.delPct || 0) * 100) : null;
+      cards = [
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars · team", spark: "delivery", lexus: Number(t.lexusDeliveryMonth) || 0 },
+        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued · team", spark: "proforma" },
+        { lab: "Prof + Del", val: formatNumber(t.profPlusDel || (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
+        { lab: "Proforma Except This Month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
+        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null, desc: "Delivery ÷ Target", meter: delPctVal },
+        { lab: "TARGET", val: formatNumber(t.target || 0), ico: "target", tone: "teal", trend: 0, desc: "Team monthly target", meter: t.target ? ((pro + del) / t.target) * 100 : null },
+        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, badWhenUp: true, desc: "Cancelled ÷ (Delivery + Cancelled) · limit 30%", meter: ratio == null ? null : ratio * 100, mark: 30 },
+        { lab: "EMPLOYEES", val: formatNumber((sr.rows || []).length), ico: "people", tone: "blue", trend: 0, desc: "Sales employees in the report" },
+      ];
+    }
+    const toneColor = { blue: "#4f9dff", violet: "#a78bfa", green: "#34d399", sky: "#38bdf8", red: "#ff4d5e", teal: "#2dd4bf", warn: "#f59e0b" };
+    const needsSeries = cards.some((c) => c.spark);
+    const series = needsSeries ? srDailySeries(sr, srView.selectedKey || "") : null;
+    const visual = (c) => {
+      const color = toneColor[c.tone] || "#4f9dff";
+      if (c.spark && series) {
+        const data = c.spark === "delivery" ? series.delivery
+          : c.spark === "proforma" ? series.proforma
+            : series.proforma.map((v, i) => v + (series.delivery[i] || 0));
+        return srSparkSvg(data, color);
+      }
+      if (c.meter !== undefined) {
+        const meterColor = c.over ? "#ff4d5e" : c.ok ? "#34d399" : color;
+        return srMeterHtml(c.meter == null ? NaN : c.meter, meterColor, c.mark);
+      }
+      return "";
+    };
+    el.innerHTML = cards.map((c) => `
+      <div class="sr-kpi-card tone-${c.tone || "neutral"}${c.over ? " is-over" : c.ok ? " is-ok" : ""}">
+        <div class="sr-kpi-top">
+          <span class="sr-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SR_KPI_ICONS[c.ico] || ""}</svg></span>
+          <span class="sr-kpi-lab">${c.lab}</span>
+          ${c.lexus != null ? `<span class="sr-kpi-lexus" title="Lexus delivered in this period · not counted in the Sales Dashboard">Lexus <b>${formatNumber(c.lexus)}</b></span>` : ""}
+        </div>
+        <div class="sr-kpi-val">${c.val}</div>
+        ${c.desc ? `<div class="sr-kpi-desc">${escapeHtml(c.desc)}</div>` : ""}
+        <div class="sr-kpi-visual">${visual(c)}</div>
+      </div>`).join("");
+  }
+
+  function renderSelectedDetail(sr) {
+    const title = $("#sr-detail-title");
+    const sub = $("#sr-detail-sub");
+    const body = $("#sr-detail-body");
+    if (!body) return;
+
+    const picked = srSelectedRows();
+    if (picked.length > 1) {
+      const pro = picked.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+      const del = picked.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      const target = picked.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      const accSold = picked.reduce((sum, row) => sum + (Number(row._accSold) || 0), 0);
+      const accProgress = picked.reduce((sum, row) => sum + (Number(row._accInProgress) || 0), 0);
+      const accQuota = picked.reduce((sum, row) => sum + (Number(row._accQuota) || 0), 0);
+      if (title) title.textContent = `${picked.length} employees`;
+      if (sub) sub.textContent = "Combined totals for the selected names";
+      body.innerHTML = `
+        <p class="foot" style="margin:0 0 8px">${picked.map((row) => escapeHtml(shortEmpLabel(row["Sales Employee"]))).join(" · ")}</p>
+        <div class="emp-stat-grid">
+          <div class="emp-stat"><div class="k">Proforma</div><div class="v">${formatNumber(pro)}</div></div>
+          <div class="emp-stat"><div class="k">Delivery</div><div class="v">${formatNumber(del)}</div></div>
+          <div class="emp-stat"><div class="k">Prof + Del</div><div class="v">${formatNumber(pro + del)}</div></div>
+          <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(target)}</div></div>
+          <div class="emp-stat"><div class="k">Acc achieved</div><div class="v">${formatNumber(accSold)}</div></div>
+          <div class="emp-stat"><div class="k">Acc in progress</div><div class="v">${formatNumber(accProgress)}</div></div>
+          <div class="emp-stat"><div class="k">Acc target</div><div class="v">${formatNumber(accQuota)}</div></div>
+        </div>`;
+      return;
+    }
+
+    if (!srView.selectedKey || !window._srRowsByKey || !window._srRowsByKey[srView.selectedKey]) {
+      if (title) title.textContent = "Employee details";
+      if (sub) sub.textContent = "Select a name to see only their Excel rows";
+      body.innerHTML = `<p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>`;
+      return;
+    }
+
+    const row = window._srRowsByKey[srView.selectedKey];
+    const key = srView.selectedKey;
+    const live = sr.live || todayKeys();
+    const day = row.day || {};
+    const month = row.month || row;
+    const rawRows = salesDashboardRows().filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
+    const cancelRawRows = cancelledRawRowsForSalesman(key);
+    const accRawRows = accessoriesRawRowsForSalesman(key, live, sr.prevMonthKey);
+    const records = row._records || [];
+
+    if (title) title.textContent = row["Sales Employee"] || "Employee";
+    if (sub) {
+      sub.textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · ${formatNumber(rawRows.length)} Sales Raw · ${formatNumber(cancelRawRows.length)} Cancelled BO · ${formatNumber(accRawRows.length)} Accessories`;
+    }
+
+    body.innerHTML = `
+      <div class="emp-stat-grid">
+        <div class="emp-stat"><div class="k">Day Proforma</div><div class="v">${formatNumber(day.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Day Delivery</div><div class="v">${formatNumber(day.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Month Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Month Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Target</div><div class="v">${row._vacation ? "VACATION" : formatNumber(rowTargetNum(row))}</div></div>
+        <div class="emp-stat"><div class="k">Adjusted target</div><div class="v">${formatNumber(row["Adjusted Target"] ?? (row._vacation ? 0 : rowTargetNum(row)))}</div></div>
+        <div class="emp-stat"><div class="k">Acc target</div><div class="v">${formatNumber(row["Acc Target"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Acc achieved</div><div class="v">${formatNumber(row["Acc Achieved"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Acc remaining</div><div class="v">${formatNumber(row["Acc Remaining"] ?? row._accRemaining ?? 0)}</div></div>
+        <div class="emp-stat"><div class="k">Acc Ach%</div><div class="v">${escapeHtml(row["Acc Ach %"] || "—")}</div></div>
+        <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(month["Ach%"] || "—")}</div></div>
+        <div class="emp-stat${row._dailyOnTrack ? " is-ok" : row._vacation ? "" : " is-behind"}"><div class="k">Daily need today</div><div class="v">${row._vacation ? "VACATION" : formatNumber(row["Daily Need"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Today proforma</div><div class="v">${formatNumber(row["Daily Achieved"] ?? row["Proforma (Day)"] ?? 0)}</div></div>
+        <div class="emp-stat${row._dailyOnTrack ? " is-ok" : row._vacation ? "" : " is-behind"}"><div class="k">Daily Ach%</div><div class="v">${escapeHtml(row["Daily Ach %"] || "—")}</div></div>
+      </div>
+      ${accRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Accessories rows · Col D VIN / Col L amount (${formatNumber(accRawRows.length)})</h4>${renderCancelledFileTableHtml(accRawRows)}` : ""}
+      ${cancelRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Cancelled BO rows · all Excel columns (${formatNumber(cancelRawRows.length)})</h4>${renderCancelledFileTableHtml(cancelRawRows)}` : ""}
+      <h4 style="margin:${cancelRawRows.length ? "14px" : "8px"} 0 6px;font-size:.9rem">Sales Raw rows for this name</h4>
+      ${renderEmployeeRawTable(rawRows)}
+      ${renderVinSection("Proforma / Delivery counted this month", records.filter((r) => r.flags?.proformaMonth || r.flags?.deliveryMonth))}
+    `;
+  }
+
+  function chartRowsForMode(allRows) {
+    const base = filterSrRows(allRows || []);
+    if (srHasSelection()) return base;
+
+    const mode = srView.chartMode || "active";
+    const score = (r) =>
+      (Number(r["Delivery (Month)"]) || 0) * 3 +
+      (Number(r["Proforma (Month)"]) || 0) * 2 +
+      (Number(r["Delivery (Day)"]) || 0) * 2 +
+      (Number(r["Proforma (Day)"]) || 0) +
+      (rowTargetNum(r)) * 0.01;
+
+    if (mode === "all") return base;
+    if (mode === "top12") {
+      return base.slice().sort((a, b) => score(b) - score(a)).slice(0, 12);
+    }
+    const active = base.filter((r) =>
+      (Number(r["Delivery (Month)"]) || 0) > 0 ||
+      (Number(r["Proforma (Month)"]) || 0) > 0 ||
+      (Number(r["Delivery (Day)"]) || 0) > 0 ||
+      (Number(r["Proforma (Day)"]) || 0) > 0
+    );
+    if (active.length) return active.slice().sort((a, b) => score(b) - score(a));
+    return base.slice().sort((a, b) => (rowTargetNum(b)) - (rowTargetNum(a))).slice(0, 12);
+  }
+
+  function setChartEmptyState(canvasId, message) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (charts[canvasId]) {
+      charts[canvasId].destroy();
+      delete charts[canvasId];
+    }
+    const scroll = canvas.closest(".chart-scroll");
+    const box = canvas.closest(".chart-box");
+    if (box) box.style.height = "160px";
+    if (scroll) {
+      scroll.classList.remove("is-scroll");
+      scroll.style.maxHeight = "";
+    }
+    let note = scroll && scroll.querySelector(".chart-empty-note");
+    if (!note && scroll) {
+      note = document.createElement("p");
+      note.className = "chart-empty-note";
+      scroll.appendChild(note);
+    }
+    if (note) {
+      note.hidden = false;
+      note.textContent = message;
+    }
+    canvas.style.display = "none";
+  }
+
+  function clearChartEmptyState(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = "";
+    const scroll = canvas.closest(".chart-scroll");
+    const note = scroll && scroll.querySelector(".chart-empty-note");
+    if (note) note.hidden = true;
+  }
+
+  function renderPerfDayStrip(sr, singleRow) {
+    const el = $("#sr-perf-day");
+    if (!el) return;
+    let targetSum = 0;
+    let delSum = 0;
+    let profSum = 0;
+    if (singleRow) {
+      targetSum = rowTargetNum(singleRow);
+      delSum = Number(singleRow["Delivery (Month)"]) || 0;
+      profSum = Number(singleRow["Proforma (Month)"]) || 0;
+    } else if (srHasSelection() && sr && Array.isArray(sr.rows)) {
+      const picked = filterSrRows(sr.rows);
+      targetSum = picked.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      delSum = picked.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      profSum = picked.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+    } else {
+      const t = (sr && sr.totals) || {};
+      targetSum = Number(t.target) || 0;
+      delSum = Number(t.deliveryMonth) || 0;
+      profSum = Number(t.proformaMonth) || 0;
+      if (sr && Array.isArray(sr.rows)) {
+        const rows = filterSrRows(sr.rows);
+        if (!targetSum) targetSum = rows.reduce((s, r) => s + rowTargetNum(r), 0);
+        if (!delSum && !profSum) {
+          delSum = rows.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
+          profSum = rows.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
+        }
+      }
+    }
+    const achieved = profSum + delSum;
+    const delPct = targetSum > 0 ? (delSum / targetSum) * 100 : null;
+    const profDelPct = targetSum > 0 ? (achieved / targetSum) * 100 : null;
+    const remaining = Math.max(0, targetSum - achieved);
+    const fmtPct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
+    const fill = targetSum > 0 ? Math.max(0, Math.min(100, (achieved / targetSum) * 100)) : 0;
+    const fillEl = $("#sr-perf-progress-fill");
+    const tgtLbl = $("#sr-perf-target-lbl");
+    const achLbl = $("#sr-perf-achieved-lbl");
+    if (fillEl) fillEl.style.width = fill.toFixed(1) + "%";
+    if (tgtLbl) tgtLbl.textContent = formatNumber(targetSum);
+    if (achLbl) achLbl.textContent = `${formatNumber(achieved)}${profDelPct == null ? "" : ` (${profDelPct.toFixed(1)}%)`}`;
+    const remLbl = $("#sr-perf-remaining-lbl");
+    if (remLbl) remLbl.textContent = formatNumber(remaining);
+    el.innerHTML = `
+      <div class="sr-perf-metric is-del">
+        <span class="k">DEL %</span>
+        <span class="v">${fmtPct(delPct)}</span>
+      </div>
+      <div class="sr-perf-metric is-prof">
+        <span class="k">PROF+DEL %</span>
+        <span class="v">${fmtPct(profDelPct)}</span>
+      </div>
+      <div class="sr-perf-metric is-remain">
+        <span class="k">Remaining</span>
+        <span class="v">${formatNumber(remaining)}</span>
+      </div>
+    `;
+  }
+
+  function renderPerfMergedChart(sr, rows, opts) {
+    const single = !!(opts && opts.single) || rows.length === 1;
+    renderPerfDayStrip(sr, single ? rows[0] : null);
+    clearChartEmptyState("chart-sr-perf");
+
+    const delPcts = rows.map((r) => (r._delPct != null ? r._delPct * 100 : (parsePct(r["Ach%"]) || 0)));
+    const profDelPcts = rows.map((r) => (r._profDelPct != null ? r._profDelPct * 100 : (parsePct(r["Prof+Del %"]) || 0)));
+    const targets = rows.map((r) => rowTargetNum(r));
+    const delCounts = rows.map((r) => Number(r["Delivery (Month)"]) || 0);
+    const profCounts = rows.map((r) => Number(r["Proforma (Month)"]) || 0);
+    const categoryExtras = targets.map((t) => (t > 0 ? `Target ${formatNumber(t)}` : "Target —"));
+    const rowMeta = rows.map((r, i) => ({
+      name: String(r["Sales Employee"] || r.Salesman || "").trim() || "—",
+      target: targets[i],
+      del: delCounts[i],
+      prof: profCounts[i],
+    }));
+
+    if (single) {
+      upsertChart("chart-sr-perf", "bar", ["Del % (Del÷Target)", "Prof+Del %"], [
+        delPcts[0],
+        profDelPcts[0],
+      ], {
+        showValues: true,
+        valueSuffix: "%",
+        max: 120,
+        backgroundColor: ["rgba(235, 10, 30, 0.88)", "rgba(13, 148, 136, 0.85)"],
+        rowMeta,
+        legend: true,
+      });
+      return;
+    }
+
+    const labels = rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+    const empKeys = rows.map((r) => r._key);
+    // Highest Prof+Del % first so the chart reads top → bottom clearly
+    const order = rows
+      .map((r, i) => ({ i, score: profDelPcts[i], del: delPcts[i] }))
+      .sort((a, b) => b.score - a.score || b.del - a.del);
+    const ordLabels = order.map((o) => labels[o.i]);
+    const ordKeys = order.map((o) => empKeys[o.i]);
+    const ordDel = order.map((o) => delPcts[o.i]);
+    const ordProfDel = order.map((o) => profDelPcts[o.i]);
+    const ordExtras = order.map((o) => categoryExtras[o.i]);
+    const ordMeta = order.map((o) => rowMeta[o.i]);
+    const peakPct = Math.max(0, ...ordDel, ...ordProfDel);
+    let axisMax = Math.ceil((peakPct * 1.15) / 10) * 10;
+    if (axisMax < 50) axisMax = 50;
+    if (peakPct >= 90 && axisMax < 110) axisMax = 110;
+    if (axisMax > 140) axisMax = 140;
+    upsertChart("chart-sr-perf", "bar", ordLabels, null, {
+      horizontal: true,
+      clickable: true,
+      empKeys: ordKeys,
+      legend: true,
+      showValues: true,
+      valueSuffix: "%",
+      max: axisMax,
+      categoryExtras: ordExtras,
+      rowMeta: ordMeta,
+      datasets: [
+        {
+          label: "Del %",
+          data: ordDel,
+          backgroundColor: "rgba(235, 10, 30, 0.88)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Prof+Del %",
+          data: ordProfDel,
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
+    });
+  }
+
+  function renderDayTotalChart(sr, singleRow) {
+    // Day totals now live in the Performance strip above the merged chart.
+    renderPerfDayStrip(sr, singleRow || null);
+  }
+
+  function renderDailyAchChart(sr, rows, opts) {
+    const dt = sr.dailyTarget || {};
+    const workDays = dt.workingDays || workingDays;
+    if (!workDays) {
+      setChartEmptyState(
+        "chart-sr-dailyach",
+        "Set working days in Admin → Employees & Targets, then Push to live."
+      );
+      return;
+    }
+
+    clearChartEmptyState("chart-sr-dailyach");
+
+    const dailyRows = rows
+      .filter((r) => !r._vacation && rowTargetNum(r) > 0)
+      .map((r) => ({
+        row: r,
+        pct: r._dailyAchPct != null ? r._dailyAchPct * 100 : 0,
+        need: r._dailyNeed || 0,
+        got: r._dailyAchieved || 0,
+      }))
+      .filter((x) => x.need > 0 || x.got > 0)
+      .sort((a, b) => b.pct - a.pct);
+
+    if (!dailyRows.length) {
+      setChartEmptyState(
+        "chart-sr-dailyach",
+        `Working day ${dt.todayWorkingDay || "—"} of ${workDays} · no proforma yet today (Col P).`
+      );
+      return;
+    }
+
+    const single = !!(opts && opts.single) || dailyRows.length === 1;
+    const labels = single
+      ? ["This employee"]
+      : dailyRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman));
+    const empKeys = dailyRows.map((x) => x.row._key);
+    const horizontal = !single && dailyRows.length > 1;
+    const pctVals = dailyRows.map((x) => x.pct);
+    const colors = pctVals.map((n) =>
+      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)"
+    );
+
+    if (single) {
+      const r = dailyRows[0];
+      upsertChart("chart-sr-dailyach", "doughnut", ["Daily Ach %", "Remaining"], [
+        Math.min(100, r.pct),
+        Math.max(0, 100 - r.pct),
+      ]);
+      return;
+    }
+
+    upsertChart("chart-sr-dailyach", "bar", labels, pctVals, {
+      horizontal,
+      clickable: dailyRows.length > 1,
+      empKeys,
+      label: "Daily Ach % today",
+      backgroundColor: colors,
+      max: 120,
+      showValues: true,
+      valueSuffix: "%",
+    });
+  }
+
+  function renderDailyTargetPanel(sr) {
+    const body = $("#sr-daily-target-body");
+    const sub = $("#sr-daily-target-sub");
+    if (!body) return;
+
+    const dt = sr.dailyTarget || {};
+    const workDays = dt.workingDays || workingDays;
+    const todayWd = dt.todayWorkingDay || todayWorkingDayIndex(sr.live || todayKeys(), workDays);
+    const live = sr.live || todayKeys();
+
+    if (sub) {
+      sub.textContent = `Working day ${todayWd} of ${workDays} · ${live.label || ""} · base = target ÷ ${workDays} · carry adds missed proforma to today`;
+    }
+
+    const rows = srWithoutSelection(() => chartRowsForMode(sr.rows || []));
+
+    const list = rows
+      .filter((r) => !r._vacation && rowTargetNum(r) > 0)
+      .slice()
+      .sort((a, b) => (b._dailyAchPct || 0) - (a._dailyAchPct || 0));
+
+    if (!workDays) {
+      body.innerHTML = `<p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>`;
+      return;
+    }
+
+    if (!list.length) {
+      body.innerHTML = `<p class="foot" style="margin:0;padding:8px 0">No active targets (vacation or zero target).</p>`;
+      return;
+    }
+
+    const onTrack = list.filter((r) => r._dailyOnTrack).length;
+    body.innerHTML = `
+      <div class="sr-daily-summary">
+        <div class="sr-daily-stat"><span>On track today</span><b class="${onTrack === list.length ? "is-ok" : ""}">${onTrack} / ${list.length}</b></div>
+        <div class="sr-daily-stat"><span>Working days</span><b>${workDays}</b></div>
+        <div class="sr-daily-stat"><span>Today (working day)</span><b>${todayWd}</b></div>
+      </div>
+      <div class="sr-daily-table-wrap">
+        <table class="sr-daily-table">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Base/day</th>
+              <th>Carry</th>
+              <th>Need today</th>
+              <th>Proforma today</th>
+              <th>Ach %</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((r) => {
+              const ok = !!r._dailyOnTrack;
+              const statusCls = ok ? "daily-flag is-ok" : "daily-flag is-behind";
+              const statusTxt = ok ? "GREEN" : "BEHIND";
+              return `<tr class="emp-row${ok ? " is-on-track" : " is-behind"}" data-emp-key="${escapeHtml(r._key)}">
+                <td class="tl">${escapeHtml(shortEmpLabel(r["Sales Employee"]))}</td>
+                <td class="num">${formatNumber(r["Daily Base"] || 0)}</td>
+                <td class="num">${formatNumber(r["Daily Carry"] || 0)}</td>
+                <td class="num"><b>${formatNumber(r["Daily Need"] || 0)}</b></td>
+                <td class="num">${formatNumber(r["Daily Achieved"] ?? 0)}</td>
+                <td class="num">${escapeHtml(r["Daily Ach %"] || "0%")}</td>
+                <td><span class="${statusCls}">${statusTxt}</span></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on open Col P proforma (Col V blank)</p>
+    `;
+  }
+
+  function renderAccessoriesChart(sr, rows, opts) {
+    const acc = sr.accessories || {};
+    const hasFile = acc.hasFile;
+    const remainWrap = $("#acc-remain-wrap");
+    const remainTable = $("#acc-remain-table");
+    const summaryBoard = $("#acc-summary-board");
+
+    if (!hasFile) {
+      if (remainWrap) remainWrap.hidden = true;
+      if (summaryBoard) {
+        summaryBoard.hidden = false;
+        const pctEl = $("#acc-sum-pct");
+        if (pctEl) pctEl.textContent = "—";
+      }
+      const hint = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
+      if (hint) {
+        hint.textContent = "Upload Accessories Excel in Admin, then Push to live · Wide for details";
+      }
+      setChartEmptyState(
+        "chart-sr-accessories",
+        "Upload Accessories Excel in Admin (slot 6 · Col D VIN matched to Sales Raw employee · Col L amount), then Push to live."
+      );
+      return;
+    }
+
+    clearChartEmptyState("chart-sr-accessories");
+    renderAccessoriesSummaryBoard(sr, rows);
+
+    const accRows = rows
+      .map((r) => {
+        const quota = Number(r._accQuota) || 0;
+        const sold = Number(r._accSold) || 0;
+        const inProgress = Number(r._accInProgress) || 0;
+        const remaining = Math.max(0, quota - sold - inProgress);
+        const combinedPct = quota > 0 ? ((sold + inProgress) / quota) * 100 : 0;
+        return {
+          row: r,
+          pct: r._accAchPct != null ? r._accAchPct * 100 : (quota > 0 ? (sold / quota) * 100 : 0),
+          combinedPct,
+          quota,
+          sold,
+          inProgress,
+          remaining,
+        };
+      })
+      .filter((x) => x.quota > 0 || x.sold > 0 || x.inProgress > 0)
+      .sort((a, b) => b.combinedPct - a.combinedPct || b.pct - a.pct || String(a.row["Sales Employee"] || "").localeCompare(String(b.row["Sales Employee"] || "")));
+
+    if (!accRows.length) {
+      if (remainWrap) remainWrap.hidden = true;
+      if (summaryBoard) {
+        summaryBoard.hidden = false;
+        const pctEl = $("#acc-sum-pct");
+        if (pctEl) pctEl.textContent = "—";
+        const combEl = $("#acc-sum-pct-combined");
+        if (combEl) combEl.textContent = "—";
+      }
+      const hint = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
+      if (hint) {
+        hint.textContent = "No accessories amounts for this period · Wide for details";
+      }
+      setChartEmptyState(
+        "chart-sr-accessories",
+        "No accessories amounts / targets for this period. Need Sales Raw VIN match (Col D) + Col L amount, VSND Col S in progress, and employee targets (or Accessories settled) in Admin."
+      );
+      return;
+    }
+
+    const hintOk = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
+    if (hintOk) hintOk.textContent = "Wide · per employee Achieved + In Progress · red % = (Ach + IP) ÷ Target";
+
+    if (remainWrap && remainTable) {
+      remainWrap.hidden = false;
+      const tableHtml = `<table class="acc-remain-table">
+        <thead><tr>
+          <th>Advisor</th>
+          <th class="num">Acc Target</th>
+          <th class="num">Achieved</th>
+          <th class="num">In Progress</th>
+          <th class="num">Ach %</th>
+          <th class="num">Ach+IP %</th>
+          <th class="num">Remaining</th>
+        </tr></thead>
+        <tbody>${accRows.map((x) => {
+          const name = x.row["Sales Employee"] || x.row.Salesman || "—";
+          const done = x.remaining <= 0 && x.quota > 0;
+          const remCls = done ? "acc-rem-done" : x.remaining > 0 ? "acc-rem-open" : "";
+          return `<tr class="${done ? "is-done" : ""}" data-emp-key="${escapeHtml(x.row._key || "")}">
+            <td><button type="button" class="bo-link acc-remain-name" data-emp-key="${escapeHtml(x.row._key || "")}">${escapeHtml(name)}</button></td>
+            <td class="num">${formatNumber(x.quota)}</td>
+            <td class="num">${formatNumber(x.sold)}</td>
+            <td class="num">${formatNumber(x.inProgress)}</td>
+            <td class="num">${x.row["Acc Ach %"] || (x.quota ? pct1(x.sold / x.quota) : "—")}</td>
+            <td class="num acc-combined-pct">${x.quota ? pct1((x.sold + x.inProgress) / x.quota) : "—"}</td>
+            <td class="num ${remCls}"><b>${done ? "0 · done" : formatNumber(x.remaining)}</b></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
+      remainTable.innerHTML = tableHtml;
+      lastAccRemainHtml = tableHtml;
+    }
+
+    const single = !!(opts && opts.single) || accRows.length === 1;
+    const labels = single
+      ? [String(accRows[0].row["Sales Employee"] || accRows[0].row.Salesman || "This employee")]
+      : accRows.map((x) => {
+          const full = String(x.row["Sales Employee"] || x.row.Salesman || "—").trim();
+          return full.length <= 28 ? full : shortEmpLabel(full);
+        });
+    const empKeys = accRows.map((x) => x.row._key);
+    const horizontal = !single && accRows.length > 1;
+    const soldVals = accRows.map((x) => Math.max(0, Number(x.sold) || 0));
+    const progressVals = accRows.map((x) => Math.max(0, Number(x.inProgress) || 0));
+    const remainVals = accRows.map((x) => Math.max(0, Number(x.remaining) || 0));
+    const stackMax = Math.max(
+      1,
+      ...accRows.map((x, i) => soldVals[i] + progressVals[i] + remainVals[i])
+    );
+    const axisMax = Math.ceil(stackMax * 1.15);
+
+    if (single) {
+      const r = accRows[0];
+      upsertChart("chart-sr-accessories", "doughnut", ["Achieved", "In Progress", "Remaining"], [r.sold, r.inProgress, r.remaining], {
+        legend: true,
+        backgroundColor: ["rgba(13, 148, 136, 0.9)", "rgba(235, 10, 30, 0.88)", "rgba(148, 163, 184, 0.55)"],
+      });
+      return;
+    }
+
+    upsertChart("chart-sr-accessories", "bar", labels, soldVals, {
+      horizontal,
+      clickable: accRows.length > 1,
+      empKeys,
+      legend: true,
+      stacked: true,
+      max: axisMax,
+      showValues: false,
+      datasets: [
+        {
+          label: "Achieved",
+          data: soldVals,
+          backgroundColor: "rgba(13, 148, 136, 0.92)",
+          borderRadius: 3,
+          stack: "acc",
+        },
+        {
+          label: "In Progress",
+          data: progressVals,
+          backgroundColor: "rgba(235, 10, 30, 0.92)",
+          borderRadius: 3,
+          stack: "acc",
+        },
+        {
+          label: "Remaining",
+          data: remainVals,
+          backgroundColor: "rgba(148, 163, 184, 0.55)",
+          borderRadius: 3,
+          stack: "acc",
+        },
+      ],
+    });
+  }
+
+  function renderSalesReportCharts(sr) {
+    const rows = chartRowsForMode(sr.rows || []);
+    if (!rows.length) return;
+
+    const single = rows.length === 1;
+    const horizontal = !single && rows.length > 1;
+    const labels = single
+      ? ["This employee"]
+      : rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+    const empKeys = rows.map((r) => r._key);
+    const clickOpts = { horizontal, clickable: !single, empKeys };
+    // When single, still allow click but less useful — keep clickable false for cleaner UX
+
+    if (single) {
+      const r = rows[0];
+      renderPerfMergedChart(sr, rows, { single: true });
+      upsertChart("chart-sr-plant", "doughnut", [String(r.Plant || "—")], [Number(r["Delivery (Month)"]) || 1]);
+      upsertChart("chart-sr-overview", "doughnut",
+        ["Delivery", "Proforma gap", "To target"],
+        [
+          Number(r["Delivery (Month)"]) || 0,
+          Math.max(0, (Number(r["Proforma (Month)"]) || 0) - (Number(r["Delivery (Month)"]) || 0)),
+          Math.max(0, rowTargetNum(r) - (Number(r["Proforma (Month)"]) || 0)),
+        ]
+      );
+      const oneCancel = parsePct(r["Cancellation %"] || r["Cancel %"]) || 0;
+      upsertChart("chart-cancel", "bar", ["Cancel %", "Gap +/-"], [
+        oneCancel,
+        parsePct(r["Gap +/-"]) || 0,
+      ], {
+        showValues: true,
+        valueSuffix: "%",
+        backgroundColor: [
+          oneCancel > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)",
+          "rgba(100, 116, 139, 0.65)",
+        ],
+        rowMeta: [{
+          name: String(r["Sales Employee"] || r.Salesman || "").trim() || "—",
+          cancelled: Number((r.month || r)["Cancelled BOs"]) || 0,
+        }],
+      });
+      upsertChart("chart-sr-delpct", "doughnut", ["Del %", "Remaining"], [
+        Math.min(100, (r._delPct || 0) * 100),
+        Math.max(0, 100 - (r._delPct || 0) * 100),
+      ]);
+      if (charts["chart-sr-profdelpct"]) {
+        charts["chart-sr-profdelpct"].destroy();
+        delete charts["chart-sr-profdelpct"];
+      }
+      delete chartSnapshots["chart-sr-profdelpct"];
+      renderProfDelDailyChart(sr, rows);
+      upsertChart("chart-sr-prev", "bar", ["Prior month Prof", "Today Prof", "Today Del"], [
+        Number(r["Proforma (Prev)"]) || 0,
+        Number(r["Proforma (Day)"]) || 0,
+        Number(r["Delivery (Day)"]) || 0,
+      ], {
+        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(13, 148, 136, 0.8)", "rgba(235, 10, 30, 0.88)"],
+      });
+      upsertChart("chart-sr-pace", "doughnut",
+        ["Days passed", "Days remaining"],
+        [sr.daysPassed || 0, sr.daysRemaining || 0]
+      );
+      upsertChart("chart-sr-cancelcount", "bar", ["Cancelled BOs"], [
+        Number((r.month || r)["Cancelled BOs"]) || 0,
+      ], { backgroundColor: "rgba(235, 10, 30, 0.82)" });
+      renderAccessoriesChart(sr, rows, { single: true });
+      renderDailyAchChart(sr, rows, { single: true });
+      return;
+    }
+
+    renderPerfMergedChart(sr, rows, { single: false });
+
+    const plantMap = new Map();
+    rows.forEach((r) => {
+      const plant = String(r.Plant || "—").trim() || "—";
+      plantMap.set(plant, (plantMap.get(plant) || 0) + (Number(r["Delivery (Month)"]) || 0));
+    });
+    const plantEntries = [...plantMap.entries()].sort((a, b) => b[1] - a[1]);
+    upsertChart("chart-sr-plant", "doughnut", plantEntries.map((x) => x[0]), plantEntries.map((x) => x[1]));
+
+    const t = sr.totals || {};
+    upsertChart("chart-sr-overview", "doughnut",
+      ["Delivery", "Proforma (not delivered)", "Remaining to target"],
+      [
+        t.deliveryMonth || 0,
+        t.proformaMonth || 0,
+        Math.max(0, (t.target || 0) - (t.deliveryMonth || 0)),
+      ]
+    );
+
+    const cancelPctVals = rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0);
+    const gapVals = rows.map((r) => parsePct(r["Gap +/-"]) || 0);
+    const cancelOrder = rows
+      .map((r, i) => ({ i, cancel: cancelPctVals[i], gap: gapVals[i] }))
+      .sort((a, b) => b.cancel - a.cancel || a.gap - b.gap);
+    upsertChart("chart-cancel", "bar", cancelOrder.map((o) => labels[o.i]), null, {
+      ...clickOpts,
+      empKeys: cancelOrder.map((o) => empKeys[o.i]),
+      legend: true,
+      showValues: true,
+      valueSuffix: "%",
+      rowMeta: cancelOrder.map((o) => ({
+        name: String(rows[o.i]["Sales Employee"] || rows[o.i].Salesman || "").trim() || "—",
+        cancelled: Number((rows[o.i].month || rows[o.i])["Cancelled BOs"]) || 0,
+      })),
+      datasets: [
+        {
+          label: "Cancel %",
+          data: cancelOrder.map((o) => cancelPctVals[o.i]),
+          backgroundColor: cancelOrder.map((o) =>
+            cancelPctVals[o.i] > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)"
+          ),
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Gap +/-",
+          data: cancelOrder.map((o) => gapVals[o.i]),
+          backgroundColor: "rgba(100, 116, 139, 0.55)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
+    });
+
+    upsertChart("chart-sr-delpct", "bar", labels, rows.map((r) => (r._delPct || 0) * 100), {
+      ...clickOpts,
+      label: "Del %",
+      backgroundColor: "rgba(235, 10, 30, 0.82)",
+      max: 120,
+      showValues: true,
+      valueSuffix: "%",
+    });
+
+    if (charts["chart-sr-profdelpct"]) {
+      charts["chart-sr-profdelpct"].destroy();
+      delete charts["chart-sr-profdelpct"];
+    }
+    delete chartSnapshots["chart-sr-profdelpct"];
+    renderProfDelDailyChart(sr, rows);
+
+    upsertChart("chart-sr-prev", "bar", labels, null, {
+      ...clickOpts,
+      legend: true,
+      datasets: [
+        {
+          label: "Prior month Prof",
+          data: rows.map((r) => Number(r["Proforma (Prev)"]) || 0),
+          backgroundColor: "rgba(100, 116, 139, 0.75)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Today Prof",
+          data: rows.map((r) => Number(r["Proforma (Day)"]) || 0),
+          backgroundColor: "rgba(13, 148, 136, 0.8)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Today Del",
+          data: rows.map((r) => Number(r["Delivery (Day)"]) || 0),
+          backgroundColor: "rgba(235, 10, 30, 0.88)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
+    });
+
+    upsertChart("chart-sr-pace", "doughnut",
+      ["Days passed", "Days remaining"],
+      [sr.daysPassed || 0, sr.daysRemaining || 0]
+    );
+
+    clearChartEmptyState("chart-sr-cancelcount");
+    const cancelRows = rows
+      .map((r) => ({
+        row: r,
+        count: Number((r.month || r)["Cancelled BOs"]) || 0,
+      }))
+      .filter((x) => x.count > 0)
+      .sort((a, b) => b.count - a.count);
+    if (!cancelRows.length) {
+      setChartEmptyState(
+        "chart-sr-cancelcount",
+        "No cancelled BOs yet. Upload Cancelled BOs Excel in Admin — every row with a VIN in Col I counts (duplicates included), by salesman name."
+      );
+    } else {
+      upsertChart(
+        "chart-sr-cancelcount",
+        "bar",
+        cancelRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman)),
+        cancelRows.map((x) => x.count),
+        {
+          horizontal: cancelRows.length > 1,
+          clickable: cancelRows.length > 1,
+          empKeys: cancelRows.map((x) => x.row._key),
+          label: "Cancelled BOs",
+          backgroundColor: "rgba(235, 10, 30, 0.82)",
+          max: Math.max(1, ...cancelRows.map((x) => x.count)),
+        }
+      );
+    }
+    renderAccessoriesChart(sr, rows, { single: false });
+    renderDailyAchChart(sr, rows, { single: false });
+  }
+  function exportTelesalesSchedule() {
+    const sr = window._data && window._data.salesReport;
+    if (!sr || !(sr.rows || []).length) {
+      setStatus("No Sales Report to export", "err");
+      return;
+    }
+    const live = sr.live || todayKeys();
+    const monthName = (live.now || new Date()).toLocaleString("en-US", { month: "long" }).toUpperCase();
+    const prevLabel = (sr.prevMonthLabel || "Prior").toUpperCase();
+    const t = sr.totals || {};
+    const stamp = live.label || cellToString(live.now);
+    const timeStr = new Date().toLocaleTimeString("en-GB", { hour12: false });
+
+    const aoa = [];
+    aoa.push(["Telesales Daily Sales Monitor"]);
+    aoa.push(["MTD:", stamp, "", "Time:", timeStr]);
+    aoa.push([]);
+    // Group header row
+    aoa.push([
+      "S.N.", "Sales Advisor", "Emp. No.",
+      monthName, "", "", "", "", "",
+      "Pro-Forma", "",
+      "Cancelled", "Notes",
+      "Lead Time", "NPS", "PSFU%",
+      "Lead Mgmt MTD Dist.", "Lead Mgmt MTD Cont.", "Lead Mgmt MTD %",
+      "NPS Prospect",
+      "Acc Target", "Acc Achieved", "Acc Ach %", "Acc Remaining",
+      "Del Quest", "Del Employee",
+    ]);
+    // Sub header
+    aoa.push([
+      "", "", "",
+      "Target", "Prof.", "Del.", "Prof+Del", "Del %", "Prof+Del %",
+      prevLabel, "Today",
+      "BOs", "",
+      "", "", "",
+      "", "", "",
+      "",
+      "", "", "", "",
+      "", "",
+    ]);
+
+    const exportRows = filterSrRows(sr.rows || []);
+    exportRows.forEach((r) => {
+      const m = r.month || r;
+      aoa.push([
+        r.No,
+        r["Sales Employee"],
+        r.Salesman || "",
+        r._vacation ? "VACATION" : rowTargetNum(r),
+        r["Proforma (Month)"] || 0,
+        r["Delivery (Month)"] || 0,
+        r["Prof+Del"] || 0,
+        r["Del %"] || "",
+        r["Prof+Del %"] || "",
+        r["Proforma (Prev)"] || 0,
+        r["Proforma (Day)"] || 0,
+        m["Cancelled BOs"] || 0,
+        r.Notes || "",
+        "", "", "",
+        "", "", "",
+        "",
+        r["Acc Target"] || 0,
+        r["Acc Achieved"] || 0,
+        r["Acc Ach %"] || "",
+        r["Acc Remaining"] ?? r._accRemaining ?? 0,
+        "", "",
+      ]);
+    });
+
+    // Totals
+    aoa.push([
+      "", "TOTAL", "",
+      t.target || 0,
+      t.proformaMonth || 0,
+      t.deliveryMonth || 0,
+      t.profPlusDel || 0,
+      t.target ? ((t.delPct || 0) * 100).toFixed(1) + "%" : "",
+      t.target ? ((t.profDelPct || 0) * 100).toFixed(1) + "%" : "",
+      t.proformaPrev || 0,
+      t.proformaDay || 0,
+      t.cancelled || 0,
+      "",
+      "", "", "",
+      "", "", "",
+      "",
+      t.accQuota || 0,
+      t.accSold || 0,
+      t.accAchPct != null ? (t.accAchPct * 100).toFixed(1) + "%" : "",
+      Math.max(0, (t.accQuota || 0) - (t.accSold || 0)),
+      "", "",
+    ]);
+
+    aoa.push([]);
+    aoa.push(["Summary"]);
+    aoa.push(["No. of calendar days in month", sr.daysInMonth || ""]);
+    aoa.push(["Days passed", sr.daysPassed || ""]);
+    aoa.push(["Days remaining", sr.daysRemaining || ""]);
+    aoa.push(["Delivery Ach% (Total)", t.target ? ((t.deliveryAch || 0) * 100).toFixed(1) + "%" : ""]);
+    aoa.push(["Prof+Del Ach% (Total)", t.target ? ((t.profDelPct || 0) * 100).toFixed(1) + "%" : ""]);
+
+    // Plant / brand-like summary
+    const plantMap = new Map();
+    (sr.rows || []).forEach((r) => {
+      const plant = String(r.Plant || "—").trim() || "—";
+      if (!plantMap.has(plant)) plantMap.set(plant, { target: 0, del: 0, prof: 0 });
+      const p = plantMap.get(plant);
+      p.target += rowTargetNum(r);
+      p.del += Number(r["Delivery (Month)"]) || 0;
+      p.prof += Number(r["Proforma (Month)"]) || 0;
+    });
+    aoa.push([]);
+    aoa.push(["By Plant / Channel"]);
+    aoa.push(["Plant", "Target", "Prof.", "Del.", "% Del"]);
+    [...plantMap.entries()].forEach(([plant, p]) => {
+      aoa.push([
+        plant,
+        p.target,
+        p.prof,
+        p.del,
+        p.target ? ((p.del / p.target) * 100).toFixed(1) + "%" : "",
+      ]);
+    });
+
+    aoa.push([]);
+    aoa.push(["Notes"]);
+    aoa.push(["Schedule built from Sales Raw (Col A/P/V) + Admin targets."]);
+    aoa.push(["Lead Time / NPS / PSFU / Lead Management columns are reserved (no source file yet). Accessories from Admin slot 6 + settled SAR."]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [
+      { wch: 6 }, { wch: 36 }, { wch: 10 },
+      { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
+      { wch: 10 }, { wch: 8 },
+      { wch: 8 }, { wch: 14 },
+      { wch: 10 }, { wch: 8 }, { wch: 8 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 },
+      { wch: 12 },
+      { wch: 10 }, { wch: 12 }, { wch: 10 },
+      { wch: 10 }, { wch: 12 },
+    ];
+    // Seed unique-name tracker used by appendObjectSheet
+    wb._sheetNamesUsed = new Set(["daily sales monitor"]);
+    XLSX.utils.book_append_sheet(wb, ws, "Daily Sales Monitor");
+
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Target", val: t.target || 0, sub: "Admin monthly target" },
+      { label: "Delivery (Month)", val: t.deliveryMonth || 0, sub: "Col V MTD" },
+      { label: "Proforma (Month)", val: t.proformaMonth || 0, sub: "Col P MTD" },
+      { label: "Delivery Ach %", val: t.target ? `${((t.deliveryAch || 0) * 100).toFixed(1)}%` : "", sub: "Delivery ÷ Target" },
+      { label: "Prof+Del Ach %", val: t.target ? `${((t.profDelPct || 0) * 100).toFixed(1)}%` : "", sub: "(Prof+Del) ÷ Target" },
+      { label: "Cancelled BOs", val: t.cancelled || 0, sub: "Cancelled list" },
+      { label: "Working days", val: sr.daysInMonth || "", sub: `${sr.daysPassed || 0} passed · ${sr.daysRemaining || 0} left` },
+    ]);
+
+    const employeeRows = exportRows.map((r, i) => {
+      const m = r.month || r;
+      return {
+        "S.N.": i + 1,
+        "Sales Employee": r["Sales Employee"] || r.Salesman || "",
+        Plant: r.Plant || "",
+        Target: rowTargetNum(r),
+        "Delivery (Month)": Number(r["Delivery (Month)"]) || 0,
+        "Proforma (Month)": Number(r["Proforma (Month)"]) || 0,
+        "Prof+Del": (Number(r["Delivery (Month)"]) || 0) + (Number(r["Proforma (Month)"]) || 0),
+        "Ach %": parsePct(r["Ach%"]) != null ? `${parsePct(r["Ach%"])}%` : "",
+        "Delivery (Day)": Number(r["Delivery (Day)"]) || 0,
+        "Proforma (Day)": Number(r["Proforma (Day)"]) || 0,
+        "Cancelled BOs": Number(m["Cancelled BOs"]) || 0,
+        "Acc Target": r._accQuota != null ? r._accQuota : (r.accQuota || ""),
+        "Acc Achieved": r._accSold != null ? r._accSold : (r.accSold || ""),
+      };
+    });
+    appendObjectSheet(wb, "Employee Schedule", employeeRows);
+
+    const detailRows = (window._srExportRows || []).map((r) => ({
+      Period: r.Period,
+      No: r.No,
+      Plant: r.Plant,
+      Salesman: r.Salesman,
+      "Sales Employee": r["Sales Employee"],
+      Proforma: r.Proforma,
+      Delivery: r.Delivery,
+      Target: r.Target,
+      "Ach%": r["Ach%"],
+      "Del+VSND": r["Del+VSND"],
+      Diff: r.Diff,
+      "Cancelled BOs": r["Cancelled BOs"],
+    }));
+    appendObjectSheet(wb, "Day Month Detail", detailRows);
+
+    appendObjectSheet(wb, "By Plant", [...plantMap.entries()].map(([plant, p]) => ({
+      Plant: plant,
+      Target: p.target,
+      Proforma: p.prof,
+      Delivery: p.del,
+      "% Del": p.target ? `${((p.del / p.target) * 100).toFixed(1)}%` : "",
+    })));
+
+    const accRemain = (exportRows || [])
+      .map((r) => {
+        const target = Number(r._accQuota != null ? r._accQuota : r.accQuota) || 0;
+        const sold = Number(r._accSold != null ? r._accSold : r.accSold) || 0;
+        const ach = target ? (sold / target) * 100 : 0;
+        return {
+          Advisor: r["Sales Employee"] || r.Salesman || "",
+          "Acc Target": target,
+          Achieved: sold,
+          "Ach %": target ? `${ach.toFixed(1)}%` : "",
+          Remaining: Math.max(0, target - sold),
+          _ach: ach,
+        };
+      })
+      .filter((r) => r["Acc Target"] || r.Achieved)
+      .sort((a, b) => b._ach - a._ach)
+      .map(({ _ach, ...row }) => row);
+    appendObjectSheet(wb, "Accessories Remaining", accRemain);
+
+    const cancelByEmp = exportRows
+      .map((r) => ({
+        Employee: r["Sales Employee"] || r.Salesman || "",
+        "Cancelled BOs": Number((r.month || r)["Cancelled BOs"]) || 0,
+      }))
+      .filter((r) => r["Cancelled BOs"] > 0)
+      .sort((a, b) => b["Cancelled BOs"] - a["Cancelled BOs"]);
+    appendObjectSheet(wb, "Cancelled BOs by Employee", cancelByEmp);
+
+    // Chart-section sheets (same names as Sales visuals)
+    appendObjectSheet(wb, "Delivery Proforma Target", employeeRows.map((r) => ({
+      Employee: r["Sales Employee"],
+      Target: r.Target,
+      Delivery: r["Delivery (Month)"],
+      Proforma: r["Proforma (Month)"],
+    })));
+    appendObjectSheet(wb, "Ach Delivery vs Target", employeeRows.map((r) => ({
+      Employee: r["Sales Employee"],
+      "Ach %": r["Ach %"],
+      Target: r.Target,
+      Delivery: r["Delivery (Month)"],
+    })));
+    appendObjectSheet(wb, "Day Delivery Proforma", employeeRows.map((r) => ({
+      Employee: r["Sales Employee"],
+      "Delivery (Day)": r["Delivery (Day)"],
+      "Proforma (Day)": r["Proforma (Day)"],
+    })));
+    appendObjectSheet(wb, "Cancellation Pct", exportRows.map((r) => ({
+      Employee: r["Sales Employee"] || r.Salesman || "",
+      "Cancellation %": r["Cancellation %"] || r["Cancel %"] || "",
+      "Cancelled BOs": Number((r.month || r)["Cancelled BOs"]) || 0,
+    })));
+    appendObjectSheet(wb, "Daily Ach today", exportRows.map((r) => {
+      const dayDel = Number(r["Delivery (Day)"]) || 0;
+      const tgt = rowTargetNum(r);
+      const days = Math.max(1, Number(sr.daysInMonth) || 30);
+      const dailyTgt = tgt / days;
+      return {
+        Employee: r["Sales Employee"] || r.Salesman || "",
+        "Delivery (Day)": dayDel,
+        "Daily target pace": dailyTgt ? Math.round(dailyTgt * 10) / 10 : "",
+        "Ach % today": dailyTgt ? `${((dayDel / dailyTgt) * 100).toFixed(1)}%` : "",
+      };
+    }));
+
+    downloadWorkbook(wb, `Sales-Dashboard-${excelFileStamp()}`);
+    setStatus("Sales Dashboard Excel exported · one sheet per section", "ok");
+  }
+
+  const STRATEGIC_PRODUCTS = ["CAMRY", "LC300", "RAV4", "RAV 4", "PRADO", "HILUX"];
+
+  let boView = {
+    search: "",
+    product: "",
+    category: "",
+    year: "",
+    scope: "",
+    channel: "",
+    type: "",
+    sfx: "",
+    confirm: "",
+    car: "",
+    salesman: "",
+    aging: "",
+    datePreset: "",
+    dateFrom: null,
+    dateTo: null,
+    page: 1,
+    sortKey: "",
+    sortDir: "asc",
+  };
+
+  function boMetrics(list) {
+    const total = list.length;
+    const confirmed = list.filter((b) => b.confirmed).length;
+    const notConfirmed = total - confirmed;
+    const agingVals = list.map((b) => b.aging).filter((n) => n != null && Number.isFinite(n));
+    const avgAging = agingVals.length
+      ? Math.round(agingVals.reduce((s, n) => s + n, 0) / agingVals.length)
+      : 0;
+    const over30 = list.filter((b) => (b.aging || 0) > 30).length;
+    const over60 = list.filter((b) => (b.aging || 0) > 60).length;
+    return {
+      total,
+      confirmed,
+      notConfirmed,
+      confirmPct: total ? confirmed / total : 0,
+      avgAging,
+      over30,
+      over60,
+    };
+  }
+
+  function filteredBos(d) {
+    let list = (d && d.bos) || [];
+    const q = boView.search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((b) =>
+        [b.product, b.sfx, b.salesman, b.customer, b.boNumber, b.category, b.salesType, b.vin]
+          .some((v) => String(v || "").toLowerCase().includes(q))
+      );
+    }
+    if (boView.product) list = list.filter((b) => b.product === boView.product);
+    if (boView.category) list = list.filter((b) => b.category === boView.category);
+    if (boView.year) list = list.filter((b) => String(b.year || "") === String(boView.year));
+    if (boView.scope) list = list.filter((b) => b.salesScope === boView.scope);
+    if (boView.channel) {
+      list = list.filter((b) => b.salesChannel === boView.channel || b.salesScope === boView.channel);
+    }
+    if (boView.type) list = list.filter((b) => b.salesType === boView.type);
+    if (boView.sfx) list = list.filter((b) => b.sfx === boView.sfx);
+    if (boView.confirm === "yes") list = list.filter((b) => b.confirmed);
+    if (boView.confirm === "no") list = list.filter((b) => !b.confirmed);
+    if (boView.salesman) list = list.filter((b) => b.salesman === boView.salesman);
+    if (boView.aging) {
+      const spec = agingBucketCounts([]).find((bucket) => bucket.label === boView.aging);
+      if (spec) {
+        list = list.filter((row) => {
+          const age = Number(row.aging);
+          return Number.isFinite(age) && age >= spec.min && age <= spec.max;
+        });
+      }
+    }
+    if (boView.dateFrom || boView.dateTo) {
+      const from = boView.dateFrom ? startOfDay(boView.dateFrom).getTime() : -Infinity;
+      const to = boView.dateTo ? startOfDay(boView.dateTo).getTime() + 86400000 - 1 : Infinity;
+      list = list.filter((b) => b.orderDateObj && b.orderDateObj.getTime() >= from && b.orderDateObj.getTime() <= to);
+    }
+    return list;
+  }
+
+  function fillBoSelect(sel, values, current, allLabel) {
+    const el = $(sel);
+    if (!el) return;
+    const opts = [`<option value="">${allLabel}</option>`]
+      .concat([...values].sort().map((v) =>
+        `<option value="${escapeHtml(v)}"${v === current ? " selected" : ""}>${escapeHtml(v)}</option>`
+      ));
+    el.innerHTML = opts.join("");
+  }
+
+  function groupBoBy(list, keyFn) {
+    const map = new Map();
+    list.forEach((b) => {
+      const k = keyFn(b) || "—";
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(b);
+    });
+    return map;
+  }
+
+  function productAgg(list) {
+    return [...groupBoBy(list, (b) => b.product).entries()]
+      .map(([product, rows]) => {
+        const m = boMetrics(rows);
+        const category = rows[0]?.category || "—";
+        return { product, category, ...m };
+      })
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function heatConfirm(pct) {
+    if (pct >= 0.7) return "heat-ok";
+    if (pct >= 0.4) return "heat-mid";
+    return "heat-bad";
+  }
+
+  function heatAging(days) {
+    if (days > 60) return "heat-bad";
+    if (days > 30) return "heat-mid";
+    return "heat-ok";
+  }
+
+  function kpiStatus(kind, m) {
+    if (kind === "confirm") return m.confirmPct >= 0.7 ? "ok" : m.confirmPct >= 0.4 ? "warn" : "bad";
+    if (kind === "aging") return m.avgAging <= 30 ? "ok" : m.avgAging <= 60 ? "warn" : "bad";
+    if (kind === "over30") return m.total ? (m.over30 / m.total <= 0.4 ? "ok" : m.over30 / m.total <= 0.7 ? "warn" : "bad") : "ok";
+    if (kind === "over60") return m.total ? (m.over60 / m.total <= 0.2 ? "ok" : m.over60 / m.total <= 0.4 ? "warn" : "bad") : "ok";
+    return "ok";
+  }
+
+  const PCT20_CARS = [
+    { key: "CAMRY", label: "CAMRY" },
+    { key: "LC300", label: "LC300" },
+    { key: "LC70", label: "LC70" },
+    { key: "RAV4", label: "RAV4" },
+    { key: "HILUXSC", label: "HILUX SC" },
+    { key: "HILUXDC", label: "HILUX DC" },
+  ];
+
+  function pct20ProductKey(product) {
+    const key = boeNormProductKey(product);
+    if (!key) return "";
+    if (key === "LANDCRUISER300") return "LC300";
+    if (key === "LANDCRUISER70") return "LC70";
+    if (key === "HILUXSINGLECAB") return "HILUXSC";
+    if (key === "HILUXDOUBLECAB") return "HILUXDC";
+    if (key === "CAMRY" || key === "LC300" || key === "LC70" || key === "RAV4" || key === "HILUXSC" || key === "HILUXDC") {
+      return key;
+    }
+    return "";
+  }
+
+  function pct20PaidLetter() {
+    const sample = (slots.backorder.rows || [])[0] || {};
+    const aliases = (HEADER_ALIASES.paid || []).map((a) => String(a).toLowerCase());
+    return findHeaderLetter(sample, [(n) => aliases.some((a) => n === a)])
+      || findHeaderLetter(sample, [(n) => aliases.some((a) => n.includes(a))])
+      || "J";
+  }
+
+  function pct20IsPaidAmount(raw) {
+    const s = String(raw ?? "").replace(/[, ]/g, "").trim();
+    if (!s) return false;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0;
+  }
+
+  function pct20BoNumber(bo, rawRow) {
+    let raw = cellToString(bo && bo.boNumber).trim();
+    if (!raw && rawRow) {
+      const letter = findHeaderLetter(rawRow, [
+        (n) => n === "back order number" || n === "backorder number" || n === "bo number" || n === "order number",
+      ]) || "F";
+      raw = cellToString(cellByLetter(rawRow, letter)).trim();
+    }
+    if (!raw && rawRow) raw = cellToString(cellByLetter(rawRow, "F")).trim();
+    return raw.replace(/\.0+$/, "");
+  }
+
+  function pct20Channel(bo, rawRow) {
+    const num = pct20BoNumber(bo, rawRow);
+    if (!num) return "unknown";
+    const ch = num.charAt(0);
+    if (ch === "5") return "b2c";
+    if (ch >= "0" && ch <= "9") return "telesales";
+    return "unknown";
+  }
+
+  function pct20EmptyRow(label) {
+    return {
+      product: label,
+      total: 0,
+      paid: 0,
+      notPaid: 0,
+      b2c: 0,
+      b2cPaid: 0,
+      telesales: 0,
+      telesalesPaid: 0,
+      unknown: 0,
+    };
+  }
+
+  function build20PctCars(list) {
+    const paidLetter = pct20PaidLetter();
+    const buckets = {};
+    const samples = {};
+    PCT20_CARS.forEach((p) => {
+      buckets[p.key] = pct20EmptyRow(p.label);
+      samples[p.key] = Object.create(null);
+    });
+    (list || []).forEach((bo) => {
+      const key = pct20ProductKey(bo.product);
+      const rec = buckets[key];
+      if (!rec) return;
+      rec.total += 1;
+      const name = String(bo.product || rec.product);
+      samples[key][name] = (samples[key][name] || 0) + 1;
+      const rawRow = (slots.backorder.rows || [])[bo.id];
+      const isPaidAmt = pct20IsPaidAmount(rawRow ? cellByLetter(rawRow, paidLetter) : "");
+      if (isPaidAmt) rec.paid += 1;
+      else rec.notPaid += 1;
+      const channel = pct20Channel(bo, rawRow);
+      if (channel === "b2c") {
+        rec.b2c += 1;
+        if (isPaidAmt) rec.b2cPaid += 1;
+      } else if (channel === "telesales") {
+        rec.telesales += 1;
+        if (isPaidAmt) rec.telesalesPaid += 1;
+      } else {
+        rec.unknown += 1;
+      }
+    });
+    const rows = PCT20_CARS.map((p) => {
+      const rec = buckets[p.key];
+      let sampleProduct = p.label;
+      let best = 0;
+      Object.keys(samples[p.key]).forEach((name) => {
+        if (samples[p.key][name] > best) {
+          best = samples[p.key][name];
+          sampleProduct = name;
+        }
+      });
+      rec.sampleProduct = sampleProduct;
+      return rec;
+    });
+    rows.forEach((r) => {
+      if (r.paid + r.notPaid !== r.total || r.b2c + r.telesales + r.unknown !== r.total) {
+        console.warn("[20% Cars] identity mismatch", r.product, r);
+      }
+    });
+    const totals = pct20EmptyRow("TOTAL");
+    rows.forEach((r) => {
+      totals.total += r.total;
+      totals.paid += r.paid;
+      totals.notPaid += r.notPaid;
+      totals.b2c += r.b2c;
+      totals.b2cPaid += r.b2cPaid;
+      totals.telesales += r.telesales;
+      totals.telesalesPaid += r.telesalesPaid;
+      totals.unknown += r.unknown;
+    });
+    return { rows, totals };
+  }
+
+  function renderBo20PctCars(list) {
+    const el = $("#bo-20pct-cars");
+    if (!el) return;
+    const { rows, totals } = build20PctCars(list);
+    console.info("[20% Cars]", totals);
+    const paidPct = totals.total ? ((totals.paid / totals.total) * 100).toFixed(1) + "%" : "0.0%";
+    const b2cUnpaid = totals.b2c - totals.b2cPaid;
+    const telUnpaid = totals.telesales - totals.telesalesPaid;
+    const rowHtml = rows.map((r) => {
+      const filterName = r.sampleProduct || r.product;
+      return `<tr class="bo-prod-row" data-bo-product="${escapeHtml(filterName)}">
+        <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(filterName)}">${escapeHtml(r.product)}</button></td>
+        <td class="num">${formatNumber(r.total)}</td>
+        <td class="num bo-20pct-paid">${formatNumber(r.paid)}</td>
+        <td class="num bo-20pct-unpaid">${formatNumber(r.notPaid)}</td>
+        <td class="num">${formatNumber(r.b2c)}</td>
+        <td class="num">${formatNumber(r.telesales)}</td>
+      </tr>`;
+    }).join("");
+    el.innerHTML = `<div class="bo-20pct-head"><h2>20% Cars</h2></div>
+      <div class="bo-20pct-stats">
+        <span>Total 20% cars <b>${formatNumber(totals.total)}</b></span>
+        <span class="bo-20pct-paid">Paid <b>${formatNumber(totals.paid)}</b></span>
+        <span class="bo-20pct-unpaid">Not paid <b>${formatNumber(totals.notPaid)}</b></span>
+        <span>Paid % <b>${escapeHtml(paidPct)}</b></span>
+      </div>
+      <div class="bo-20pct-channels">
+        <span>B2C <b>${formatNumber(totals.b2c)}</b> · <span class="bo-20pct-paid">Paid ${formatNumber(totals.b2cPaid)}</span> / <span class="bo-20pct-unpaid">Not paid ${formatNumber(b2cUnpaid)}</span></span>
+        <span>Telesales <b>${formatNumber(totals.telesales)}</b> · <span class="bo-20pct-paid">Paid ${formatNumber(totals.telesalesPaid)}</span> / <span class="bo-20pct-unpaid">Not paid ${formatNumber(telUnpaid)}</span></span>
+        ${totals.unknown ? `<span>Unknown <b>${formatNumber(totals.unknown)}</b></span>` : ""}
+      </div>
+      <div class="table-wrap">
+        <table class="bo-table">
+          <thead><tr>
+            <th>Product</th>
+            <th class="num">Total</th>
+            <th class="num">Paid</th>
+            <th class="num">Not Paid</th>
+            <th class="num">B2C</th>
+            <th class="num">Telesales</th>
+          </tr></thead>
+          <tbody>${rowHtml}</tbody>
+          <tfoot><tr class="bo-total-row">
+            <td><b>TOTAL</b></td>
+            <td class="num"><b>${formatNumber(totals.total)}</b></td>
+            <td class="num bo-20pct-paid"><b>${formatNumber(totals.paid)}</b></td>
+            <td class="num bo-20pct-unpaid"><b>${formatNumber(totals.notPaid)}</b></td>
+            <td class="num"><b>${formatNumber(totals.b2c)}</b></td>
+            <td class="num"><b>${formatNumber(totals.telesales)}</b></td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+    el.querySelectorAll("[data-bo-product]").forEach((node) => {
+      node.addEventListener("click", (e) => {
+        e.stopPropagation();
+        boView.product = node.getAttribute("data-bo-product") || "";
+        boView.car = boView.product;
+        refreshBoFromFilters();
+      });
+    });
+  }
+
+  function renderBoKpis(m, extras) {
+    const x = extras || {};
+    const returned = Number(x.returned) || 0;
+    const pipeline = m.notConfirmed;
+    const cards = [
+      { lab: "Total Back Orders", val: m.total, sub: "open backlog", status: "ok", tone: "blue", icon: "boxes" },
+      { lab: "Confirmed", val: m.confirmed, sub: "allocated", status: "ok", tone: "green", icon: "check" },
+      { lab: "Not Confirmed", val: m.notConfirmed, sub: "awaiting allocation", status: m.notConfirmed ? "warn" : "ok", tone: "orange", icon: "clock" },
+      { lab: "Confirmation Rate", val: (m.confirmPct * 100).toFixed(1) + "%", sub: "confirmed ÷ total", status: kpiStatus("confirm", m), tone: "teal", icon: "pct" },
+      { lab: "Avg. Waiting Days", val: m.avgAging, sub: "average aging", status: kpiStatus("aging", m), tone: "red", icon: "wait" },
+      { lab: "Cars in Pipeline", val: pipeline, sub: "not yet confirmed", status: pipeline ? "warn" : "ok", tone: "slate", icon: "pipe" },
+      { lab: "Returned Orders", val: returned, sub: hasCancelledBO() ? "cancelled BOs" : "no cancel file", status: returned ? "bad" : "ok", tone: "rose", icon: "return" },
+    ];
+    const icons = {
+      boxes: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9Zm9 1.2L6.2 6.1 12 3.4l5.8 2.7L12 8.7Zm-7.2 1.3v6.7L11 20v-6.8L4.8 10Zm14.4 0L13 13.2V20l6.2-3.1v-6.7Z"/></svg>',
+      check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.2 16.6 4.8 12.2l1.4-1.4 3 3 8-8 1.4 1.4-9.4 9.4Z"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 10.4 3.2 1.9-.9 1.5L11 13.2V7h2v5.4Z"/></svg>',
+      pct: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm9 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM18 5.4 6.4 18.2l-1.5-1.4L16.5 4l1.5 1.4Z"/></svg>',
+      wait: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a9 9 0 0 0-9 9c0 4.2 2.9 7.7 6.8 8.7L8 22h8l-1.8-2.3c3.9-1 6.8-4.5 6.8-8.7a9 9 0 0 0-9-9Zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm-1 2v6l4.5 2.7.9-1.5L13 11.2V6H11Z"/></svg>',
+      pipe: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 7h7v3H4V7Zm9 0h7v3h-7V7ZM4 14h7v3H4v-3Zm9 0h7v3h-7v-3ZM7 10h3v4H7v-4Zm7 0h3v4h-3v-4Z"/></svg>',
+      return: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 7V3L3 10l7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11Z"/></svg>',
+    };
+    $("#bo-kpis").innerHTML = cards.map((c) => `
+      <div class="bo-kpi ${c.status} tone-${c.tone}">
+        <div class="bo-kpi-top">
+          <span class="bo-kpi-icon">${icons[c.icon] || ""}</span>
+          <div class="lab">${c.lab}</div>
+        </div>
+        <div class="val">${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
+        <div class="sub">${escapeHtml(c.sub)}</div>
+      </div>`).join("");
+  }
+
+  function renderBoInsights(list, m) {
+    const el = $("#bo-insights");
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = `<div class="bo-insights-head"><span class="bo-insights-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9V21Zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm2.5 13.5h-5v-.8l.5-.4A5.5 5.5 0 1 1 17.5 9a5.5 5.5 0 0 1-2.5 4.7l.5.4v.9Z"/></svg></span><h2>Executive Insights</h2></div><p class="foot">No back orders match the current filters.</p>`;
+      return;
+    }
+    const byProd = productAgg(list).filter((p) => p.product && p.product !== "—");
+    const top = byProd[0];
+    const lowestConfirm = byProd.slice().sort((a, b) => a.confirmPct - b.confirmPct)[0];
+    const highestAging = byProd.slice().sort((a, b) => b.avgAging - a.avgAging)[0];
+    const best = byProd.slice().filter((p) => p.total >= 3).sort((a, b) => b.confirmPct - a.confirmPct)[0] || byProd[0];
+    const share = top && m.total ? ((top.total / m.total) * 100).toFixed(1) : "0";
+    const pct30 = m.total ? ((m.over30 / m.total) * 100).toFixed(1) : "0";
+    const pct60 = m.total ? ((m.over60 / m.total) * 100).toFixed(1) : "0";
+    const typeRows = [...groupBoBy(list, (b) => `${b.product} · ${b.salesType || "—"}`).entries()]
+      .map(([label, items]) => ({ label, ...boMetrics(items) }))
+      .filter((r) => r.total >= 3)
+      .sort((a, b) => a.confirmPct - b.confirmPct);
+    const weakMix = typeRows[0];
+    const bullets = [
+      top ? `<b>${escapeHtml(top.product)}</b> contributes the largest share of total backlog (${share}%).` : null,
+      lowestConfirm ? `<b>${escapeHtml(lowestConfirm.product)}</b> has the lowest confirmation rate (${(lowestConfirm.confirmPct * 100).toFixed(1)}%).` : null,
+      weakMix ? `<b>${escapeHtml(weakMix.label)}</b> shows weak confirmation among product × sales-type mixes (${(weakMix.confirmPct * 100).toFixed(1)}%).` : null,
+      highestAging ? `<b>${escapeHtml(highestAging.product)}</b> shows the highest average aging (${highestAging.avgAging} days).` : null,
+      `Overall confirmation is <b>${(m.confirmPct * 100).toFixed(1)}%</b> — ${m.confirmPct >= 0.7 ? "healthy" : m.confirmPct >= 0.4 ? "needs attention" : "at risk"}.`,
+      `Orders older than 30 days: <b>${pct30}%</b> · older than 60 days: <b>${pct60}%</b>.`,
+      best ? `<b>${escapeHtml(best.product)}</b> is among the strongest allocation performers (${(best.confirmPct * 100).toFixed(1)}% confirmed).` : null,
+    ].filter(Boolean).slice(0, 4);
+    el.innerHTML = `<div class="bo-insights-head"><span class="bo-insights-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9V21Zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm2.5 13.5h-5v-.8l.5-.4A5.5 5.5 0 1 1 17.5 9a5.5 5.5 0 0 1-2.5 4.7l.5.4v.9Z"/></svg></span><h2>Executive Insights</h2></div><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
+  }
+
+  function boCarImageUrl(product) {
+    const file = typeof resolveCarImageFile === "function" ? resolveCarImageFile(product) : "";
+    if (!file) return "";
+    const bases = typeof carImageBases === "function" ? carImageBases() : ["../images/cars/"];
+    return bases[0] + encodeURI(file);
+  }
+
+  function renderBoStrategic(list) {
+    const el = $("#bo-strategic");
+    if (!el) return;
+    const cards = STRATEGIC_PRODUCTS.map((key) => {
+      const rows2 = list.filter((b) => {
+        const p = String(b.product || "").toUpperCase().replace(/\s+/g, "");
+        const k = String(key).toUpperCase().replace(/\s+/g, "");
+        return p.includes(k);
+      });
+      const m = boMetrics(rows2);
+      const label = key === "RAV 4" ? "RAV4" : key;
+      return { label, key, m, has: rows2.length > 0, sampleProduct: rows2[0]?.product || key };
+    });
+    const seen = new Set();
+    const unique = cards.filter((c) => {
+      if (seen.has(c.label)) return false;
+      seen.add(c.label);
+      return true;
+    });
+    el.innerHTML = unique.map((c) => {
+      const img = boCarImageUrl(c.sampleProduct) || boCarImageUrl(c.label);
+      return `
+      <button type="button" class="bo-strat bo-strat--compact ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}" data-bo-product="${escapeHtml(c.sampleProduct)}">
+        <div class="bo-strat-identity">
+          ${img
+            ? `<img class="bo-strat-thumb" src="${escapeHtml(img)}" alt="" data-fallback="${escapeHtml(c.label.slice(0, 1))}" loading="lazy" onerror="var s=document.createElement('span');s.className='bo-strat-placeholder';s.textContent=this.getAttribute('data-fallback')||'';this.replaceWith(s)" />`
+            : `<span class="bo-strat-placeholder">${escapeHtml(c.label.slice(0, 1))}</span>`}
+          <span class="bo-strat-name">${escapeHtml(c.label)}</span>
+        </div>
+        <div class="bo-strat-metrics">
+          <div><span>Total</span><b>${formatNumber(c.m.total)}</b></div>
+          <div><span>Confirmed</span><b>${formatNumber(c.m.confirmed)}</b></div>
+          <div><span>Not confirmed</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
+          <div><span>Conf. %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
+          <div><span>Avg aging</span><b>${formatNumber(c.m.avgAging)}d</b></div>
+        </div>
+      </button>`;
+    }).join("");
+  }
+
+  function renderBoProductTable(aggs, totals) {
+    const el = $("#bo-product-table");
+    if (!el) return;
+    if (!aggs.length) {
+      el.innerHTML = `<p class="foot" style="padding:12px">No products to show.</p>`;
+      return;
+    }
+    const t = totals || {
+      total: aggs.reduce((s, a) => s + a.total, 0),
+      confirmed: aggs.reduce((s, a) => s + a.confirmed, 0),
+      notConfirmed: aggs.reduce((s, a) => s + a.notConfirmed, 0),
+      confirmPct: 0,
+      avgAging: 0,
+    };
+    if (!totals) {
+      t.confirmPct = t.total ? t.confirmed / t.total : 0;
+    }
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>Product</th>
+        <th class="num">Total BO</th>
+        <th class="num">Confirmed</th>
+        <th class="num">Not Confirmed</th>
+        <th class="num">Avg. Aging (Days)</th>
+        <th class="num">Confirmation %</th>
+      </tr></thead>
+      <tbody>${aggs.map((a) => {
+        const active = a.product === boView.car ? " active" : "";
+        return `<tr data-bo-product="${escapeHtml(a.product)}" class="bo-prod-row${active}">
+          <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
+          <td class="num"><b>${formatNumber(a.total)}</b></td>
+          <td class="num">${formatNumber(a.confirmed)}</td>
+          <td class="num">${formatNumber(a.notConfirmed)}</td>
+          <td class="num ${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}</td>
+          <td class="num ${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
+        </tr>`;
+      }).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td class="num"><b>${formatNumber(t.total)}</b></td>
+        <td class="num"><b>${formatNumber(t.confirmed)}</b></td>
+        <td class="num"><b>${formatNumber(t.notConfirmed)}</b></td>
+        <td class="num ${heatAging(t.avgAging || 0)}"><b>${formatNumber(t.avgAging || 0)}</b></td>
+        <td class="num ${heatConfirm(t.confirmPct)}"><b>${(t.confirmPct * 100).toFixed(1)}%</b></td>
+      </tr></tfoot>
+    </table>`;
+  }
+
+  const PAY_TYPES = ["Cash", "Bank", "Employee", "Fleet", "ALJUF"];
+
+  function countPayTypes(items) {
+    const byType = {};
+    PAY_TYPES.forEach((t) => { byType[t] = 0; });
+    byType.Other = 0;
+    items.forEach((b) => {
+      const t = b.salesType || "Other";
+      if (byType[t] == null) byType.Other += 1;
+      else byType[t] += 1;
+    });
+    return byType;
+  }
+
+  function boFileColumns(sample) {
+    if (sample && Array.isArray(sample.__headers) && sample.__headers.length) {
+      return sample.__headers.map((label, i) => ({
+        letter: indexToColLetter(i),
+        label: String(label || "").trim() || `Col ${indexToColLetter(i)}`,
+        idx: i,
+      }));
+    }
+    const keys = Object.keys(sample || {}).filter((k) => !k.startsWith("__"));
+    return keys.map((label, i) => ({
+      letter: indexToColLetter(i),
+      label,
+      idx: i,
+      key: label,
+    }));
+  }
+
+  function boFileCell(row, col) {
+    if (col.key) return row[col.key];
+    return cellByLetter(row, col.letter);
+  }
+
+  function renderBoCarRowsTable(allBos, product, tableEl, footEl) {
+    if (!tableEl) return;
+    if (!product) {
+      tableEl.innerHTML = "";
+      if (footEl) footEl.textContent = "";
+      return;
+    }
+    const mappedRows = (allBos || []).filter((b) => b.product === product);
+    const rawRows = mappedRows
+      .map((b) => (slots.backorder.rows || [])[b.id])
+      .filter(Boolean);
+    if (!rawRows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:12px">No back order rows for this product.</p>`;
+      if (footEl) footEl.textContent = "0 rows";
+      return;
+    }
+    const sample = rawRows[0];
+    const cols = boFileColumns(sample);
+    const limit = Math.min(rawRows.length, MAX_ROWS);
+    const colCount = cols.length;
+
+    tableEl.innerHTML = `<table class="bo-table stock-file-table">
+      <thead><tr>${cols.map((c) =>
+        `<th title="Column ${c.letter}">${escapeHtml(c.label)}<span class="stock-col-letter">${c.letter}</span></th>`
+      ).join("")}</tr></thead>
+      <tbody>${rawRows.slice(0, limit).map((r) => `
+        <tr>${cols.map((c) =>
+          `<td>${escapeHtml(cellToString(boFileCell(r, c)))}</td>`
+        ).join("")}</tr>`
+      ).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td colspan="${Math.max(1, colCount - 1)}"><b>${formatNumber(rawRows.length)} row${rawRows.length === 1 ? "" : "s"} · ${formatNumber(colCount)} columns</b></td>
+      </tr></tfoot>
+    </table>`;
+    if (footEl) {
+      footEl.textContent = rawRows.length > limit
+        ? `Showing ${limit.toLocaleString()} of ${rawRows.length.toLocaleString()} rows · ${colCount} columns`
+        : `${rawRows.length.toLocaleString()} row${rawRows.length === 1 ? "" : "s"} · ${colCount} columns`;
+    }
+  }
+
+  function renderBoCarDetail(allBos, filteredList) {
+    const select = $("#bo-car-select");
+    const summary = $("#bo-car-summary");
+    const tableEl = $("#bo-car-sfx-table");
+    const rowsTableEl = $("#bo-car-rows-table");
+    const rowsFootEl = $("#bo-car-rows-foot");
+    if (!select || !summary || !tableEl) return;
+
+    const products = [...new Set((allBos || []).map((b) => b.product).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">Select a product…</option>` +
+      products.map((p) => `<option value="${escapeHtml(p)}"${p === boView.car ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
+
+    if (!boView.car) {
+      summary.innerHTML = `<p class="foot" style="margin:0">Select a car/product above (or click a product in the table) to see suffix BO counts, payment mix, and all back order rows.</p>`;
+      tableEl.innerHTML = "";
+      renderBoCarRowsTable(null, "", rowsTableEl, rowsFootEl);
+      upsertChart("chart-bo-car-sfx", "bar", ["—"], [0], { horizontal: true, backgroundColor: "rgba(148,163,184,0.5)" });
+      upsertChart("chart-bo-car-pay", "doughnut", ["No selection"], [1]);
+      return;
+    }
+
+    const source = filteredList || allBos || [];
+    const carRows = source.filter((b) => b.product === boView.car);
+    const m = boMetrics(carRows);
+    const pay = countPayTypes(carRows);
+    summary.innerHTML = `
+      <div class="bo-car-kpis">
+        <div class="bo-kpi ok"><div class="lab">Product</div><div class="val" style="font-size:1.05rem">${escapeHtml(boView.car)}</div><div class="sub">selected car</div></div>
+        <div class="bo-kpi ok"><div class="lab">Total BO</div><div class="val">${formatNumber(m.total)}</div><div class="sub">for this product</div></div>
+        <div class="bo-kpi ok"><div class="lab">Confirmed</div><div class="val">${formatNumber(m.confirmed)}</div><div class="sub">${(m.confirmPct * 100).toFixed(1)}%</div></div>
+        <div class="bo-kpi warn"><div class="lab">Not Confirmed</div><div class="val">${formatNumber(m.notConfirmed)}</div><div class="sub">waiting</div></div>
+        <div class="bo-kpi ${kpiStatus("aging", m)}"><div class="lab">Avg Aging</div><div class="val">${formatNumber(m.avgAging)}d</div><div class="sub">days</div></div>
+        <div class="bo-kpi ok"><div class="lab">Cash</div><div class="val">${formatNumber(pay.Cash)}</div><div class="sub">sales type</div></div>
+        <div class="bo-kpi ok"><div class="lab">Bank</div><div class="val">${formatNumber(pay.Bank)}</div><div class="sub">sales type</div></div>
+        <div class="bo-kpi ok"><div class="lab">Employee</div><div class="val">${formatNumber(pay.Employee)}</div><div class="sub">sales type</div></div>
+        <div class="bo-kpi ok"><div class="lab">Fleet</div><div class="val">${formatNumber(pay.Fleet)}</div><div class="sub">sales type</div></div>
+      </div>`;
+
+    const sfxRows = [...groupBoBy(carRows, (b) => b.sfx || "—").entries()]
+      .map(([sfx, items]) => {
+        const metrics = boMetrics(items);
+        const byType = countPayTypes(items);
+        return { sfx, ...metrics, byType };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    tableEl.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>Suffix / SFX</th>
+        <th>Total BO</th>
+        <th>Confirmed</th>
+        <th>Not Confirmed</th>
+        <th>Avg Aging</th>
+        <th>Cash</th>
+        <th>Bank</th>
+        <th>Employee</th>
+        <th>Fleet</th>
+        <th>ALJUF</th>
+      </tr></thead>
+      <tbody>${sfxRows.map((r) => `
+        <tr>
+          <td><b>${escapeHtml(r.sfx)}</b></td>
+          <td><b>${formatNumber(r.total)}</b></td>
+          <td>${formatNumber(r.confirmed)}</td>
+          <td>${formatNumber(r.notConfirmed)}</td>
+          <td class="${heatAging(r.avgAging)}">${formatNumber(r.avgAging)}d</td>
+          <td>${formatNumber(r.byType.Cash || 0)}</td>
+          <td>${formatNumber(r.byType.Bank || 0)}</td>
+          <td>${formatNumber(r.byType.Employee || 0)}</td>
+          <td>${formatNumber(r.byType.Fleet || 0)}</td>
+          <td>${formatNumber(r.byType.ALJUF || 0)}</td>
+        </tr>`).join("") || `<tr><td colspan="10" class="foot">No suffix rows for this product</td></tr>`}</tbody>
+    </table>`;
+
+    const topSfx = sfxRows.slice(0, 15);
+    upsertChart("chart-bo-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
+      horizontal: true,
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
+      _wide: {
+        labels: sfxRows.map((r) => r.sfx),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxRows),
+          rowMeta: boSfxRowMeta(sfxRows),
+        },
+      },
+    });
+    const payLabels = ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0);
+    const payValues = payLabels.map((t) => pay[t] || 0);
+    upsertChart("chart-bo-car-pay", "doughnut", payLabels, payValues, {
+      _wide: {
+        labels: payLabels,
+        values: payValues,
+        extra: {
+          legend: true,
+          cutout: "62%",
+        },
+      },
+    });
+    renderBoCarRowsTable(allBos, boView.car, rowsTableEl, rowsFootEl);
+  }
+
+  function renderBoSalesTypeTable(list) {
+    const el = $("#bo-salestype-table");
+    if (!el) return;
+    const rows = [...groupBoBy(list, (b) => b.salesType).entries()]
+      .map(([salesType, items]) => ({ salesType, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr><th>Sales Type</th><th>Total BO</th><th>Confirmed</th><th>Not Confirmed</th><th>Orders &gt;60 Days</th><th>Conf %</th></tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr>
+          <td><button type="button" class="bo-link" data-bo-type="${escapeHtml(r.salesType)}">${escapeHtml(r.salesType)}</button></td>
+          <td>${formatNumber(r.total)}</td>
+          <td>${formatNumber(r.confirmed)}</td>
+          <td>${formatNumber(r.notConfirmed)}</td>
+          <td>${formatNumber(r.over60)}</td>
+          <td class="${heatConfirm(r.confirmPct)}">${(r.confirmPct * 100).toFixed(1)}%</td>
+        </tr>`).join("") || `<tr><td colspan="6" class="foot">No rows</td></tr>`}</tbody>
+    </table>`;
+  }
+
+  function renderBoSfxTable(list) {
+    const el = $("#bo-sfx-table");
+    if (!el) return;
+    const types = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
+    const rows = [...groupBoBy(list, (b) => b.sfx).entries()]
+      .map(([sfx, items]) => {
+        const m = boMetrics(items);
+        const byType = {};
+        types.forEach((t) => { byType[t] = items.filter((b) => b.salesType === t).length; });
+        return { sfx, ...m, byType };
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 40);
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>SFX/Grade</th><th>Total BO</th>${types.map((t) => `<th>${t}</th>`).join("")}
+        <th>Confirmed</th><th>Not Confirmed</th><th>&gt;60 Days</th>
+      </tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr>
+          <td><button type="button" class="bo-link" data-bo-sfx="${escapeHtml(r.sfx)}">${escapeHtml(r.sfx)}</button></td>
+          <td>${formatNumber(r.total)}</td>
+          ${types.map((t) => `<td>${formatNumber(r.byType[t] || 0)}</td>`).join("")}
+          <td>${formatNumber(r.confirmed)}</td>
+          <td>${formatNumber(r.notConfirmed)}</td>
+          <td class="${heatAging(r.over60 > 0 ? 61 : 0)}">${formatNumber(r.over60)}</td>
+        </tr>`).join("") || `<tr><td colspan="10" class="foot">No rows</td></tr>`}</tbody>
+    </table>`;
+  }
+
+  function agingBucketCounts(list) {
+    const buckets = [
+      { label: "0-30", min: 0, max: 30, color: "rgba(235, 10, 30, 0.9)" },
+      { label: "31-60", min: 31, max: 60, color: "rgba(234, 88, 12, 0.9)" },
+      { label: "61-90", min: 61, max: 90, color: "rgba(202, 138, 4, 0.9)" },
+      { label: "91-180", min: 91, max: 180, color: "rgba(56, 189, 248, 0.9)" },
+      { label: ">180", min: 181, max: Infinity, color: "rgba(30, 64, 175, 0.92)" },
+    ];
+    return buckets.map((b) => {
+      const count = list.filter((row) => {
+        const age = Number(row.aging);
+        if (!Number.isFinite(age)) return false;
+        return age >= b.min && age <= b.max;
+      }).length;
+      return { ...b, count };
+    });
+  }
+
+  function boConfirmDatasets(rows) {
+    return [
+      {
+        label: "Confirmed",
+        data: rows.map((r) => r.confirmed),
+        backgroundColor: "rgba(13, 148, 136, 0.85)",
+        borderWidth: 0,
+        borderRadius: 4,
+      },
+      {
+        label: "Not Confirmed",
+        data: rows.map((r) => r.notConfirmed),
+        backgroundColor: "rgba(235, 10, 30, 0.82)",
+        borderWidth: 0,
+        borderRadius: 4,
+      },
+    ];
+  }
+
+  function boProductRowMeta(rows) {
+    return rows.map((a) => ({
+      name: a.product,
+      total: a.total,
+      confirmed: a.confirmed,
+      notConfirmed: a.notConfirmed,
+      confirmPct: a.confirmPct,
+      avgAging: a.avgAging,
+    }));
+  }
+
+  function boSfxRowMeta(rows) {
+    return rows.map((a) => ({
+      name: a.sfx,
+      total: a.total,
+      confirmed: a.confirmed,
+      notConfirmed: a.notConfirmed,
+      confirmPct: a.confirmPct,
+      avgAging: a.avgAging,
+    }));
+  }
+
+  /** Rebuild full-detail Wide snapshot for BO charts from current filters (not the compact Top-N card). */
+  function buildBoWideSnapshot(sourceId) {
+    const d = window._data;
+    if (!d || !Array.isArray(d.bos)) return null;
+    const list = filteredBos(d);
+    const aggs = typeof productAgg === "function" ? productAgg(list) : [];
+    const m = boMetrics(list);
+    const allProducts = aggs.slice();
+    const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
+      .map(([salesType, items]) => ({ salesType, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    const sfxAll = [...groupBoBy(list, (b) => b.sfx).entries()]
+      .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    const buckets = agingBucketCounts(list);
+    const agingAll = aggs.slice().sort((a, b) => b.avgAging - a.avgAging);
+    const totalBo = m.total || allProducts.reduce((s, a) => s + a.total, 0) || 1;
+
+    const pack = (type, labels, values, extra) => ({
+      type,
+      labels: labels ? labels.slice() : [],
+      values: Array.isArray(values) ? values.slice() : values,
+      extra: cloneChartExtra(extra || {}),
+    });
+
+    switch (sourceId) {
+      case "chart-bo-top5":
+      case "chart-bo-backlog":
+      case "chart-bo-confirm":
+        return pack("bar", allProducts.map((a) => a.product), null, {
+          horizontal: sourceId !== "chart-bo-confirm",
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        });
+      case "chart-bo-status":
+        return pack("doughnut",
+          [`Confirmed ${+(m.confirmPct * 100).toFixed(1)}%`, `Not Confirmed ${+((1 - m.confirmPct) * 100).toFixed(1)}%`],
+          [m.confirmed || 0, m.notConfirmed || 0],
+          {
+            legend: true,
+            cutout: "62%",
+            backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+          });
+      case "chart-bo-aging-buckets":
+        return pack("bar", buckets.map((b) => b.label), buckets.map((b) => b.count), {
+          backgroundColor: buckets.map((b) => b.color),
+          showValues: true,
+        });
+      case "chart-bo-aging":
+        return pack("bar", agingAll.map((a) => a.product), agingAll.map((a) => a.avgAging), {
+          horizontal: true,
+          valueSuffix: "d",
+          showValues: true,
+          backgroundColor: agingAll.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+          rowMeta: boProductRowMeta(agingAll),
+        });
+      case "chart-bo-contrib":
+        return pack("bar", allProducts.map((a) => a.product), allProducts.map((a) => +((a.total / totalBo) * 100).toFixed(1)), {
+          horizontal: true,
+          backgroundColor: "rgba(235, 10, 30, 0.85)",
+          valueSuffix: "%",
+          showValues: true,
+          rowMeta: boProductRowMeta(allProducts),
+        });
+      case "chart-bo-salestype":
+        return pack("bar", typeRows.map((r) => r.salesType), null, {
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(typeRows),
+          rowMeta: typeRows.map((r) => ({
+            name: r.salesType,
+            total: r.total,
+            confirmed: r.confirmed,
+            notConfirmed: r.notConfirmed,
+            confirmPct: r.confirmPct,
+            avgAging: r.avgAging,
+          })),
+        });
+      case "chart-bo-sfx":
+        return pack("bar", sfxAll.map((r) => r.sfx), null, {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxAll),
+          rowMeta: boSfxRowMeta(sfxAll),
+        });
+      case "chart-bo-sfx-confirm":
+        return pack("bar", sfxAll.map((r) => r.sfx), sfxAll.map((r) => +(r.confirmPct * 100).toFixed(1)), {
+          horizontal: true,
+          max: 100,
+          valueSuffix: "%",
+          showValues: true,
+          backgroundColor: sfxAll.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
+          rowMeta: boSfxRowMeta(sfxAll),
+        });
+      case "chart-bo-car-sfx": {
+        if (!boView.car) return chartSnapshots[sourceId] || null;
+        const carRows = list.filter((b) => b.product === boView.car);
+        const sfxRows = [...groupBoBy(carRows, (b) => b.sfx || "—").entries()]
+          .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+          .sort((a, b) => b.total - a.total);
+        return pack("bar", sfxRows.map((r) => r.sfx), null, {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxRows),
+          rowMeta: boSfxRowMeta(sfxRows),
+        });
+      }
+      case "chart-bo-car-pay": {
+        if (!boView.car) return chartSnapshots[sourceId] || null;
+        const carRows = list.filter((b) => b.product === boView.car);
+        const pay = countPayTypes(carRows);
+        const payLabels = ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0);
+        const payValues = payLabels.map((t) => pay[t] || 0);
+        return pack("doughnut", payLabels, payValues, { legend: true, cutout: "62%" });
+      }
+      default:
+        return null;
+    }
+  }
+
+  function renderBoCharts(list, aggs, metrics) {
+    const m = metrics || boMetrics(list);
+    const top5 = aggs.slice(0, 5);
+    const allProducts = aggs.slice();
+    upsertChart("chart-bo-top5", "bar", top5.map((a) => a.product), top5.map((a) => a.total), {
+      horizontal: true,
+      backgroundColor: top5.map((_, i) => i === 0 ? "rgba(79, 157, 255, 0.95)" : "rgba(59, 130, 246, 0.62)"),
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        },
+      },
+    });
+
+    const confPct = +(m.confirmPct * 100).toFixed(1);
+    const notPct = +((1 - m.confirmPct) * 100).toFixed(1);
+    const buckets = agingBucketCounts(list);
+    upsertChart("chart-bo-status", "doughnut",
+      [`Confirmed ${confPct}%`, `Not Confirmed ${notPct}%`],
+      [m.confirmed || 0, m.notConfirmed || 0],
+      {
+        legend: false,
+        cutout: "70%",
+        backgroundColor: ["rgba(52, 211, 153, 0.92)", "rgba(235, 10, 30, 0.9)"],
+        _wide: {
+          labels: [
+            `Confirmed ${confPct}%`,
+            `Not Confirmed ${notPct}%`,
+          ],
+          values: [m.confirmed || 0, m.notConfirmed || 0],
+          type: "doughnut",
+          extra: {
+            legend: true,
+            cutout: "62%",
+            backgroundColor: ["rgba(52, 211, 153, 0.92)", "rgba(235, 10, 30, 0.9)"],
+          },
+        },
+      }
+    );
+    const center = $("#bo-status-center");
+    if (center) {
+      center.hidden = false;
+      center.innerHTML = `<strong>${formatNumber(m.total)}</strong><span>Total Orders</span>`;
+    }
+
+    upsertChart("chart-bo-aging-buckets", "bar", buckets.map((b) => b.label), buckets.map((b) => b.count), {
+      backgroundColor: buckets.map((b) => b.color),
+      _wide: {
+        labels: buckets.map((b) => b.label),
+        values: buckets.map((b) => b.count),
+        extra: {
+          backgroundColor: buckets.map((b) => b.color),
+          showValues: true,
+        },
+      },
+    });
+
+    const top = aggs.slice(0, 10);
+    const labels = top.map((a) => a.product);
+    upsertChart("chart-bo-backlog", "bar", labels, top.map((a) => a.total), {
+      horizontal: true,
+      backgroundColor: top.map((_, i) => i === 0 ? "rgba(235, 10, 30, 0.92)" : "rgba(235, 10, 30, 0.72)"),
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        },
+      },
+    });
+
+    const confLabels = aggs.slice(0, 12).map((a) => a.product);
+    upsertChart("chart-bo-confirm", "bar", confLabels, null, {
+      legend: true,
+      datasets: [
+        {
+          label: "Confirmed",
+          data: aggs.slice(0, 12).map((a) => a.confirmed),
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+        {
+          label: "Not Confirmed",
+          data: aggs.slice(0, 12).map((a) => a.notConfirmed),
+          backgroundColor: "rgba(235, 10, 30, 0.82)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+      ],
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: null,
+        extra: {
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        },
+      },
+    });
+
+    const agingRows = aggs.slice().sort((a, b) => b.avgAging - a.avgAging).slice(0, 12);
+    const agingAll = aggs.slice().sort((a, b) => b.avgAging - a.avgAging);
+    upsertChart("chart-bo-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
+      horizontal: true,
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+      _wide: {
+        labels: agingAll.map((a) => a.product),
+        values: agingAll.map((a) => a.avgAging),
+        extra: {
+          horizontal: true,
+          valueSuffix: "d",
+          showValues: true,
+          backgroundColor: agingAll.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+          rowMeta: boProductRowMeta(agingAll),
+        },
+      },
+    });
+
+    const contrib = aggs.slice(0, 10);
+    const totalBo = m.total || contrib.reduce((s, a) => s + a.total, 0) || 1;
+    upsertChart("chart-bo-contrib", "bar", contrib.map((a) => a.product), contrib.map((a) => +((a.total / totalBo) * 100).toFixed(1)), {
+      backgroundColor: "rgba(235, 10, 30, 0.85)",
+      valueSuffix: "%",
+      showValues: true,
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: allProducts.map((a) => +((a.total / totalBo) * 100).toFixed(1)),
+        extra: {
+          horizontal: true,
+          backgroundColor: "rgba(235, 10, 30, 0.85)",
+          valueSuffix: "%",
+          showValues: true,
+          rowMeta: allProducts.map((a) => ({
+            name: a.product,
+            total: a.total,
+            confirmed: a.confirmed,
+            notConfirmed: a.notConfirmed,
+            confirmPct: a.confirmPct,
+            avgAging: a.avgAging,
+          })),
+        },
+      },
+    });
+
+    const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
+      .map(([salesType, items]) => ({ salesType, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    upsertChart("chart-bo-salestype", "bar", typeRows.map((r) => r.salesType), null, {
+      legend: true,
+      datasets: [
+        {
+          label: "Confirmed",
+          data: typeRows.map((r) => r.confirmed),
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+        {
+          label: "Not Confirmed",
+          data: typeRows.map((r) => r.notConfirmed),
+          backgroundColor: "rgba(235, 10, 30, 0.82)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+      ],
+      _wide: {
+        labels: typeRows.map((r) => r.salesType),
+        values: null,
+        extra: {
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(typeRows),
+          rowMeta: typeRows.map((r) => ({
+            name: r.salesType,
+            total: r.total,
+            confirmed: r.confirmed,
+            notConfirmed: r.notConfirmed,
+            confirmPct: r.confirmPct,
+            avgAging: r.avgAging,
+          })),
+        },
+      },
+    });
+
+    const sfxAll = [...groupBoBy(list, (b) => b.sfx).entries()]
+      .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    const sfxRows = sfxAll.slice(0, 12);
+    upsertChart("chart-bo-sfx", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => r.total), {
+      horizontal: true,
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
+      _wide: {
+        labels: sfxAll.map((r) => r.sfx),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxAll),
+          rowMeta: boSfxRowMeta(sfxAll),
+        },
+      },
+    });
+    upsertChart("chart-bo-sfx-confirm", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => +(r.confirmPct * 100).toFixed(1)), {
+      horizontal: true,
+      max: 100,
+      backgroundColor: sfxRows.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
+      _wide: {
+        labels: sfxAll.map((r) => r.sfx),
+        values: sfxAll.map((r) => +(r.confirmPct * 100).toFixed(1)),
+        extra: {
+          horizontal: true,
+          max: 100,
+          valueSuffix: "%",
+          showValues: true,
+          backgroundColor: sfxAll.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
+          rowMeta: boSfxRowMeta(sfxAll),
+        },
+      },
+    });
+  }
+
+  /* ——— BO & Allocation & Stock gap dashboard ——— */
+  let basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: "shortfall", sortGap: "gap", barShowAll: false };
+  let basAllocView = { search: "", salesStatus: "", source: "", score: "", selected: "", tab: "overview" };
+  let basAllocShown = [];
+  const ACT_CONFIG = {
+    coverageSplit: 1.0,
+    demandSplitAuto: true,
+    demandSplit: null,
+  };
+  let actTowerCache = null;
+
+  function allocProductKey(p) {
+    return upperTrim(p).replace(/\s+/g, " ");
+  }
+
+  function allocSfxParts(sfx) {
+    const full = upperTrim(sfx);
+    if (!full) return [];
+    const parts = full.split(/[/,&]+|\s+\/\s+/).map((s) => s.trim()).filter(Boolean);
+    return [...new Set([full, ...parts])];
+  }
+
+  function allocCompact(s) {
+    return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  /** Numeric suffix aliases: 1 ↔ 01, 3 ↔ 03 (HILUX DC plan / RTL). */
+  function allocNumericAliases(compact) {
+    const c = String(compact || "");
+    if (!/^\d+$/.test(c)) return [c];
+    const stripped = c.replace(/^0+/, "") || "0";
+    const padded2 = stripped.padStart(2, "0");
+    return [...new Set([c, stripped, padded2])];
+  }
+
+  /** Strip trailing HEV / hybrid markers so "S1 HEV" matches plan "S1". */
+  function allocSfxCoreTokens(compactOrRaw) {
+    const c = allocCompact(compactOrRaw);
+    if (!c) return [];
+    const tokens = new Set([c]);
+    const noHev = c.replace(/(HEV|HYBRID|PHEV)$/i, "");
+    if (noHev && noHev !== c) tokens.add(noHev);
+    allocNumericAliases(c).forEach((a) => tokens.add(a));
+    if (noHev) allocNumericAliases(noHev).forEach((a) => tokens.add(a));
+    return [...tokens];
+  }
+
+  function isFortunerProduct(product) {
+    return allocCompact(product).includes("FORTUNER");
+  }
+
+  /** Fortuner grades are identified by the first two letters/digits (G2, G4, D4, …). */
+  function fortunerSuffixKey(sfx) {
+    const compact = allocCompact(sfx);
+    return compact ? compact.slice(0, 2) : "";
+  }
+
+  function normalizeProductSuffix(product, suffix) {
+    const s = cellToString(suffix).trim();
+    if (!s || s === "—") return s || "—";
+    if (!isFortunerProduct(product)) return s;
+    return fortunerSuffixKey(s) || s;
+  }
+
+  function productMatchesAlloc(boProduct, allocProduct) {
+    const b = allocProductKey(boProduct).replace(/^TOYOTA\s+/, "");
+    const a = allocProductKey(allocProduct);
+    if (!a || !b || b === "—") return false;
+    if (b === a) return true;
+    const bC = allocCompact(b);
+    const aC = allocCompact(a);
+    // RAV 4 ↔ RAV4 (spacing / punctuation only)
+    if (bC && aC && bC === aC) return true;
+    // LC300 ↔ LAND CRUISER 300 / LC 300
+    if (aC === "LC300" && (bC === "LC300" || bC.includes("LANDCRUISER300") || /^LC0*300/.test(bC))) return true;
+    if (bC === "LC300" && (aC === "LC300" || aC.includes("LANDCRUISER300"))) return true;
+    // "CAMRY HEV" may match plan CAMRY, but not when a longer plan product fits (e.g. COROLLA CR)
+    if (!b.startsWith(a + " ")) return false;
+    const longerHit = ALLOCATION_ROWS.some((r) => {
+      if (r.kind !== "leaf") return false;
+      const o = allocProductKey(r.product);
+      if (!o || o === a || o.length <= a.length) return false;
+      return b === o || b.startsWith(o + " ") || allocCompact(o) === bC;
+    });
+    return !longerHit;
+  }
+
+  function suffixMatchesAlloc(boSuffix, allocSfx, product) {
+    const b = upperTrim(boSuffix);
+    if (!b || b === "—") return false;
+    const bC = allocCompact(b);
+    if (!bC) return false;
+
+    // Fortuner: match by first two letters (G2 GX2 4X2 ↔ G2, G4 GX2 4X4 ↔ G4)
+    if (isFortunerProduct(product)) {
+      const bKey = fortunerSuffixKey(b);
+      if (!bKey) return false;
+      if (fortunerSuffixKey(allocSfx) === bKey) return true;
+      return allocSfxParts(allocSfx).some((v) => fortunerSuffixKey(v) === bKey);
+    }
+
+    const boTokenSet = new Set(allocSfxCoreTokens(b));
+    b.split(/[\s\/,&._-]+/).forEach((t) => {
+      allocSfxCoreTokens(t).forEach((x) => boTokenSet.add(x));
+    });
+
+    const allocParts = allocSfxParts(allocSfx);
+    return allocParts.some((part) => {
+      const cores = allocSfxCoreTokens(part);
+      if (!cores.length) return false;
+      // Exact compact or numeric/HEV-normalized token hit
+      return cores.some((p) => boTokenSet.has(p));
+    });
+  }
+
+  /**
+   * Score a suffix match — prefer exact code over slash-group (D3/AA) or weak contains.
+   * Higher = better. -1 = no match.
+   */
+  function scoreSuffixMatch(boSuffix, allocSfx, product) {
+    if (!suffixMatchesAlloc(boSuffix, allocSfx, product)) return -1;
+    const bC = allocCompact(boSuffix);
+    const aC = allocCompact(allocSfx);
+    const bCores = new Set(allocSfxCoreTokens(boSuffix));
+    if (bC && aC && (bC === aC || bCores.has(aC))) return 10000 + aC.length;
+    const parts = allocSfxParts(allocSfx).map(allocCompact).filter(Boolean);
+    if (parts.length === 1 && parts.some((p) => bCores.has(p) || allocSfxCoreTokens(p).some((x) => bCores.has(x)))) {
+      return 8000 + parts[0].length;
+    }
+    if (parts.some((p) => bCores.has(p) || allocSfxCoreTokens(p).some((x) => bCores.has(x)))) {
+      return 2000 + Math.min(...parts.map((p) => p.length));
+    }
+    return aC.length;
+  }
+
+  function matchRtlToAllocLeaf(rtlRow) {
+    let best = null;
+    let bestScore = -1;
+    let bestProdLen = -1;
+    for (const leaf of ALLOCATION_ROWS) {
+      if (leaf.kind !== "leaf") continue;
+      if (!productMatchesAlloc(rtlRow.product, leaf.product)) continue;
+      const score = scoreSuffixMatch(rtlRow.suffix || rtlRow.sfx, leaf.sfx, leaf.product || rtlRow.product);
+      if (score < 0) continue;
+      const prodLen = allocCompact(leaf.product).length;
+      if (score > bestScore || (score === bestScore && prodLen > bestProdLen)) {
+        best = leaf;
+        bestScore = score;
+        bestProdLen = prodLen;
+      }
+    }
+    return best;
+  }
+
+  function basBoUnitCount(bo) {
+    const raw = (slots.backorder.rows || [])[bo.id];
+    if (!raw) return 1;
+    const qty = boQtyValue(raw);
+    return qty > 0 ? qty : 1;
+  }
+
+  function buildBasRows(d, opts = {}) {
+    let bos = d.bos || [];
+    if (opts.confirmedOnly) bos = bos.filter((bo) => bo.confirmed);
+    const stockRows = [...(d.rtl || []), ...(d.central || [])];
+    const leaves = ALLOCATION_ROWS.filter((r) => r.kind === "leaf");
+    const boByLeaf = new Map();
+    leaves.forEach((row) => boByLeaf.set(row.id, 0));
+    const bestLeafBySpec = new Map();
+    bos.forEach((bo) => {
+      const spec = `${bo.product || ""}\0${bo.suffix || bo.sfx || ""}`;
+      let best = bestLeafBySpec.get(spec);
+      if (best === undefined) {
+        best = null;
+        let bestScore = -1;
+        leaves.forEach((row) => {
+          if (!productMatchesAlloc(bo.product, row.product)) return;
+          const score = scoreSuffixMatch(bo.suffix || bo.sfx, row.sfx, row.product || bo.product);
+          if (score < 0) return;
+          if (score > bestScore) {
+            best = row;
+            bestScore = score;
+          }
+        });
+        bestLeafBySpec.set(spec, best);
+      }
+      if (best) boByLeaf.set(best.id, (boByLeaf.get(best.id) || 0) + basBoUnitCount(bo));
+    });
+    const stockGroups = new Map();
+    stockRows.forEach((s) => {
+      const spec = `${s.product || ""}\0${s.suffix || ""}`;
+      const group = stockGroups.get(spec);
+      if (group) group.count += 1;
+      else stockGroups.set(spec, { product: s.product, suffix: s.suffix, count: 1 });
+    });
+    const stockCountByLeaf = new Map();
+    leaves.forEach((row) => stockCountByLeaf.set(row.id, 0));
+    stockGroups.forEach((group) => {
+      leaves.forEach((row) => {
+        if (!productMatchesAlloc(group.product, row.product)) return;
+        if (!suffixMatchesAlloc(group.suffix, row.sfx, row.product || group.product)) return;
+        stockCountByLeaf.set(row.id, stockCountByLeaf.get(row.id) + group.count);
+      });
+    });
+    return leaves.map((row) => {
+      const allocation = Number(allocationValues[row.id]) || 0;
+      const boCount = boByLeaf.get(row.id) || 0;
+      const stockCount = stockCountByLeaf.get(row.id) || 0;
+      const gap = boCount - allocation;
+      // Gap = BO − Allocation: positive = shortfall (below plan), negative = surplus (above plan)
+      const status = gap > 0 ? "below" : gap < 0 ? "above" : "match";
+      return {
+        id: row.id,
+        seg: row.seg,
+        product: row.product,
+        sfx: row.sfx,
+        allocation,
+        boCount,
+        stockCount,
+        gap,
+        status,
+        netCover: allocation + stockCount - boCount,
+      };
+    });
+  }
+
+  function basGapLabel(status) {
+    if (status === "above") return "Above";
+    if (status === "below") return "Below";
+    return "On track";
+  }
+
+  function basFormatGap(gap) {
+    return (gap > 0 ? "+" : "") + formatNumber(gap);
+  }
+
+  function basGapBadge(status, gap) {
+    const cls = status === "above" ? "ok" : status === "below" ? "bad" : "warn";
+    return `<span class="badge ${cls}">${basGapLabel(status)} (${basFormatGap(gap)})</span>`;
+  }
+
+  function renderBasKpis(rows, opts = {}) {
+    const el = $(opts.kpiEl || "#bas-kpis");
+    if (!el) return;
+    const totalAlloc = rows.reduce((s, r) => s + r.allocation, 0);
+    const totalBo = rows.reduce((s, r) => s + r.boCount, 0);
+    const totalStock = rows.reduce((s, r) => s + r.stockCount, 0);
+    const totalGap = totalBo - totalAlloc;
+    const below = rows.filter((r) => r.status === "below").length;
+    const above = rows.filter((r) => r.status === "above").length;
+    const boLabel = opts.boLabel || "Matched Back Orders";
+    const boSub = opts.boSub || "Same product + suffix";
+    const lateRtl = opts.lateRtl != null ? opts.lateRtl : null;
+    const resReceived = opts.resReceived != null ? opts.resReceived : null;
+    const totalDemand = opts.totalDemand != null ? opts.totalDemand : null;
+
+    if (opts.compact) {
+    el.innerHTML = [
+      { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
+      { label: boLabel, val: formatNumber(totalBo), sub: boSub },
+      { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
+        { label: "Overall gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad" },
+      { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
+    ].map((k) => `
+      <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+        <div class="lbl">${k.label}</div>
+        <div class="val">${k.val}</div>
+        <div class="sub">${k.sub}</div>
+      </article>
+    `).join("");
+      return;
+    }
+
+    const cards = [
+      { label: "Total Allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan", icon: "▣", tone: "tone-blue" },
+      { label: "Matched Back Orders", val: formatNumber(totalBo), sub: boSub, icon: "▤", tone: "tone-green" },
+      { label: "Available Stock", val: formatNumber(totalStock), sub: "RTL + Central", icon: "◈", tone: "tone-blue" },
+      { label: "Total Back Orders", val: totalDemand != null ? formatNumber(totalDemand) : formatNumber(totalBo), sub: totalDemand != null ? "Customer demand · BO file" : "Matched demand", icon: "▦", tone: "tone-amber" },
+      { label: "Overall Gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad", tone: totalGap <= 0 ? "tone-green" : "tone-red", icon: "⇄" },
+      {
+        label: "Received from RTL",
+        val: resReceived != null ? formatNumber(resReceived) : "N/A",
+        sub: resReceived != null
+          ? (lateRtl
+            ? `RES schedule · ${formatNumber(lateRtl)} late`
+            : "RES · schedule")
+          : "Upload RTL schedule",
+        cls: resReceived ? "ok" : "",
+        tone: resReceived ? "tone-green" : "tone-violet",
+        icon: "↓",
+      },
+    ];
+    el.innerHTML = cards.map((k) => `
+      <article class="bo-kpi act-kpi${k.tone ? " " + k.tone : ""}${k.cls ? " " + k.cls : ""}">
+        <div class="act-kpi-icon" aria-hidden="true">${k.icon}</div>
+        <div class="lbl">${k.label}</div>
+        <div class="val">${k.val}</div>
+        <div class="sub">${k.sub}</div>
+      </article>
+    `).join("");
+  }
+
+  function aggregateBasByProduct(rows) {
+    const map = new Map();
+    (rows || []).forEach((r) => {
+      const key = r.product || "—";
+      if (!map.has(key)) {
+        map.set(key, {
+          product: key,
+          seg: r.seg || "",
+          allocation: 0,
+          boCount: 0,
+          stockCount: 0,
+          gap: 0,
+          leaves: [],
+        });
+      }
+      const g = map.get(key);
+      g.allocation += r.allocation;
+      g.boCount += r.boCount;
+      g.stockCount += r.stockCount;
+      g.leaves.push(r);
+    });
+    return [...map.values()].map((g) => {
+      g.gap = g.boCount - g.allocation;
+      g.status = g.gap > 0 ? "below" : g.gap < 0 ? "above" : "match";
+      g.coverage = g.boCount > 0 ? g.allocation / g.boCount : (g.allocation > 0 ? Infinity : 0);
+      g.netCover = g.allocation + g.stockCount - g.boCount;
+      return g;
+    });
+  }
+
+  function actSupplyGapOf(p) {
+    return (Number(p && p.boCount) || 0) - (Number(p && p.allocation) || 0) - (Number(p && p.stockCount) || 0);
+  }
+
+  function actSupplyCoverPct(p) {
+    const bo = Number(p && p.boCount) || 0;
+    if (!bo) return null;
+    return (((Number(p.allocation) || 0) + (Number(p.stockCount) || 0)) / bo) * 100;
+  }
+
+  function actFormatSupplyGap(p) {
+    const gap = actSupplyGapOf(p);
+    const n = formatNumber(Math.abs(gap));
+    if (gap > 0) return `${n} short`;
+    if (gap < 0) return `${n} surplus`;
+    return "0";
+  }
+
+  function actFormatCoverPct(p) {
+    const cov = actSupplyCoverPct(p);
+    return cov == null ? "—" : `${Math.round(cov)}%`;
+  }
+
+  function actSupplyStatus(p) {
+    const cov = actSupplyCoverPct(p);
+    if (cov == null) {
+      return actSupplyGapOf(p) > 0
+        ? { key: "attention", icon: "🟠", label: "Attention — moderate coverage" }
+        : { key: "healthy", icon: "🟢", label: "Healthy — strong coverage" };
+    }
+    if (cov < 50) return { key: "critical", icon: "🔴", label: "Critical — very low coverage" };
+    if (cov < 90) return { key: "attention", icon: "🟠", label: "Attention — moderate coverage" };
+    return { key: "healthy", icon: "🟢", label: "Healthy — strong coverage" };
+  }
+
+  function sortSupplyGapProducts(list, sortKey) {
+    const rows = [...(list || [])];
+    rows.sort((a, b) => {
+      if (sortKey === "bo") return b.boCount - a.boCount || actSupplyGapOf(b) - actSupplyGapOf(a);
+      if (sortKey === "stock") return b.stockCount - a.stockCount || actSupplyGapOf(b) - actSupplyGapOf(a);
+      if (sortKey === "lowcov" || sortKey === "bestcov") {
+        const ca = actSupplyCoverPct(a);
+        const cb = actSupplyCoverPct(b);
+        if (ca == null && cb == null) return actSupplyGapOf(b) - actSupplyGapOf(a);
+        if (ca == null) return 1;
+        if (cb == null) return -1;
+        return sortKey === "lowcov" ? ca - cb : cb - ca;
+      }
+      return actSupplyGapOf(b) - actSupplyGapOf(a) || b.boCount - a.boCount;
+    });
+    return rows;
+  }
+
+  function renderActSupplyInsight(barSorted) {
+    const el = $("#act-supply-insight");
+    if (!el) return;
+    const ranked = [...(barSorted || [])].sort((a, b) => actSupplyGapOf(b) - actSupplyGapOf(a) || b.boCount - a.boCount);
+    const p = ranked[0];
+    if (!p) {
+      el.innerHTML = `<p class="act-supply-empty">No product demand to rank yet.</p>`;
+      el.onclick = null;
+      return;
+    }
+    const gap = actSupplyGapOf(p);
+    const st = actSupplyStatus(p);
+    el.innerHTML = `
+      <p class="act-supply-kicker">${st.icon} Highest Supply Gap</p>
+      <h3 class="act-supply-product">${escapeHtml(p.product)}</h3>
+      <p class="act-supply-gap ${gap > 0 ? "is-short" : "is-ok"}">Gap: <strong>${formatNumber(gap)}</strong> units</p>
+      <dl class="act-supply-metrics">
+        <div><dt>Back Orders</dt><dd>${formatNumber(p.boCount)}</dd></div>
+        <div><dt>Available Stock</dt><dd>${formatNumber(p.stockCount)}</dd></div>
+        <div><dt>Allocated</dt><dd>${formatNumber(p.allocation)}</dd></div>
+        <div><dt>Coverage</dt><dd>${actFormatCoverPct(p)}</dd></div>
+      </dl>
+      <p class="act-supply-status is-${st.key}">${st.icon} ${escapeHtml(st.label)}</p>
+      <p class="act-supply-click">Click for product detail</p>`;
+    el.onclick = () => actSelectProduct(p.product);
+  }
+
+  function renderActSupplyRest(barSorted) {
+    const el = $("#act-supply-rest");
+    const btn = $("#act-supply-viewall");
+    const rows = barSorted || [];
+    if (btn) {
+      btn.hidden = rows.length <= 5;
+      btn.textContent = basView.barShowAll ? "Show top 5" : `View all ${formatNumber(rows.length)}`;
+    }
+    if (!el) return;
+    if (!basView.barShowAll || rows.length <= 5) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const rest = rows.slice(5);
+    el.hidden = false;
+    el.innerHTML = `
+      <p class="act-supply-rest-label">Remaining products · ${formatNumber(rest.length)}</p>
+      <div class="act-supply-rest-list">${rest.map((p) => {
+        const gap = actSupplyGapOf(p);
+        const st = actSupplyStatus(p);
+        return `<button type="button" class="act-supply-rest-row" data-act-product="${escapeHtml(p.product)}">
+          <span class="act-supply-rest-name">${st.icon} ${escapeHtml(p.product)}</span>
+          <span>BO ${formatNumber(p.boCount)}</span>
+          <span>Stock ${formatNumber(p.stockCount)}</span>
+          <span>Alloc ${formatNumber(p.allocation)}</span>
+          <span class="${gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">Gap ${gap > 0 ? formatNumber(gap) : actFormatSupplyGap(p)}</span>
+          <span>${actFormatCoverPct(p)}</span>
+        </button>`;
+      }).join("")}</div>`;
+    el.querySelectorAll("[data-act-product]").forEach((btnRow) => {
+      btnRow.addEventListener("click", () => actSelectProduct(btnRow.getAttribute("data-act-product") || ""));
+    });
+  }
+
+  /** Sum of schedule-day RES (age 0 Retail Electronic Sales) through today. */
+  function basScheduleResReceived(monthPack) {
+    if (!monthPack || !Array.isArray(monthPack.dayRetailTotals)) return null;
+    const today = (monthPack.ctx && monthPack.ctx.todayDay) || 31;
+    let n = 0;
+    for (let d = 1; d <= Math.min(30, today); d += 1) {
+      n += Number(monthPack.dayRetailTotals[d]) || 0;
+    }
+    return n;
+  }
+
+  function computeBasTowerMetrics(d, filteredRows) {
+    const totalAlloc = filteredRows.reduce((s, r) => s + r.allocation, 0);
+    const matchedBo = filteredRows.reduce((s, r) => s + r.boCount, 0);
+    const totalStock = filteredRows.reduce((s, r) => s + r.stockCount, 0);
+    const totalGap = matchedBo - totalAlloc;
+    const below = filteredRows.filter((r) => r.status === "below").length;
+    const above = filteredRows.filter((r) => r.status === "above").length;
+    const match = filteredRows.filter((r) => r.status === "match").length;
+    const totalDemand = (d.bos || []).reduce((s, bo) => s + basBoUnitCount(bo), 0);
+
+    let lateRtl = null;
+    let resReceived = null;
+    let monthPack = null;
+    const monthKey = basMonthContext().monthKey;
+    const hasDaily = Boolean(getCachedRtlActiveMonth(monthKey));
+    if (slotHasRows("rtl") || hasDaily) {
+      monthPack = buildBasMonthlyData();
+      const filteredMonth = filteredBasMonthlyRows(monthPack.rows);
+      const filteredMatched = monthPack.matched.filter((car) => filteredMonth.some((fr) => fr.id === car.leafId));
+      const filteredLate = (monthPack.lateCars || []).filter((car) => filteredMonth.some((fr) => fr.id === car.leafId));
+      lateRtl = filteredLate.length || filteredMatched.filter((c) => c.isLate).length;
+      resReceived = basScheduleResReceived(monthPack);
+      monthPack._filteredRows = filteredMonth;
+      monthPack._filteredMatched = filteredMatched;
+    }
+
+    const byProduct = aggregateBasByProduct(filteredRows);
+    const demandVals = byProduct.map((p) => p.boCount).filter((n) => n > 0);
+    const demandSplit = ACT_CONFIG.demandSplitAuto
+      ? (demandVals.length ? demandVals.slice().sort((a, b) => a - b)[Math.floor(demandVals.length / 2)] : 0)
+      : (ACT_CONFIG.demandSplit || 0);
+
+    const metrics = {
+      totalAlloc,
+      matchedBo,
+      totalStock,
+      totalGap,
+      totalDemand,
+      lateRtl,
+      resReceived,
+      below,
+      above,
+      match,
+      byProduct,
+      demandSplit,
+      coverageSplit: ACT_CONFIG.coverageSplit,
+      monthPack,
+      filteredRows,
+    };
+
+    if (typeof console !== "undefined" && console.info) {
+      console.info("[ACT validation]", {
+        Allocation: totalAlloc,
+        MatchedBO: matchedBo,
+        TotalBO: totalDemand,
+        Stock: totalStock,
+        Gap: totalGap,
+        LateRTL: lateRtl,
+        ResReceived: resReceived,
+      });
+    }
+    return metrics;
+  }
+
+  function destroyActChart(id) {
+    if (charts[id]) {
+      charts[id].destroy();
+      delete charts[id];
+    }
+  }
+
+  function actSelectProduct(product) {
+    // Chart click opens the drawer only — does not collapse the whole tower to one product.
+    if (product) openActDrawer(product);
+  }
+
+  function actFilterToProduct(product) {
+    basView.product = product || "";
+    basView.sfx = "";
+    refreshBasFromFilters();
+    if (product) openActDrawer(product);
+  }
+
+  function actClearProductFilter() {
+    basView.product = "";
+    basView.sfx = "";
+    refreshBasFromFilters();
+  }
+
+  function openActDrawer(product) {
+    const drawer = $("#act-drawer");
+    const backdrop = $("#act-drawer-backdrop");
+    const body = $("#act-drawer-body");
+    const title = $("#act-drawer-title");
+    const sub = $("#act-drawer-sub");
+    if (!drawer || !body) return;
+    const allRows = (actTowerCache && actTowerCache.allRows) || (actTowerCache && actTowerCache.filteredRows) || [];
+    const leaves = allRows.filter((r) => r.product === product);
+    const agg = aggregateBasByProduct(leaves)[0];
+    if (title) title.textContent = product;
+    if (sub) sub.textContent = agg ? `${agg.seg || "—"} · ${leaves.length} suffix row(s)` : "—";
+    const lateSrc = (actTowerCache && actTowerCache.monthPack && actTowerCache.monthPack.matched)
+      ? actTowerCache.monthPack.matched
+      : (actTowerCache && actTowerCache.monthPack && actTowerCache.monthPack._filteredMatched) || [];
+    const late = lateSrc.filter((c) => c.isLate && (c.allocProduct === product || c.product === product)).length;
+    const isFiltered = basView.product === product;
+    body.innerHTML = !agg ? `<p class="foot">No data</p>` : `
+      <div class="act-drawer-actions">
+        ${isFiltered
+          ? `<button type="button" class="btn" id="act-drawer-clear-filter">Show all products</button>`
+          : `<button type="button" class="btn-primary" id="act-drawer-filter">Filter tower to ${escapeHtml(product)}</button>`}
+      </div>
+      <div class="act-drawer-kpis">
+        <div><span class="lab">Back Orders</span><strong>${formatNumber(agg.boCount)}</strong></div>
+        <div><span class="lab">Stock</span><strong>${formatNumber(agg.stockCount)}</strong></div>
+        <div><span class="lab">Allocation</span><strong>${formatNumber(agg.allocation)}</strong></div>
+        <div><span class="lab">Supply Gap</span><strong class="${actSupplyGapOf(agg) > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${actFormatSupplyGap(agg)}</strong></div>
+        <div><span class="lab">Coverage</span><strong>${actFormatCoverPct(agg)}</strong></div>
+        <div><span class="lab">Late RTL</span><strong>${formatNumber(late)}</strong></div>
+      </div>
+      <h4 class="act-drawer-h">SFX breakdown</h4>
+      <div class="table-wrap"><table class="bas-table">
+        <thead><tr><th>SFX</th><th class="num">Alloc</th><th class="num">BO</th><th class="num">Stock</th><th class="num">Gap</th><th>Status</th></tr></thead>
+        <tbody>${leaves.map((r) => `
+          <tr data-act-sfx="${escapeHtml(r.sfx)}" class="act-sfx-row">
+            <td>${escapeHtml(r.sfx)}</td>
+            <td class="num">${formatNumber(r.allocation)}</td>
+            <td class="num">${formatNumber(r.boCount)}</td>
+            <td class="num">${formatNumber(r.stockCount)}</td>
+            <td class="num ${r.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(r.gap)}</td>
+            <td>${basGapBadge(r.status, r.gap)}</td>
+          </tr>`).join("")}</tbody>
+      </table></div>
+      <p class="foot">Click a suffix to filter tables · VIN detail is in Matched &amp; allocated below</p>`;
+    const filterBtn = $("#act-drawer-filter");
+    if (filterBtn) filterBtn.addEventListener("click", () => actFilterToProduct(product));
+    const clearBtn = $("#act-drawer-clear-filter");
+    if (clearBtn) clearBtn.addEventListener("click", () => {
+      actClearProductFilter();
+      openActDrawer(product);
+    });
+    body.querySelectorAll("[data-act-sfx]").forEach((tr) => {
+      tr.addEventListener("click", () => {
+        basView.product = product;
+        basView.sfx = tr.getAttribute("data-act-sfx") || "";
+        refreshBasFromFilters();
+        openActDrawer(product);
+      });
+    });
+    drawer.hidden = false;
+    drawer.removeAttribute("hidden");
+    drawer.setAttribute("aria-hidden", "false");
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.removeAttribute("hidden");
+    }
+  }
+
+  function closeActDrawer() {
+    const drawer = $("#act-drawer");
+    const backdrop = $("#act-drawer-backdrop");
+    if (drawer) {
+      drawer.hidden = true;
+      drawer.setAttribute("hidden", "");
+      drawer.setAttribute("aria-hidden", "true");
+    }
+    if (backdrop) {
+      backdrop.hidden = true;
+      backdrop.setAttribute("hidden", "");
+    }
+  }
+
+  function collectActLateCars(metrics) {
+    const pack = metrics && metrics.monthPack;
+    if (!pack) return [];
+    const fromLate = pack.lateCars || [];
+    const fromMatched = (pack._filteredMatched || pack.matched || []).filter((c) => c.isLate);
+    const seen = new Set();
+    const out = [];
+    const displayLookup = typeof buildDisplayVinLookup === "function" ? buildDisplayVinLookup() : null;
+    fromLate.concat(fromMatched).forEach((c) => {
+      const key = `${c.vin || ""}|${c.age != null ? c.age : ""}|${c.leafId || ""}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const displayHit = displayLookup && typeof findDisplayVinHit === "function"
+        ? findDisplayVinHit(displayLookup, c.vin)
+        : null;
+      out.push({
+        ...c,
+        inDisplay: !!displayHit,
+        displaySheet: displayHit && displayHit.sheet ? displayHit.sheet : "",
+        displayLocation: displayHit && displayHit.location ? displayHit.location : "",
+      });
+    });
+    out.sort((a, b) => {
+      if (!!b.inDisplay !== !!a.inDisplay) return a.inDisplay ? -1 : 1;
+      return (Number(b.age) || 0) - (Number(a.age) || 0)
+        || String(a.allocProduct || a.product || "").localeCompare(String(b.allocProduct || b.product || ""));
+    });
+    return out;
+  }
+
+  function actAlertPlanRows(metrics, tab) {
+    const rows = (metrics && metrics.filteredRows) || [];
+    if (tab === "surplus") {
+      return rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap);
+    }
+    return rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap);
+  }
+
+  function buildActAlertTableHtml(metrics, tab, limit) {
+    if (tab === "late") {
+      if (!metrics || !metrics.monthPack) {
+        return `<p class="foot" style="padding:12px">N/A · upload RTL stock</p>`;
+      }
+      const all = collectActLateCars(metrics);
+      if (!all.length) return `<p class="foot" style="padding:12px">No RTL Free units.</p>`;
+      const cars = limit ? all.slice(0, limit) : all;
+      const displayCount = all.filter((c) => c.inDisplay).length;
+      const footBits = [];
+      if (limit && all.length > limit) {
+        footBits.push(`Showing ${formatNumber(cars.length)} of ${formatNumber(all.length)} · open Wide for the full list`);
+      }
+      if (displayCount) {
+        footBits.push(`${formatNumber(displayCount)} on Display Central 1 (red)`);
+      }
+      const foot = footBits.length
+        ? `<p class="foot" style="padding:8px 12px">${footBits.join(" · ")}</p>`
+        : "";
+      return `<table class="bas-table act-rtl-free-table"><thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th class="num">Age</th><th>Collection</th></tr></thead>
+        <tbody>${cars.map((c) => {
+          return `<tr class="${c.inDisplay ? "act-row-display" : ""}">
+          <td class="${c.inDisplay ? "act-display-text" : ""}">
+            ${escapeHtml(c.allocProduct || c.product || "")}
+            ${c.inDisplay ? ` <span class="act-display-badge">Display</span>` : ""}
+          </td>
+          <td class="${c.inDisplay ? "act-display-text" : ""}">${escapeHtml(c.allocSfx || c.suffix || "")}</td>
+          <td class="mono ${c.inDisplay ? "act-display-text" : ""}">${escapeHtml(c.vin || "")}</td>
+          <td class="num ${c.inDisplay ? "act-display-text" : ""}">${c.age != null ? c.age : "—"}</td>
+          <td class="${c.inDisplay ? "act-display-text" : ""}">${escapeHtml(c.collectionLabel || "—")}</td>
+        </tr>`;
+        }).join("")}</tbody></table>${foot}`;
+    }
+    const all = actAlertPlanRows(metrics, tab);
+    if (!all.length) return `<p class="foot" style="padding:12px">No ${tab} rows.</p>`;
+    const rows = limit ? all.slice(0, limit) : all;
+    const gapHead = tab === "surplus" ? "Surplus" : "Gap";
+    const foot = limit && all.length > limit
+      ? `<p class="foot" style="padding:8px 12px">Showing ${formatNumber(rows.length)} of ${formatNumber(all.length)} · open Wide for the full list</p>`
+      : "";
+    return `<table class="bas-table"><thead><tr>
+      <th>Product</th><th>SFX</th><th class="num">BO</th><th class="num">Allocation</th><th class="num">${gapHead}</th>
+    </tr></thead><tbody>${rows.map((r) => {
+      const gapShow = tab === "surplus" ? Math.abs(r.gap) : r.gap;
+      return `<tr>
+        <td>${escapeHtml(r.product)}</td>
+        <td>${escapeHtml(r.sfx)}</td>
+        <td class="num">${formatNumber(r.boCount)}</td>
+        <td class="num">${formatNumber(r.allocation)}</td>
+        <td class="num ${r.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(tab === "surplus" ? -gapShow : r.gap)}</td>
+      </tr>`;
+    }).join("")}</tbody></table>${foot}`;
+  }
+
+  function actAlertTabCount(metrics, tab) {
+    if (tab === "late") return collectActLateCars(metrics).length;
+    return actAlertPlanRows(metrics, tab).length;
+  }
+
+  function fillWideActAlerts() {
+    const metrics = actTowerCache;
+    const dest = $("#pbi-wide-table");
+    if (!dest || !metrics) return;
+    const tab = basView.alertTab || "shortfall";
+    const titles = { shortfall: "Shortfall", surplus: "Surplus", late: "RTL Free" };
+    const n = actAlertTabCount(metrics, tab);
+    const titleEl = $("#pbi-wide-title");
+    if (titleEl) titleEl.textContent = `Operational Alerts · ${titles[tab] || tab} (${formatNumber(n)})`;
+    const hint = $("#pbi-wide-hint");
+    if (hint) hint.textContent = "Full list · page card stays compact · Close or press Esc";
+    dest.innerHTML = `
+      <div class="act-alert-tabs act-alert-tabs--wide" id="act-alert-wide-tabs" role="tablist">
+        <button type="button" class="act-alert-tab${tab === "shortfall" ? " active" : ""}" data-act-alert-wide="shortfall">Shortfall</button>
+        <button type="button" class="act-alert-tab${tab === "surplus" ? " active" : ""}" data-act-alert-wide="surplus">Surplus</button>
+        <button type="button" class="act-alert-tab${tab === "late" ? " active" : ""}" data-act-alert-wide="late">RTL Free</button>
+      </div>
+      ${buildActAlertTableHtml(metrics, tab)}`;
+  }
+
+  function openWideActAlerts() {
+    const card = document.querySelector("#panel-boallocstock .act-alerts-card");
+    if (!card) return;
+    const wide = card.classList.toggle("is-row-wide");
+    const btn = $("#act-alert-wide");
+    if (btn) btn.setAttribute("aria-pressed", wide ? "true" : "false");
+    if (actTowerCache) renderActAlertTable(actTowerCache);
+  }
+
+  function renderActAlertTable(metrics) {
+    const el = $("#act-alert-table");
+    if (!el) return;
+    const tab = basView.alertTab || "shortfall";
+    document.querySelectorAll("#act-alert-tabs .act-alert-tab").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-act-alert") === tab);
+    });
+    const wide = !!document.querySelector("#panel-boallocstock .act-alerts-card.is-row-wide");
+    el.innerHTML = buildActAlertTableHtml(metrics, tab, wide ? 0 : (tab === "late" ? 20 : 15));
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal && modal.classList.contains("pbi-wide-modal--act-alerts") && $("#pbi-wide-backdrop") && $("#pbi-wide-backdrop").classList.contains("show")) {
+      fillWideActAlerts();
+    }
+  }
+
+  async function renderBasTowerCharts(metrics) {
+    if (!window.Chart) return;
+    const sortKey = basView.sortGap || "gap";
+    // Prefer full product set for overview charts so a drawer filter doesn't blank Top 10 / monthly.
+    const overviewRows = (metrics.allRows && metrics.allRows.length) ? metrics.allRows : metrics.filteredRows;
+    const overviewByProduct = aggregateBasByProduct(overviewRows);
+    let products = [...overviewByProduct];
+    products.sort((a, b) => {
+      if (sortKey === "bo") return b.boCount - a.boCount;
+      if (sortKey === "alloc") return b.allocation - a.allocation;
+      if (sortKey === "stock") return b.stockCount - a.stockCount;
+      return Math.abs(b.gap) - Math.abs(a.gap) || b.gap - a.gap;
+    });
+    products = products.filter((p) => p.allocation || p.boCount || p.stockCount).slice(0, 18);
+
+    const barSorted = sortSupplyGapProducts(
+      overviewByProduct.filter((p) => p.allocation || p.boCount || p.stockCount),
+      sortKey
+    );
+    const barShown = barSorted.slice(0, 5);
+    if (metrics) metrics.supplyBarRows = barSorted;
+    renderActSupplyInsight(barSorted);
+    renderActSupplyRest(barSorted);
+
+    const resizeChart = (id) => {
+      try {
+        if (charts[id] && typeof charts[id].resize === "function") charts[id].resize();
+      } catch (_) { /* ignore */ }
+    };
+
+    try {
+    // Product grouped bars — top 5 executive preview
+    const barId = "chart-act-product-bars";
+    destroyActChart(barId);
+    const barCanvas = document.getElementById(barId);
+    if (barCanvas) {
+      const actBarLabels = {
+        id: "actSupplyBarLabels",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          chart.data.datasets.forEach((ds, di) => {
+            const meta = chart.getDatasetMeta(di);
+            if (!meta || !meta.data) return;
+            meta.data.forEach((bar, i) => {
+              const v = Number(ds.data[i]) || 0;
+              if (v <= 0) return;
+              const props = bar.getProps(["x", "y", "base"], true);
+              const span = Math.abs((props.x || 0) - (props.base || 0));
+              if (span < 30) return;
+              const midX = ((props.base || 0) + (props.x || 0)) / 2;
+              ctx.save();
+              ctx.fillStyle = di === 2 ? "#0f172a" : "#fff";
+              ctx.font = "700 9px Manrope, sans-serif";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(formatNumber(v), midX, props.y);
+              ctx.restore();
+            });
+          });
+        },
+      };
+      charts[barId] = new Chart(barCanvas, {
+        type: "bar",
+        data: {
+          labels: barShown.map((p) => p.product),
+          datasets: [
+            { label: "Back Orders", data: barShown.map((p) => p.boCount), backgroundColor: "#111827", borderRadius: 4, maxBarThickness: 16, order: 1 },
+            { label: "Allocation", data: barShown.map((p) => p.allocation), backgroundColor: "#eb0a1e", borderRadius: 4, maxBarThickness: 16, order: 2 },
+            { label: "Stock", data: barShown.map((p) => p.stockCount), backgroundColor: "#60a5fa", borderRadius: 4, maxBarThickness: 16, order: 3 },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { right: 8, left: 2 } },
+          interaction: { mode: "index", intersect: true },
+          datasets: { bar: { categoryPercentage: 0.72, barPercentage: 0.9 } },
+          plugins: {
+            legend: {
+              position: "top",
+              align: "end",
+              labels: { boxWidth: 10, boxHeight: 10, font: { size: 11, weight: "700" }, padding: 12 },
+            },
+            tooltip: {
+              callbacks: {
+                afterBody(items) {
+                  const i = items[0] && items[0].dataIndex;
+                  const p = barShown[i];
+                  if (!p) return "";
+                  return [
+                    `Supply Gap ${actFormatSupplyGap(p)}`,
+                    `Coverage ${actFormatCoverPct(p)}`,
+                  ];
+                },
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(148,163,184,0.18)" }, ticks: { font: { size: 10 } } },
+            y: {
+              ticks: { font: { size: 11, weight: "700" }, color: "#111", autoSkip: false },
+              grid: { display: false },
+            },
+          },
+          onHover(evt, els) {
+            const t = evt.native && evt.native.target;
+            if (t && t.style) t.style.cursor = els.length ? "pointer" : "default";
+          },
+          onClick(evt, els) {
+            if (!els.length) return;
+            const p = barShown[els[0].index];
+            if (p) actSelectProduct(p.product);
+          },
+        },
+        plugins: [actBarLabels],
+      });
+      resizeChart(barId);
+    }
+
+    // Health quadrant
+    const healthId = "chart-act-health";
+    destroyActChart(healthId);
+    const healthCanvas = document.getElementById(healthId);
+    if (healthCanvas) {
+      const covSplit = metrics.coverageSplit;
+      const demSplit = metrics.demandSplit;
+      const maxStock = Math.max(1, ...products.map((p) => p.stockCount));
+      const points = products.map((p) => {
+        const cov = p.boCount > 0 ? Math.min(2.5, p.allocation / p.boCount) : (p.allocation > 0 ? 2.2 : 0);
+        return {
+          x: cov,
+          y: p.boCount,
+          r: 8 + Math.sqrt(p.stockCount / maxStock) * 18,
+          product: p.product,
+          meta: p,
+        };
+      });
+      try {
+        await (typeof preloadCarImagesForPoints === "function"
+          ? preloadCarImagesForPoints(points.map((p) => ({ meta: { product: p.product } })))
+          : Promise.resolve());
+      } catch (err) {
+        if (typeof console !== "undefined" && console.warn) console.warn("[ACT] car image preload", err);
+      }
+      const quadPlugin = {
+        id: "actHealthQuad",
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea || !scales.x || !scales.y) return;
+          const xSplit = scales.x.getPixelForValue(Math.min(covSplit, scales.x.max));
+          const ySplit = scales.y.getPixelForValue(demSplit);
+          const { left, right, top, bottom } = chartArea;
+          const bands = [
+            { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(235,10,30,0.07)" },
+            { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13,148,136,0.07)" },
+            { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(245,158,11,0.07)" },
+            { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(37,99,235,0.07)" },
+          ];
+          ctx.save();
+          bands.forEach((b) => {
+            ctx.fillStyle = b.c;
+            ctx.fillRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
+          });
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = "rgba(232,238,247,0.35)";
+          ctx.beginPath();
+          ctx.moveTo(xSplit, top); ctx.lineTo(xSplit, bottom);
+          ctx.moveTo(left, ySplit); ctx.lineTo(right, ySplit);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = "700 10px Manrope, sans-serif";
+          ctx.fillStyle = "rgba(255,59,78,0.8)";
+          ctx.fillText("HIGH DEMAND / LOW ALLOC", left + 6, top + 14);
+          ctx.fillStyle = "rgba(52,211,153,0.85)";
+          ctx.fillText("HIGH DEMAND / HIGH ALLOC", xSplit + 6, top + 14);
+          ctx.fillStyle = "rgba(245,158,11,0.9)";
+          ctx.fillText("LOW / LOW · MONITOR", left + 6, ySplit + 16);
+          ctx.fillStyle = "rgba(79,157,255,0.9)";
+          ctx.fillText("LOW / HIGH · SURPLUS", xSplit + 6, ySplit + 16);
+          ctx.restore();
+        },
+      };
+      const carPlugin = {
+        id: "actHealthCars",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || !meta.data) return;
+          ctx.save();
+          const drawn = [];
+          meta.data.forEach((el, i) => {
+            const pt = points[i];
+            if (!pt) return;
+            const { x, y } = el.getProps(["x", "y"], true);
+            const crowded = drawn.some((d) => Math.hypot(d.x - x, d.y - y) < 40);
+            if (crowded) {
+              ctx.beginPath();
+              ctx.fillStyle = "#4f9dff";
+              ctx.arc(x, y, 4, 0, Math.PI * 2);
+              ctx.fill();
+              return;
+            }
+            drawn.push({ x, y });
+            const file = typeof resolveCarImageFile === "function" ? resolveCarImageFile(pt.product) : "";
+            const key = file || `__none__:${String(pt.product || "").toLowerCase()}`;
+            const img = (typeof carImageCache !== "undefined" && carImageCache.get) ? carImageCache.get(key) : null;
+            const size = 26;
+            if (img && img.complete && img.naturalWidth) {
+              ctx.drawImage(img, x - size / 2, y - size / 2 - 2, size, size);
+            } else {
+              ctx.beginPath();
+              ctx.fillStyle = "#eb0a1e";
+              ctx.arc(x, y, 5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.textAlign = "center";
+            ctx.font = "700 10px Manrope, sans-serif";
+            ctx.fillStyle = "#e8eef7";
+            const short = pt.product.length > 12 ? pt.product.slice(0, 10) + "…" : pt.product;
+            ctx.fillText(short, x, y + size / 2 + 8);
+          });
+          ctx.restore();
+        },
+      };
+      charts[healthId] = new Chart(healthCanvas, {
+        type: "bubble",
+        data: {
+          datasets: [{
+            data: points,
+            backgroundColor: "rgba(0,0,0,0)",
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,
+          layout: { padding: { top: 16, bottom: 28, left: 4, right: 8 } },
+          plugins: { legend: { display: false }, tooltip: {
+            backgroundColor: "#101a2b",
+            titleColor: "#f8fbff",
+            bodyColor: "#e8eef7",
+            callbacks: {
+              label(ctx) {
+                const p = ctx.raw && ctx.raw.meta;
+                if (!p) return "";
+                return `${p.product}: BO ${p.boCount} · Alloc ${p.allocation} · Stock ${p.stockCount} · Gap ${basFormatGap(p.gap)}`;
+              },
+            },
+          } },
+          scales: {
+            x: {
+              title: { display: true, text: "Allocation Coverage (Alloc ÷ BO)", color: "#8d9bb0", font: { weight: "700", size: 11 } },
+              min: 0, suggestedMax: 2.2, beginAtZero: true,
+              ticks: { color: "#8d9bb0", font: { size: 11 } },
+              grid: { color: "rgba(148,163,184,0.12)" },
+            },
+            y: {
+              title: { display: true, text: "Back Order Demand", color: "#8d9bb0", font: { weight: "700", size: 11 } },
+              beginAtZero: true,
+              ticks: { color: "#8d9bb0", font: { size: 11 } },
+              grid: { color: "rgba(148,163,184,0.12)" },
+            },
+          },
+          onClick(evt, els) {
+            if (!els.length) return;
+            const p = points[els[0].index];
+            if (p) actSelectProduct(p.product);
+          },
+        },
+        plugins: [quadPlugin, carPlugin],
+      });
+      resizeChart(healthId);
+    }
+
+    // Status donut — suffix-row allocation status only (late RTL is a VIN count, not a suffix status)
+    const donutId = "chart-act-status";
+    destroyActChart(donutId);
+    const donutData = [metrics.below, metrics.above, metrics.match];
+    const donutTotal = metrics.below + metrics.above + metrics.match;
+    const donutCanvas = document.getElementById(donutId);
+    if (donutCanvas) {
+      charts[donutId] = new Chart(donutCanvas, {
+        type: "doughnut",
+        data: {
+          labels: ["Below Plan", "Above Plan", "On Track"],
+          datasets: [{
+            data: donutData,
+            backgroundColor: ["#ff3b4e", "#34d399", "#3b82f6"],
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "68%",
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 }, color: "#e8eef7" } },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const v = ctx.parsed || 0;
+                  const pct = `${((v / (donutTotal || 1)) * 100).toFixed(0)}%`;
+                  return `${ctx.label}: ${v} (${pct})`;
+                },
+              },
+            },
+          },
+        },
+      });
+      resizeChart(donutId);
+    }
+    const mini = $("#act-donut-mini");
+    if (mini) {
+      mini.innerHTML = `
+        <div class="act-mini bad"><span class="lab">Shortfall</span><strong>${formatNumber(metrics.below)}</strong><span class="sub">suffixes below</span></div>
+        <div class="act-mini ok"><span class="lab">Surplus</span><strong>${formatNumber(metrics.above)}</strong><span class="sub">suffixes above</span></div>
+        <div class="act-mini"><span class="lab">On Track</span><strong>${formatNumber(metrics.match)}</strong><span class="sub">suffixes equal</span></div>
+        <div class="act-donut-center-note">Suffix rows ${formatNumber(donutTotal)}</div>`;
+    }
+
+    // Daily + monthly + RES from month pack (unfiltered for overview when available)
+    const dailyId = "chart-act-daily";
+    destroyActChart(dailyId);
+    const dailySide = $("#act-daily-side");
+    const monthKpis = $("#act-monthly-kpis");
+    let pack = metrics.monthPack;
+    if (!pack && typeof buildBasMonthlyData === "function") {
+      try {
+        const hasRtl = typeof slotHasRows === "function" && slotHasRows("rtl");
+        const ctx = typeof basMonthContext === "function" ? basMonthContext() : null;
+        const cached = ctx && typeof getCachedRtlActiveMonth === "function"
+          ? getCachedRtlActiveMonth(ctx.monthKey)
+          : null;
+        if (hasRtl || (cached && cached.days && Object.keys(cached.days).length)) {
+          pack = buildBasMonthlyData();
+        }
+      } catch (_) { pack = null; }
+    }
+    if (pack) {
+      const ctx = pack.ctx;
+      const monthRows = pack.rows || [];
+      const matched = pack.matched || pack._filteredMatched || [];
+      const dayLabels = [];
+      const dayActual = [];
+      const dayPlan = [];
+      const planTotal = monthRows.reduce((s, r) => s + r.allocation, 0);
+      const mtdTotal = monthRows.reduce((s, r) => s + r.mtd, 0);
+      const dailyPlan = ctx.todayDay > 0 ? planTotal / ctx.todayDay : 0;
+      const dayRetail = pack.dayRetailTotals || [];
+      for (let day = 1; day <= Math.min(30, ctx.daysInMonth); day += 1) {
+        dayLabels.push(String(day));
+        dayActual.push(dayRetail[day] || 0);
+        dayPlan.push(day <= ctx.todayDay ? dailyPlan : null);
+      }
+      const dailyCanvas = document.getElementById(dailyId);
+      if (dailyCanvas) {
+        charts[dailyId] = new Chart(dailyCanvas, {
+          type: "bar",
+          data: {
+            labels: dayLabels,
+            datasets: [
+              { type: "bar", label: "Collected", data: dayActual, backgroundColor: "rgba(148,163,184,0.55)", borderRadius: 3 },
+              { type: "line", label: "Plan pace", data: dayPlan, borderColor: "#eb0a1e", borderWidth: 2, pointRadius: 0, tension: 0.2 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+            scales: { x: { ticks: { maxTicksLimit: 15, font: { size: 9 } } }, y: { beginAtZero: true } },
+          },
+        });
+        resizeChart(dailyId);
+      }
+      const gap = planTotal - mtdTotal;
+      if (dailySide) {
+        dailySide.innerHTML = `
+          <div><span class="lab">MTD Collected</span><strong>${formatNumber(mtdTotal)}</strong></div>
+          <div><span class="lab">MTD Plan</span><strong>${formatNumber(planTotal)}</strong></div>
+          <div><span class="lab">MTD Gap</span><strong class="${gap >= 0 ? "bas-gap-pos" : "bas-gap-neg"}">${gap >= 0 ? "+" : ""}${formatNumber(gap)}</strong></div>`;
+      }
+
+      const resKpis = $("#act-res-kpis");
+      const late = (pack.lateCars || []).length || matched.filter((c) => c.isLate).length;
+      const resByProduct = Array.isArray(pack.resByProduct) ? pack.resByProduct.slice() : [];
+      const resTotal = resByProduct.reduce((s, x) => s + (Number(x[1]) || 0), 0);
+      if (resKpis) {
+        resKpis.innerHTML = [
+          ["Total RES", formatNumber(resTotal)],
+          ["Car types", formatNumber(resByProduct.length)],
+          ["Collected MTD", formatNumber(mtdTotal)],
+          ["Plan", formatNumber(planTotal)],
+          ["Gap", (gap >= 0 ? "+" : "") + formatNumber(gap)],
+          ["Late", formatNumber(late)],
+        ].map(([lab, val]) => `<div class="act-res-chip"><span class="lab">${lab}</span><strong>${escapeHtml(String(val))}</strong></div>`).join("");
+      }
+      let shownRes = resByProduct;
+      if (basView.product) shownRes = shownRes.filter((x) => x[0] === basView.product);
+      if (basView.search && basView.search.trim()) {
+        const q = basView.search.trim().toLowerCase();
+        shownRes = shownRes.filter((x) => String(x[0]).toLowerCase().includes(q));
+      }
+      const resId = "chart-act-res-top";
+      destroyActChart(resId);
+      const resCanvas = document.getElementById(resId);
+      const resBox = $("#act-res-chart-box");
+      if (resBox) {
+        const n = Math.max(1, shownRes.length);
+        resBox.style.height = `${Math.max(160, n * 28 + 24)}px`;
+        resBox.style.minHeight = `${Math.max(160, n * 28 + 24)}px`;
+      }
+      if (resCanvas) {
+        charts[resId] = new Chart(resCanvas, {
+          type: "bar",
+          data: {
+            labels: shownRes.length ? shownRes.map((x) => x[0]) : ["No RES"],
+            datasets: [{ data: shownRes.length ? shownRes.map((x) => x[1]) : [0], backgroundColor: "rgba(235,10,30,0.8)", borderRadius: 4 }],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const v = ctx.parsed.x || 0;
+                    return `${formatNumber(v)} received`;
+                  },
+                },
+              },
+            },
+            scales: {
+              x: { beginAtZero: true, ticks: { precision: 0 } },
+              y: { ticks: { font: { size: 11, weight: "700" }, autoSkip: false } },
+            },
+            onClick(evt, els) {
+              if (!els.length || !shownRes.length) return;
+              actSelectProduct(shownRes[els[0].index][0]);
+            },
+          },
+        });
+        resizeChart(resId);
+      }
+
+      // Monthly: bar chart (Collected vs Plan) — single-point lines looked empty
+      const monthId = "chart-act-monthly";
+      destroyActChart(monthId);
+      const monthHint = $("#act-monthly-hint");
+      if (monthHint) {
+        monthHint.textContent = pack.mode === "daily"
+          ? `${ctx.monthLabel} · ${pack.activeDayCount || 0} active day file(s) · age-0 arrivals`
+          : `${ctx.monthLabel} · from live RTL Col J age (no daily archive yet)`;
+      }
+      const monthCanvas = document.getElementById(monthId);
+      if (monthCanvas) {
+        charts[monthId] = new Chart(monthCanvas, {
+          type: "bar",
+          data: {
+            labels: [ctx.monthLabel],
+            datasets: [
+              { label: "Collected", data: [mtdTotal], backgroundColor: "rgba(235,10,30,0.85)", borderRadius: 6, maxBarThickness: 64 },
+              { label: "Plan", data: [planTotal], backgroundColor: "rgba(148,163,184,0.7)", borderRadius: 6, maxBarThickness: 64 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "top", labels: { boxWidth: 10, font: { size: 10 } } } },
+            scales: { y: { beginAtZero: true } },
+          },
+        });
+        resizeChart(monthId);
+      }
+      if (monthKpis) {
+        monthKpis.innerHTML = `
+          <div class="act-mini"><span class="lab">Collected</span><strong>${formatNumber(mtdTotal)}</strong></div>
+          <div class="act-mini"><span class="lab">Plan</span><strong>${formatNumber(planTotal)}</strong></div>
+          <div class="act-mini ${gap >= 0 ? "warn" : "ok"}"><span class="lab">Gap</span><strong>${gap >= 0 ? "+" : ""}${formatNumber(gap)}</strong></div>`;
+      }
+    } else {
+      if (dailySide) dailySide.innerHTML = `<p class="foot">N/A · upload RTL stock</p>`;
+      if (monthKpis) monthKpis.innerHTML = `<p class="foot">N/A · upload RTL stock</p>`;
+      ["chart-act-daily", "chart-act-monthly", "chart-act-res-top"].forEach(destroyActChart);
+      const resKpis = $("#act-res-kpis");
+      if (resKpis) resKpis.innerHTML = `<p class="foot">N/A</p>`;
+      const monthHint = $("#act-monthly-hint");
+      if (monthHint) monthHint.textContent = "Upload RTL stock to see monthly collection";
+    }
+    } catch (err) {
+      if (typeof console !== "undefined" && console.error) console.error("[ACT charts]", err);
+    }
+
+    // Top 10 always — even if earlier charts failed
+    const topBo = [...overviewByProduct].sort((a, b) => b.boCount - a.boCount).filter((r) => r.boCount > 0).slice(0, 10);
+    const topStock = [...overviewByProduct].sort((a, b) => b.stockCount - a.stockCount).filter((r) => r.stockCount > 0).slice(0, 10);
+    const topGap = [...overviewByProduct].sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).filter((r) => r.gap !== 0 || r.allocation || r.boCount).slice(0, 10);
+
+    const fillTopFallback = (elId, rows, field) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      if (!rows.length) {
+        el.classList.add("is-visible");
+        el.innerHTML = `<li><span>No data</span><span>—</span></li>`;
+        return;
+      }
+      el.classList.add("is-visible");
+      el.innerHTML = rows.map((r) => {
+        const val = field === "gap" ? basFormatGap(r.gap) : formatNumber(r[field]);
+        return `<li><span>${escapeHtml(r.product)}</span><strong>${val}</strong></li>`;
+      }).join("");
+    };
+
+    const makeTop = (id, rows, field, colorFn, fallbackId) => {
+      destroyActChart(id);
+      fillTopFallback(fallbackId, rows, field);
+      const canvas = document.getElementById(id);
+      if (!canvas || !rows.length) return;
+      try {
+        charts[id] = new Chart(canvas, {
+          type: "bar",
+          data: {
+            labels: rows.map((r) => r.product),
+            datasets: [{
+              data: rows.map((r) => (field === "gap" ? r.gap : r[field])),
+              backgroundColor: rows.map((r) => (typeof colorFn === "function" ? colorFn(r) : colorFn)),
+              borderRadius: 5,
+              barPercentage: 0.88,
+              categoryPercentage: 0.92,
+            }],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 4, right: 8, bottom: 4, left: 2 } },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => formatNumber(ctx.raw) } },
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                grid: { color: "rgba(148,163,184,0.16)" },
+                ticks: { maxTicksLimit: 6, font: { size: 11 }, color: "#8d9bb0" },
+              },
+              y: {
+                grid: { display: false },
+                ticks: {
+                  font: { size: 11, weight: "600" },
+                  color: "#e8eef7",
+                  autoSkip: false,
+                  callback(value) {
+                    const label = this.getLabelForValue(value);
+                    const text = String(label || "");
+                    return text.length > 16 ? text.slice(0, 14) + "…" : text;
+                  },
+                },
+              },
+            },
+            onClick(evt, els) {
+              if (!els.length) return;
+              actSelectProduct(rows[els[0].index].product);
+            },
+          },
+        });
+        const fb = document.getElementById(fallbackId);
+        if (fb) fb.classList.remove("is-visible");
+        requestAnimationFrame(() => {
+          resizeChart(id);
+          requestAnimationFrame(() => resizeChart(id));
+        });
+      } catch (err) {
+        if (typeof console !== "undefined" && console.error) console.error("[ACT top chart]", id, err);
+      }
+    };
+    makeTop("chart-act-top-bo", topBo, "boCount", "rgba(255,59,78,0.88)", "act-top-fallback-bo");
+    makeTop("chart-act-top-stock", topStock, "stockCount", "rgba(79,157,255,0.9)", "act-top-fallback-stock");
+    makeTop("chart-act-top-gap", topGap, "gap", (r) => (r.gap > 0 ? "rgba(255,59,78,0.9)" : "rgba(52,211,153,0.9)"), "act-top-fallback-gap");
+
+    renderActAlertTable(metrics);
+  }
+
+  function renderBasInsights(rows, opts = {}) {
+    const el = $(opts.insightEl || "#bas-insights");
+    if (!el) return;
+    const boWord = opts.boWord || "BO";
+    const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap).slice(0, 5);
+    const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap).slice(0, 5);
+    const belowHtml = below.length
+      ? `<ul class="bas-insight-list">${below.map((r) =>
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — ${boWord} ${formatNumber(r.boCount)} vs plan ${formatNumber(r.allocation)} <span class="badge bad">${basFormatGap(r.gap)}</span></li>`
+      ).join("")}</ul>`
+      : `<p class="foot" style="margin:0">No suffixes where ${boWord} exceeds allocation.</p>`;
+    const aboveHtml = above.length
+      ? `<ul class="bas-insight-list">${above.map((r) =>
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — plan ${formatNumber(r.allocation)} vs ${boWord} ${formatNumber(r.boCount)} <span class="badge ok">${basFormatGap(r.gap)}</span></li>`
+      ).join("")}</ul>`
+      : `<p class="foot" style="margin:0">No surplus allocation rows.</p>`;
+    el.innerHTML = `
+      <h2 class="bas-insights-heading">Gap highlights</h2>
+      <div class="bas-insight-grid">
+        <div class="bas-insight-card is-below"><h3 class="bas-insight-title bad">Shortfall · ${boWord} above allocation</h3>${belowHtml}</div>
+        <div class="bas-insight-card is-above"><h3 class="bas-insight-title ok">Surplus · allocation above ${boWord}</h3>${aboveHtml}</div>
+      </div>`;
+  }
+
+  function filteredBasRows(allRows) {
+    const q = basView.search.trim().toLowerCase();
+    return allRows.filter((r) => {
+      if (basView.seg && r.seg !== basView.seg) return false;
+      if (basView.product && r.product !== basView.product) return false;
+      if (basView.sfx && r.sfx !== basView.sfx) return false;
+      if (basView.status && r.status !== basView.status) return false;
+      if (q) {
+        const hay = `${r.seg} ${r.product} ${r.sfx}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function syncBasCarSuffixSelects(allRows) {
+    const products = [...new Set((allRows || []).map((r) => r.product).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    const sfxSource = (allRows || []).filter((r) => !basView.product || r.product === basView.product);
+    const suffixes = [...new Set(sfxSource.map((r) => r.sfx).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    if (basView.sfx && !suffixes.includes(basView.sfx)) basView.sfx = "";
+    fillBoSelect("#bas-f-product", new Set(products), basView.product, "All cars");
+    fillBoSelect("#bas-f-car", new Set(products), basView.product, "All cars");
+    fillBoSelect("#bas-f-car-conf", new Set(products), basView.product, "All cars");
+    fillBoSelect("#bas-f-sfx", new Set(suffixes), basView.sfx, "All suffixes");
+    fillBoSelect("#bas-f-sfx-conf", new Set(suffixes), basView.sfx, "All suffixes");
+    fillBoSelect("#bas-f-sfx-top", new Set(suffixes), basView.sfx, "All suffixes");
+  }
+
+  function renderBasTable(rows, opts = {}) {
+    const el = $(opts.tableEl || "#bas-table");
+    const foot = $(opts.footEl || "#bas-foot");
+    const summaryEl = $(opts.summaryEl || "#bas-table-summary");
+    const boColHeader = opts.boColHeader || "Back Orders";
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = `<p class="foot" style="padding:16px">No rows match filters.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      if (summaryEl) summaryEl.innerHTML = "";
+      return;
+    }
+    const sorted = [...rows].sort((a, b) => {
+      if (a.status === "below" && b.status !== "below") return -1;
+      if (b.status === "below" && a.status !== "below") return 1;
+      return b.gap - a.gap;
+    });
+    if (summaryEl) {
+      const alloc = rows.reduce((s, r) => s + r.allocation, 0);
+      const bo = rows.reduce((s, r) => s + r.boCount, 0);
+      const stock = rows.reduce((s, r) => s + r.stockCount, 0);
+      const gap = bo - alloc;
+      const cover = alloc + stock - bo;
+      const carLabel = basView.product || "All cars";
+      const sfxLabel = basView.sfx || "All suffixes";
+      // Positive gap (BO > plan) = shortfall red; negative = surplus green
+      const gapCls = gap > 0 ? "bas-gap-neg" : gap < 0 ? "bas-gap-pos" : "";
+      summaryEl.innerHTML = `
+        <div class="bas-result-chip"><span class="bas-result-lab">Car</span><strong>${escapeHtml(carLabel)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Suffix</span><strong>${escapeHtml(sfxLabel)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Allocation</span><strong>${formatNumber(alloc)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">${escapeHtml(boColHeader)}</span><strong>${formatNumber(bo)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Stock</span><strong>${formatNumber(stock)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Gap</span><strong class="${gapCls}">${basFormatGap(gap)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Plan + Stock − BO</span><strong class="${cover >= 0 ? "bas-gap-pos" : "bas-gap-neg"}">${cover >= 0 ? "+" : ""}${formatNumber(cover)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Rows</span><strong>${formatNumber(rows.length)}</strong></div>`;
+    }
+    el.innerHTML = `<table class="bas-table">
+      <thead><tr>
+        <th>Seg</th>
+        <th>Product</th>
+        <th>SFX</th>
+        <th class="num"><span class="bas-th-lab">Allocation</span></th>
+        <th class="num"><span class="bas-th-lab">${boColHeader}</span></th>
+        <th class="num"><span class="bas-th-lab">Stock</span></th>
+        <th class="num"><span class="bas-th-lab">Gap</span><span class="bas-th-sub">BO − Alloc</span></th>
+        <th><span class="bas-th-lab">Status</span></th>
+        <th class="num"><span class="bas-th-lab">Plan + Stock − BO</span></th>
+      </tr></thead>
+      <tbody>${sorted.map((r) => {
+        const rowCls = r.status === "below" ? "bas-row-below" : r.status === "above" ? "bas-row-above" : "";
+        const gapCls = r.gap > 0 ? "bas-gap-neg" : r.gap < 0 ? "bas-gap-pos" : "";
+        const coverCls = r.netCover >= 0 ? "bas-gap-pos" : "bas-gap-neg";
+        return `<tr class="${rowCls}">
+          <td>${escapeHtml(r.seg)}</td>
+          <td>${escapeHtml(r.product)}</td>
+          <td>${escapeHtml(r.sfx)}</td>
+          <td class="num">${formatNumber(r.allocation)}</td>
+          <td class="num">${formatNumber(r.boCount)}</td>
+          <td class="num">${formatNumber(r.stockCount)}</td>
+          <td class="num ${gapCls}">${basFormatGap(r.gap)}</td>
+          <td>${basGapBadge(r.status, r.gap)}</td>
+          <td class="num ${coverCls}">${r.netCover >= 0 ? "+" : ""}${formatNumber(r.netCover)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+    if (foot) {
+      const below = rows.filter((r) => r.status === "below").length;
+      foot.textContent = `${formatNumber(rows.length)} product/suffix rows · ${formatNumber(below)} below allocation plan`;
+    }
+  }
+
+  function renderBoAllocStockDashboard(d) {
+    const empty = $("#bas-empty");
+    const dash = $("#bas-dash");
+    // Matching needs back orders and at least one stock file
+    const hasData = hasBackOrder() && hasStockFiles();
+    if (!hasData) {
+      if (empty) empty.hidden = false;
+      if (dash) dash.hidden = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (dash) dash.hidden = false;
+
+    const stamp = $("#act-refresh-time");
+    if (stamp) stamp.textContent = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
+
+    // Plan rows only feed the Product / Suffix / Segment dropdowns
+    const allRows = buildBasRows(d);
+    const segs = [...new Set(allRows.map((r) => r.seg))].sort();
+    fillBoSelect("#bas-f-seg", new Set(segs), basView.seg, "All segments");
+    syncBasCarSuffixSelects(allRows);
+
+    renderBasAllocatedVehicles(d);
+  }
+
+  function basMonthContext(refDate) {
+    const live = window._globalLivePeriod || ensureGlobalLivePeriod();
+    const ref = refDate
+      || (live && live.now)
+      || saudiToday();
+    const y = ref.getFullYear();
+    const m = ref.getMonth();
+    const monthLabel = ref.toLocaleString("en", { month: "long", year: "numeric" });
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    // For This month / Today: only count through today (MTD), not future days
+    let todayDay = ref.getDate();
+    if (live && live.rangeTo && (live.preset === "this_month" || live.preset === "today")) {
+      todayDay = Math.min(todayDay, live.rangeTo.getDate());
+    }
+    const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+    return { y, m, monthLabel, daysInMonth, todayDay, today: ref, live, monthKey };
+  }
+
+  function inferCollectionDateFromAge(age, today) {
+    if (age == null || !Number.isFinite(age) || age < 0) return null;
+    const ref = today
+      || (window._globalLivePeriod && window._globalLivePeriod.now)
+      || new Date();
+    const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+    d.setDate(d.getDate() - Math.floor(age));
+    return d;
+  }
+
+  /** Cached active RTL file per calendar day for the schedule month. */
+  let rtlActiveMonthCache = { month: "", pack: null, loading: null, error: "" };
+
+  function invalidateRtlActiveMonthCache() {
+    rtlActiveMonthCache = { month: "", pack: null, loading: null, error: "" };
+  }
+
+  function getCachedRtlActiveMonth(monthKey) {
+    if (!monthKey) return null;
+    if (rtlActiveMonthCache.month === monthKey && rtlActiveMonthCache.pack) {
+      return rtlActiveMonthCache.pack;
+    }
+    return null;
+  }
+
+  function ensureRtlActiveMonth(monthKey, force) {
+    const mk = String(monthKey || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(mk)) return Promise.resolve(null);
+    if (!force && rtlActiveMonthCache.month === mk && rtlActiveMonthCache.pack) {
+      return Promise.resolve(rtlActiveMonthCache.pack);
+    }
+    if (!force && rtlActiveMonthCache.loading && rtlActiveMonthCache.month === mk) {
+      return rtlActiveMonthCache.loading;
+    }
+    rtlActiveMonthCache.month = mk;
+    rtlActiveMonthCache.error = "";
+    rtlActiveMonthCache.loading = fetch(`/api/rtl-daily/active-month?month=${encodeURIComponent(mk)}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || res.statusText || "Failed to load daily RTL");
+        }
+        return res.json();
+      })
+      .then((pack) => {
+        if (rtlActiveMonthCache.month === mk) {
+          rtlActiveMonthCache.pack = pack && pack.days ? pack : { month: mk, days: {}, activeByDay: {} };
+          rtlActiveMonthCache.loading = null;
+        }
+        return rtlActiveMonthCache.pack;
+      })
+      .catch((err) => {
+        if (rtlActiveMonthCache.month === mk) {
+          rtlActiveMonthCache.loading = null;
+          rtlActiveMonthCache.error = err.message || "RTL daily unavailable";
+          rtlActiveMonthCache.pack = null;
+        }
+        return null;
+      });
+    return rtlActiveMonthCache.loading;
+  }
+
+  function mapRtlDailyVehicle(v, dateKey, snapId, i) {
+    const ageRaw = v && (v.age != null && String(v.age).trim() !== "" ? v.age : v.ageing);
+    let ageing = null;
+    if (ageRaw != null && String(ageRaw).trim() !== "" && String(ageRaw).trim() !== "—") {
+      const ageNum = Number(String(ageRaw).replace(/[, ]/g, ""));
+      if (Number.isFinite(ageNum) && ageNum >= 0) ageing = ageNum;
+    }
+    const product = cellToString(v && v.product).trim() || "—";
+    const suffix = normalizeProductSuffix(product, cellToString(v && (v.suffix || v.sfx)).trim() || "—");
+    const details = v && v.details && typeof v.details === "object" ? v.details : null;
+    // Exact "Sharing Level" (capital L) only — not "Sharing level" codes.
+    const sharingExact = details && details["Sharing Level"] != null
+      ? cellToString(details["Sharing Level"]).trim()
+      : "";
+    const sharingLevel = sharingExact
+      || cellToString(v && (v.sharingLevel || v.shareLevel || v.sharing)).trim()
+      || "";
+    return {
+      id: `rtl-day-${dateKey}-${i}`,
+      source: "RTL-daily",
+      product,
+      vin: extractVinValue(v && v.vin) || cellToString(v && v.vin).trim().toUpperCase(),
+      suffix,
+      year: cellToString(v && v.year).trim(),
+      ext: cellToString(v && v.ext).trim(),
+      int: cellToString(v && v.int).trim(),
+      ageing,
+      usage: cellToString(v && v.usage).trim()
+        || detailByHeader(v && v.details, ["usage description", "usage desc", "usage"])
+        || "—",
+      location: cellToString(v && v.location).trim()
+        || detailByHeader(v && v.details, ["current location", "allocated location", "location"])
+        || "—",
+      status: cellToString(v && v.status).trim(),
+      searchAreaDesc: cellToString(v && (v.vehicleSearchArea || v.searchAreaDesc)).trim(),
+      sharingLevel,
+      shareLevel: sharingLevel,
+      details,
+      snapshotDate: dateKey,
+      snapshotId: snapId || "",
+    };
+  }
+
+  function emptyBasLeafRows() {
+    const byLeaf = new Map();
+    ALLOCATION_ROWS.forEach((leaf) => {
+      if (leaf.kind !== "leaf") return;
+      byLeaf.set(leaf.id, {
+        id: leaf.id,
+        seg: leaf.seg,
+        product: leaf.product,
+        sfx: leaf.sfx,
+        allocation: Number(allocationValues[leaf.id]) || 0,
+        dayCounts: Array(31).fill(0),
+        mtd: 0,
+        late: 0,
+        age0: 0,
+        cars: [],
+      });
+    });
+    return byLeaf;
+  }
+
+  function pushBasMonthCar(byLeaf, car) {
+    const row = byLeaf.get(car.leafId);
+    if (!row) return;
+    row.mtd += 1;
+    if (car.collectionDay >= 1 && car.collectionDay <= 30) row.dayCounts[car.collectionDay] += 1;
+    if (car.isLate) row.late += 1;
+    if (car.isTodayArrival) row.age0 += 1;
+    row.cars.push(car);
+  }
+
+  /** Col J age 0 only (explicit). Blank age is unknown — not counted in Tot (avoids inflated day sums). */
+  function isRtlDayFileArrival(age) {
+    return age != null && Number.isFinite(age) && Math.floor(age) === 0;
+  }
+
+  /** RES collected in this day file: explicit Col J age 0 only (blank ages excluded). */
+  function isResCollectedInDayFile(age) {
+    return age != null && Number.isFinite(age) && Math.floor(age) === 0;
+  }
+
+  function basResArrivalBadge(car) {
+    const kind = car && car.changeKind;
+    if (kind === "to-res") {
+      const from = car.prevSearchArea ? ` · was ${car.prevSearchArea}` : "";
+      return { cls: "warn", text: `New to RES${from}` };
+    }
+    if (kind === "from-res") {
+      const to = car.newSearchArea ? ` · now ${car.newSearchArea}` : "";
+      return { cls: "bad", text: `Moved out of RES${to}` };
+    }
+    if (car && car.arrivalKind === "new-res") {
+      const ag = car.agLabel ? ` · AG ${car.agLabel}` : "";
+      return { cls: "ok", text: `Age 0 · day ${car.collectionDay != null ? car.collectionDay : "?"}${ag}` };
+    }
+    if (car && car.arrivalKind === "backdated-res") {
+      const ag = car.agLabel ? ` · AG ${car.agLabel}` : "";
+      return { cls: "ok", text: `Backdated · day ${car.collectionDay != null ? car.collectionDay : "?"}${ag}` };
+    }
+    if (car && car.arrivalKind === "free-stock") {
+      return { cls: "warn", text: `Free stock · age ${car.age != null ? car.age : "?"}d` };
+    }
+    if (car && car.arrivalKind === "age0") {
+      return { cls: "ok", text: `Received · day ${car.collectionDay != null ? car.collectionDay : "?"}` };
+    }
+    if (car && car.isTodayArrival) {
+      return { cls: "ok", text: `Received · day ${car.collectionDay || "?"}` };
+    }
+    return { cls: "ok", text: `Received · day ${car && car.collectionDay != null ? car.collectionDay : "?"}` };
+  }
+
+  let basDayOpsView = { day: 0, bucket: "" };
+  let basDayOpsLast = null;
+
+  function basDayOpsFmtSalesDate(d) {
+    if (!d) return "—";
+    if (typeof formatRvDate === "function") {
+      const s = formatRvDate(d);
+      if (s && s !== "—" && s !== "N/A") return s;
+    }
+    try {
+      const dt = d instanceof Date ? d : parseDate(d);
+      if (!dt) return "—";
+      return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return "—";
+    }
+  }
+
+  function renderBasDayOpsDetail() {
+    const detail = $("#bas-day-ops-detail");
+    const tableEl = $("#bas-day-ops-table");
+    const titleEl = $("#bas-day-ops-detail-title");
+    const hintEl = $("#bas-day-ops-detail-hint");
+    if (!detail || !tableEl) return;
+    const day = Number(basDayOpsView.day) || 0;
+    const bucket = basDayOpsView.bucket || "";
+    const pack = basDayOpsLast;
+    const slot = pack && pack.days && pack.days[day] ? pack.days[day] : null;
+    if (!slot || !bucket || !slot[bucket]) {
+      detail.hidden = true;
+      return;
+    }
+    const labels = {
+      received: "From allocation · received",
+      delivered: "Delivered",
+      proforma: "Proforma",
+      free: "Free in stock",
+      moved: "Moved from Retail Electronic Sales",
+    };
+    const rows = slot[bucket] || [];
+    detail.hidden = false;
+    if (titleEl) titleEl.textContent = `Day ${day} · ${labels[bucket] || bucket}`;
+    if (hintEl) {
+      hintEl.textContent = `${formatNumber(rows.length)} VIN(s) · ${slot.label || ""}${slot.dateKey ? ` · file ${slot.dateKey}` : ""}`;
+    }
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:12px">No VINs in this bucket.</p>`;
+      return;
+    }
+    const showMoved = bucket === "moved";
+    tableEl.innerHTML = `<table class="bas-table">
+      <thead><tr>
+        <th>VIN</th><th>Product</th><th>SFX</th><th>Alloc Date</th><th class="num">Age</th>
+        ${showMoved ? "<th>From</th><th>To</th>" : "<th>Sales Raw</th><th>Proforma</th><th>Invoice</th>"}
+        <th>Location</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows.map((r) => `<tr class="${bucket === "moved" ? "bas-row-below" : bucket === "received" ? "bas-row-above" : ""}">
+        <td class="mono">${escapeHtml(r.vin)}</td>
+        <td>${escapeHtml(r.product || "—")}</td>
+        <td>${escapeHtml(r.suffix || "—")}</td>
+        <td>${escapeHtml(r.agLabel || "—")}</td>
+        <td class="num">${r.age == null ? "—" : formatNumber(r.age)}</td>
+        ${showMoved
+          ? `<td>${escapeHtml(r.prevSearchArea || "Retail Electronic Sales")}</td><td>${escapeHtml(r.newSearchArea || "—")}</td>`
+          : `<td><span class="badge ${r.bucket === "delivered" ? "ok" : r.bucket === "proforma" ? "warn" : "na"}">${escapeHtml(r.label || "—")}</span></td>
+             <td>${escapeHtml(basDayOpsFmtSalesDate(r.proformaDate))}</td>
+             <td>${escapeHtml(basDayOpsFmtSalesDate(r.invoiceDate))}</td>`}
+        <td>${escapeHtml(r.location || "—")}</td>
+        <td>${escapeHtml(r.status || "—")}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  function renderBasDayOps(dayOps, ctx, dayHasFile) {
+    const root = $("#bas-day-ops");
+    if (!root) return;
+    basDayOpsLast = dayOps;
+    if (!dayOps || !dayOps.days) {
+      root.innerHTML = `<p class="foot" style="padding:8px 0">Upload day RTL files to see same-day allocation, Sales Raw, and movement.</p>`;
+      const detail = $("#bas-day-ops-detail");
+      if (detail) detail.hidden = true;
+      return;
+    }
+
+    let html = "";
+    for (let day = 1; day <= 30; day += 1) {
+      const slot = dayOps.days[day] || null;
+      const hasFile = (slot && slot.hasFile) || (dayHasFile && dayHasFile[day]);
+      const isToday = day === ctx.todayDay;
+      const isFuture = day > ctx.todayDay;
+      if (!hasFile) continue;
+      if (isFuture) continue;
+      const received = slot ? slot.received.length : 0;
+      const delivered = slot ? slot.delivered.length : 0;
+      const proforma = slot ? slot.proforma.length : 0;
+      const free = slot ? slot.free.length : 0;
+      const moved = slot ? slot.moved.length : 0;
+      const active = basDayOpsView.day === day ? basDayOpsView.bucket : "";
+      const cardCls = [
+        "bas-day-ops-card",
+        isToday ? "is-today" : "",
+        isFuture ? "is-future" : "",
+        hasFile ? "has-file" : "",
+        (received || delivered || proforma || free || moved) ? "has-stats" : "",
+      ].filter(Boolean).join(" ");
+
+      html += `<article class="${cardCls}" data-day="${day}">
+        <header class="bas-day-ops-head">
+          <div>
+            <span class="bas-day-ops-num">Day ${day}</span>
+            <span class="bas-day-ops-date">${escapeHtml(slot && slot.label ? slot.label : "")}${hasFile ? " · file" : " · no file"}</span>
+          </div>
+          ${day > 1 ? `<span class="bas-day-ops-vs">vs day ${day - 1}</span>` : `<span class="bas-day-ops-vs">first file</span>`}
+        </header>
+        <div class="bas-day-ops-metrics">
+          ${[
+            ["received", "From allocation we received", received, "ok"],
+            ["delivered", "Delivered", delivered, "ok"],
+            ["proforma", "Proforma", proforma, "warn"],
+            ["free", "Free in the stock", free, "info"],
+            ["moved", "Moved from Retail Electronic Sales", moved, "bad"],
+          ].map(([key, lab, n, tone]) => `
+            <button type="button" class="bas-day-ops-metric ${tone}${active === key ? " is-active" : ""}${!hasFile ? " is-disabled" : ""}"
+              data-day-ops-day="${day}" data-day-ops-bucket="${key}" ${!hasFile ? "disabled" : ""}>
+              <span class="bas-day-ops-metric-lab">${escapeHtml(lab)}</span>
+              <span class="bas-day-ops-metric-val">${formatNumber(n)}</span>
+            </button>`).join("")}
+        </div>
+      </article>`;
+    }
+    root.innerHTML = html || `<p class="foot" style="padding:8px 0">No day files in range yet.</p>`;
+
+    $$("[data-day-ops-bucket]", root).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const d = Number(btn.getAttribute("data-day-ops-day")) || 0;
+        const b = btn.getAttribute("data-day-ops-bucket") || "";
+        if (basDayOpsView.day === d && basDayOpsView.bucket === b) {
+          basDayOpsView = { day: 0, bucket: "" };
+        } else {
+          basDayOpsView = { day: d, bucket: b };
+        }
+        renderBasDayOps(basDayOpsLast, ctx, dayHasFile);
+        renderBasDayOpsDetail();
+        const detail = $("#bas-day-ops-detail");
+        if (detail && !detail.hidden) {
+          try { detail.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) { /* ignore */ }
+        }
+      });
+    });
+
+    const closeBtn = $("#bas-day-ops-detail-close");
+    if (closeBtn && !closeBtn.dataset.bound) {
+      closeBtn.dataset.bound = "1";
+      closeBtn.addEventListener("click", () => {
+        basDayOpsView = { day: 0, bucket: "" };
+        if (basDayOpsLast) renderBasDayOps(basDayOpsLast, ctx, dayHasFile);
+        renderBasDayOpsDetail();
+      });
+    }
+
+    renderBasDayOpsDetail();
+  }
+
+  function basScheduleDayFromAg(agDate, fileDayNum, ctx) {
+    if (agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m) {
+      const d = agDate.getDate();
+      if (Number.isFinite(d) && d >= 1 && d <= 30 && d <= ctx.todayDay) return d;
+    }
+    return fileDayNum;
+  }
+
+  function basAttachSalesDelivery(cars) {
+    const salesMap = typeof buildSalesVinLookup === "function" ? buildSalesVinLookup() : new Map();
+    let delivered = 0;
+    let proforma = 0;
+    let pending = 0;
+    let notFound = 0;
+    (cars || []).forEach((car) => {
+      const sales = typeof resolveAaSalesStatus === "function"
+        ? resolveAaSalesStatus(car.vin, salesMap)
+        : { kind: "none", label: "—", salesman: "" };
+      car.salesKind = sales.kind || "none";
+      car.salesLabel = sales.label || "—";
+      car.salesman = sales.salesman || "";
+      car.proformaDate = sales.proformaDate || null;
+      car.invoiceDate = sales.invoiceDate || sales.deliveryDate || null;
+      if (sales.kind === "delivered") {
+        car.deliveryStatus = "Delivered";
+        delivered += 1;
+      } else if (sales.kind === "proforma") {
+        car.deliveryStatus = "Proforma / Invoice";
+        proforma += 1;
+      } else if (sales.kind === "sales") {
+        car.deliveryStatus = "Not Delivered";
+        pending += 1;
+      } else {
+        car.deliveryStatus = "Not Found";
+        notFound += 1;
+        pending += 1;
+      }
+    });
+    return { delivered, proforma, pending, notFound, total: (cars || []).length };
+  }
+
+  /** Sales Raw bucket for day ops: invoice → delivered; blank invoice (incl. both blank) → proforma; else free. */
+  function basDaySalesBucket(vin, salesLookup) {
+    const sales = typeof resolveAaSalesStatus === "function"
+      ? resolveAaSalesStatus(vin, salesLookup)
+      : { kind: "none", proformaDate: null, invoiceDate: null, deliveryDate: null };
+    const inv = sales.invoiceDate || sales.deliveryDate || null;
+    const hasInv = !!(inv && parseDate(inv)) || sales.kind === "delivered";
+    const pro = sales.proformaDate || null;
+    const hasPro = !!(pro && parseDate(pro));
+    if (hasInv) {
+      return {
+        bucket: "delivered",
+        label: "Delivered",
+        salesFound: true,
+        proformaDate: pro,
+        invoiceDate: inv,
+      };
+    }
+    if (sales.kind !== "none") {
+      // Found in Sales Raw with blank invoice (proforma only, or both dates blank) → Proforma
+      return {
+        bucket: "proforma",
+        label: hasPro ? "Proforma" : "Proforma (no dates)",
+        salesFound: true,
+        proformaDate: pro,
+        invoiceDate: null,
+      };
+    }
+    return {
+      bucket: "free",
+      label: "Free in stock",
+      salesFound: false,
+      proformaDate: null,
+      invoiceDate: null,
+    };
+  }
+
+  function basAgSameAsFileDay(agDate, dayNum, ctx) {
+    if (!agDate || !ctx) return false;
+    return agDate.getFullYear() === ctx.y
+      && agDate.getMonth() === ctx.m
+      && agDate.getDate() === dayNum;
+  }
+
+  /**
+   * Per day-file RES ops:
+   * received = RES + Allocation Date on that file day
+   * delivered / proforma / free = Sales Raw status for RES still in the file
+   * moved = was RES in previous day file, not RES in this file
+   */
+  function buildBasDayOpsPack(ctx, dayFiles) {
+    const emptyDay = (day) => ({
+      day,
+      dateKey: "",
+      hasFile: false,
+      label: new Date(ctx.y, ctx.m, day).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+      received: [],
+      delivered: [],
+      proforma: [],
+      free: [],
+      moved: [],
+    });
+    const days = {};
+    for (let d = 1; d <= 30; d += 1) days[d] = emptyDay(d);
+    if (!dayFiles || typeof dayFiles !== "object") {
+      return { days, salesLookupSize: 0 };
+    }
+
+    const salesLookup = typeof buildSalesVinLookup === "function" ? buildSalesVinLookup() : new Map();
+    let prevRes = new Map(); // vin -> row meta
+
+    Object.keys(dayFiles).sort().forEach((dateKey) => {
+      const dayNum = Number(String(dateKey).slice(8, 10));
+      if (!Number.isFinite(dayNum) || dayNum < 1 || dayNum > 30) return;
+      if (dayNum > ctx.daysInMonth || dayNum > ctx.todayDay) return;
+      const snap = dayFiles[dateKey];
+      const vehicles = (snap && snap.vehicles) || [];
+      const slot = days[dayNum];
+      slot.hasFile = true;
+      slot.dateKey = dateKey;
+
+      const thisRes = new Map();
+      const seenVin = new Set();
+
+      vehicles.forEach((v, i) => {
+        const car = mapRtlDailyVehicle(v, dateKey, snap && snap.id, i);
+        const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+        if (!vin || seenVin.has(vin)) return;
+        seenVin.add(vin);
+        const searchArea = (typeof dayVehicleSearchArea === "function"
+          ? dayVehicleSearchArea(v)
+          : "") || car.searchAreaDesc || "";
+        const isRes = isRetailElectronicSales(searchArea);
+        const agDate = typeof dayVehicleAgDate === "function" ? dayVehicleAgDate(v) : null;
+        const agLabel = agDate
+          ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          : "";
+        const ageRaw = car.ageing;
+        const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+        const leaf = matchRtlToAllocLeaf(car);
+        const base = {
+          vin,
+          product: leaf ? leaf.product : (car.product || "—"),
+          suffix: leaf ? leaf.sfx : (car.suffix || "—"),
+          year: car.year || "",
+          age,
+          agDate,
+          agLabel,
+          location: car.location || "—",
+          status: car.status || "",
+          searchArea: searchArea || "",
+          day: dayNum,
+          dateKey,
+        };
+
+        if (isRes) {
+          thisRes.set(vin, base);
+          // Received = RES + Col J age 0 + AG same as file day (frozen per day file)
+          if (age === 0 && basAgSameAsFileDay(agDate, dayNum, ctx)) {
+            slot.received.push({ ...base, bucket: "received", label: "Received · age 0 · same-day AG" });
+          }
+          const sales = basDaySalesBucket(vin, salesLookup);
+          const row = {
+            ...base,
+            bucket: sales.bucket,
+            label: sales.label,
+            salesFound: sales.salesFound,
+            proformaDate: sales.proformaDate,
+            invoiceDate: sales.invoiceDate,
+          };
+          if (sales.bucket === "delivered") slot.delivered.push(row);
+          else if (sales.bucket === "proforma") slot.proforma.push(row);
+          else slot.free.push(row);
+        } else if (prevRes.has(vin)) {
+          const prev = prevRes.get(vin);
+          slot.moved.push({
+            ...base,
+            bucket: "moved",
+            label: "Moved from Retail Electronic Sales",
+            prevSearchArea: (prev && prev.searchArea) || "Retail Electronic Sales",
+            newSearchArea: searchArea || "(other)",
+            product: base.product !== "—" ? base.product : (prev.product || "—"),
+            suffix: base.suffix !== "—" ? base.suffix : (prev.suffix || "—"),
+          });
+        }
+      });
+
+      // RES yesterday, missing entirely from today's file → moved out
+      prevRes.forEach((prev, vin) => {
+        if (thisRes.has(vin)) return;
+        if (seenVin.has(vin)) return; // already counted as moved to other area
+        slot.moved.push({
+          ...prev,
+          day: dayNum,
+          dateKey,
+          bucket: "moved",
+          label: "Moved from Retail Electronic Sales",
+          prevSearchArea: prev.searchArea || "Retail Electronic Sales",
+          newSearchArea: "(not in day file)",
+        });
+      });
+
+      prevRes = thisRes;
+    });
+
+    return { days, salesLookupSize: salesLookup.size };
+  }
+
+  /**
+   * Monthly RTL allocation schedule:
+   * For each submitted day RTL file, compare Retail Electronic Sales VINs to all prior day files.
+   * - Tot = Col J age === 0 (any search area) — explicit 0 only (blank excluded so summed Tot is not inflated).
+   * - New RES + Col J = 0 + first seen as RES = Received on schedule (once). Day frozen from that file.
+   * - VIN first seen in another search area then entering RES = transfer in (not counted as received).
+   * - Was RES before, now another search area / missing = Moved out (informational).
+   * - Sales Raw: Col P = Proforma · Col V = Delivered.
+   */
+  function buildBasMonthlyData() {
+    const ctx = basMonthContext();
+    const pack = getCachedRtlActiveMonth(ctx.monthKey);
+    const dayFiles = pack && pack.days && typeof pack.days === "object" ? pack.days : null;
+    const hasDayFiles = dayFiles && Object.keys(dayFiles).length > 0;
+
+    const matched = [];
+    const retailArrivalCars = [];
+    const retailArrivalSeen = new Set();
+    const freeStockCars = [];
+    const freeStockSeen = new Set();
+    const matchedResVinSeen = new Set();
+    const resChangeCars = [];
+    const resChangeSeen = new Set();
+    const everResSeen = new Set(); // cumulative RES across prior days
+    const everSeenAny = new Set(); // any search area — first appearance wins for "mine"
+    const everSeenNonRes = new Set(); // first seen outside RES → later RES is transfer-in
+    const dayTotals = Array(31).fill(0);
+    const dayRetailTotals = Array(31).fill(0);
+    const dayHasFile = Array(31).fill(false);
+    const dayFileVinCount = Array(31).fill(0);
+    const dayAge0Count = Array(31).fill(0);
+    let mode = hasDayFiles ? "daily" : "age";
+
+    const pushRetailArrival = (car, collDate, collectionDay, collLabel, extra) => {
+      if (collectionDay > ctx.todayDay) return;
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || retailArrivalSeen.has(vin)) return;
+      retailArrivalSeen.add(vin);
+      retailArrivalCars.push({
+        ...car,
+        collectionDate: collDate,
+        collectionDay,
+        collectionLabel: collLabel,
+        ...(extra || {}),
+      });
+    };
+
+    const pushFreeStock = (car, collDate, collectionDay, collLabel, extra) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || freeStockSeen.has(vin)) return;
+      freeStockSeen.add(vin);
+      const leaf = matchRtlToAllocLeaf(car);
+      freeStockCars.push({
+        ...car,
+        seg: leaf ? leaf.seg : "—",
+        allocProduct: leaf ? leaf.product : (car.product || "—"),
+        allocSfx: leaf ? leaf.sfx : (car.suffix || "—"),
+        leafId: leaf ? leaf.id : "",
+        allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
+        collectionDate: collDate,
+        collectionDay,
+        collectionLabel: collLabel,
+        isTodayArrival: false,
+        isLate: false,
+        isFreeStock: true,
+        arrivalKind: "free-stock",
+        ...(extra || {}),
+      });
+    };
+
+    const pushResChange = (car, dayNum, collDate, collLabel, change) => {
+      if (dayNum > ctx.todayDay) return;
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin) return;
+      const key = `${vin}|${dayNum}|${change.changeKind}`;
+      if (resChangeSeen.has(key)) return;
+      resChangeSeen.add(key);
+      const leaf = matchRtlToAllocLeaf(car);
+      resChangeCars.push({
+        ...car,
+        seg: leaf ? leaf.seg : "—",
+        allocProduct: leaf ? leaf.product : (car.product || "—"),
+        allocSfx: leaf ? leaf.sfx : (car.suffix || "—"),
+        leafId: leaf ? leaf.id : "",
+        allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
+        collectionDate: collDate,
+        collectionDay: dayNum,
+        collectionLabel: collLabel,
+        isTodayArrival: false,
+        isLate: false,
+        _changeOnly: true,
+        ...change,
+      });
+    };
+
+    const resByProduct = new Map();
+    const addResProduct = (car, dayNum) => {
+      if (dayNum > ctx.todayDay) return;
+      const name = String(car.product || "—").trim() || "—";
+      resByProduct.set(name, (resByProduct.get(name) || 0) + 1);
+    };
+
+    if (hasDayFiles) {
+      let prevResMeta = new Map(); // vin -> { searchArea, car } from previous day file RES only
+
+      Object.keys(dayFiles).sort().forEach((dateKey) => {
+        const dayNum = Number(String(dateKey).slice(8, 10));
+        if (!Number.isFinite(dayNum) || dayNum < 1 || dayNum > 31) return;
+        if (dayNum > ctx.daysInMonth) return;
+        const snap = dayFiles[dateKey];
+        const vehicles = (snap && snap.vehicles) || [];
+        const fileDate = new Date(ctx.y, ctx.m, dayNum);
+        const fileLabel = fileDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+        if (dayNum >= 1 && dayNum <= 30) {
+          dayHasFile[dayNum] = true;
+          dayFileVinCount[dayNum] = Number(snap.count) || vehicles.length || 0;
+        }
+
+        const thisResMeta = new Map();
+        const seenThisDay = new Set();
+
+        vehicles.forEach((v, i) => {
+          const car = mapRtlDailyVehicle(v, dateKey, snap.id, i);
+          const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+          if (!vin) return;
+          const ageRaw = car.ageing;
+          const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+          const isAge0 = isRtlDayFileArrival(age);
+          const isResArrival = isResCollectedInDayFile(age);
+          const searchArea = (typeof dayVehicleSearchArea === "function"
+            ? dayVehicleSearchArea(v)
+            : "") || car.searchAreaDesc || "";
+          car.searchAreaDesc = searchArea || car.searchAreaDesc;
+          const isRes = isRetailElectronicSales(searchArea);
+          const agDate = typeof dayVehicleAgDate === "function" ? dayVehicleAgDate(v) : null;
+          const agLabel = agDate
+            ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+            : "";
+          seenThisDay.add(vin);
+
+          if (!everSeenAny.has(vin)) {
+            everSeenAny.add(vin);
+            if (!isRes) everSeenNonRes.add(vin);
+          }
+
+          // Tot = explicit Col J age 0 only (any search area) — blank ages excluded
+          // Frozen from this day file — later days do not change prior day Tot
+          if (isAge0 && dayNum >= 1 && dayNum <= 30 && dayNum <= ctx.todayDay) {
+            dayTotals[dayNum] += 1;
+            dayAge0Count[dayNum] += 1;
+          }
+
+          if (isRes) {
+            thisResMeta.set(vin, { searchArea, car, agDate, agLabel, age });
+          }
+
+          // New to RES vs all prior day files → once
+          // Received ONLY when: Col M RES + Col J = 0 + AG = file day + first appearance was RES
+          if (isRes && dayNum <= ctx.todayDay && !everResSeen.has(vin)) {
+            everResSeen.add(vin);
+            const cameFromOther = everSeenNonRes.has(vin);
+            const changeKind = prevResMeta.size > 0 || cameFromOther ? "to-res" : null;
+            const ageVal = age == null ? null : age;
+            const agSameDay = basAgSameAsFileDay(agDate, dayNum, ctx);
+
+            if (changeKind) {
+              pushResChange(car, dayNum, fileDate, fileLabel, {
+                changeKind: "to-res",
+                prevSearchArea: cameFromOther ? "(other area)" : "",
+                newSearchArea: searchArea || "Retail Electronic Sales",
+                age: ageVal,
+                agDate,
+                agLabel,
+              });
+            }
+
+            if (cameFromOther) {
+              // First seen elsewhere → Transfers IN only (not counted as received / schedule)
+            } else if (isAge0 && agSameDay) {
+              const scheduleDay = dayNum;
+              const collDate = agDate;
+              const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+              dayRetailTotals[scheduleDay] += 1;
+              pushRetailArrival(car, collDate, scheduleDay, collLabel, {
+                age: ageVal,
+                isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
+                isLate: false,
+                arrivalKind: "new-res",
+                agDate,
+                agLabel,
+                firstSeenDay: dayNum,
+                backdated: false,
+                sameDayAllocation: true,
+                _fromDayFile: true,
+              });
+              addResProduct(car, scheduleDay);
+
+              const leaf = matchRtlToAllocLeaf(car);
+              if (leaf && !matchedResVinSeen.has(vin)) {
+                matchedResVinSeen.add(vin);
+                matched.push({
+                  ...car,
+                  seg: leaf.seg,
+                  allocProduct: leaf.product,
+                  allocSfx: leaf.sfx,
+                  leafId: leaf.id,
+                  allocation: Number(allocationValues[leaf.id]) || 0,
+                  collectionDate: collDate,
+                  collectionDay: scheduleDay,
+                  collectionLabel: collLabel,
+                  isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
+                  isLate: false,
+                  age: ageVal,
+                  arrivalKind: "new-res",
+                  agDate,
+                  agLabel,
+                  firstSeenDay: dayNum,
+                  backdated: false,
+                  sameDayAllocation: true,
+                  _fromDayFile: true,
+                });
+              }
+            } else {
+              // RES first seen but not age-0 same-day AG → free stock (not on schedule day)
+              const fallbackDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
+                ? agDate
+                : fileDate;
+              const fallbackDay = basScheduleDayFromAg(agDate, dayNum, ctx);
+              pushFreeStock(car, fallbackDate, fallbackDay, fallbackDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+                age: ageVal,
+                agDate,
+                agLabel,
+                firstSeenDay: dayNum,
+                sameDayAllocation: false,
+                _fromDayFile: true,
+              });
+            }
+          } else if (isRes && everResSeen.has(vin)) {
+            // Already counted as received / free stock — still RES today, no double count
+            // Same-day AG on a later file still counts toward that day's strip via dayOps overlay
+          } else if (!isRes && prevResMeta.has(vin)) {
+            // Still in file but left RES
+            const prev = prevResMeta.get(vin);
+            pushResChange(car, dayNum, fileDate, fileLabel, {
+              changeKind: "from-res",
+              prevSearchArea: (prev && prev.searchArea) || "Retail Electronic Sales",
+              newSearchArea: searchArea || "",
+              age: age == null ? 0 : age,
+              agDate,
+              agLabel,
+            });
+          }
+        });
+
+        // Was RES in previous day file, absent from this file → moved out
+        if (prevResMeta.size && dayNum <= ctx.todayDay) {
+          prevResMeta.forEach((prev, vin) => {
+            if (thisResMeta.has(vin)) return;
+            if (seenThisDay.has(vin)) return; // already handled as from-res above
+            const base = (prev && prev.car) || { vin, searchAreaDesc: prev.searchArea, product: "—", suffix: "—" };
+            pushResChange(base, dayNum, fileDate, fileLabel, {
+              changeKind: "from-res",
+              prevSearchArea: (prev && prev.searchArea) || "Retail Electronic Sales",
+              newSearchArea: "(not in day file)",
+              age: base.ageing == null || !Number.isFinite(base.ageing) ? null : Math.floor(base.ageing),
+              agDate: prev && prev.agDate ? prev.agDate : null,
+              agLabel: prev && prev.agLabel ? prev.agLabel : "",
+            });
+          });
+        }
+
+        prevResMeta = thisResMeta;
+      });
+
+      // Late = age ≥ 1 RES still in today's file (backlog) — not part of received MTD
+      const todayKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
+      const todaySnap = dayFiles[todayKey];
+      if (todaySnap && Array.isArray(todaySnap.vehicles)) {
+        todaySnap.vehicles.forEach((v, i) => {
+          const car = mapRtlDailyVehicle(v, todayKey, todaySnap.id, `late-${i}`);
+          const searchArea = (typeof dayVehicleSearchArea === "function"
+            ? dayVehicleSearchArea(v)
+            : "") || car.searchAreaDesc || "";
+          if (!isRetailElectronicSales(searchArea)) return;
+          const leaf = matchRtlToAllocLeaf(car);
+          if (!leaf) return;
+          const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+          if (age == null || age < 1) return;
+          const arrivedOn = inferCollectionDateFromAge(age, ctx.today);
+          matched.push({
+            ...car,
+            searchAreaDesc: searchArea,
+            seg: leaf.seg,
+            allocProduct: leaf.product,
+            allocSfx: leaf.sfx,
+            leafId: leaf.id,
+            allocation: Number(allocationValues[leaf.id]) || 0,
+            collectionDate: arrivedOn || ctx.today,
+            collectionDay: arrivedOn ? arrivedOn.getDate() : null,
+            collectionLabel: arrivedOn
+              ? arrivedOn.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+              : "—",
+            isTodayArrival: false,
+            isLate: true,
+            age,
+            arrivalKind: "late",
+            _lateOnly: true,
+            _fromDayFile: true,
+          });
+        });
+      }
+    } else {
+      // No day files — fall back to live RTL Col J age for RES
+      const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
+      rtlRows.forEach((car) => {
+        if (!isRetailElectronicSales(car.searchAreaDesc)) return;
+        const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
+        if (!collDate) return;
+        if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
+        const collectionDay = collDate.getDate();
+        const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+        const isAge0 = isRtlDayFileArrival(age);
+        const leaf = matchRtlToAllocLeaf(car);
+        if (!leaf) return;
+        if (collectionDay >= 1 && collectionDay <= 30) {
+          if (isAge0) {
+            dayTotals[collectionDay] += 1;
+            dayAge0Count[collectionDay] += 1;
+            dayRetailTotals[collectionDay] += 1;
+            addResProduct(car, collectionDay);
+            pushRetailArrival(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+              age,
+              isTodayArrival: age === 0,
+              isLate: false,
+              arrivalKind: "new-res",
+              _fromDayFile: false,
+            });
+            matched.push({
+              ...car,
+              seg: leaf.seg,
+              allocProduct: leaf.product,
+              allocSfx: leaf.sfx,
+              leafId: leaf.id,
+              allocation: Number(allocationValues[leaf.id]) || 0,
+              collectionDate: collDate,
+              collectionDay,
+              collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+              isTodayArrival: age === 0,
+              isLate: false,
+              age,
+              arrivalKind: "new-res",
+              _fromDayFile: false,
+            });
+          } else {
+            // age ≥ 1 with inferred collection day already in month → schedule (backdated)
+            dayRetailTotals[collectionDay] += 1;
+            addResProduct(car, collectionDay);
+            pushRetailArrival(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+              age,
+              isTodayArrival: false,
+              isLate: false,
+              arrivalKind: "backdated-res",
+              backdated: true,
+              _fromDayFile: false,
+            });
+            matched.push({
+              ...car,
+              seg: leaf.seg,
+              allocProduct: leaf.product,
+              allocSfx: leaf.sfx,
+              leafId: leaf.id,
+              allocation: Number(allocationValues[leaf.id]) || 0,
+              collectionDate: collDate,
+              collectionDay,
+              collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+              isTodayArrival: false,
+              isLate: false,
+              age,
+              arrivalKind: "backdated-res",
+              backdated: true,
+              _fromDayFile: false,
+            });
+          }
+        }
+      });
+      if (matched.length || freeStockCars.length) mode = "age";
+    }
+
+    const byLeaf = emptyBasLeafRows();
+    const arrivalMatched = matched.filter((car) => !car._lateOnly && !car._nonResAge0);
+    arrivalMatched.forEach((car) => pushBasMonthCar(byLeaf, car));
+
+    const byLeafRetail = emptyBasLeafRows();
+    const matchedRetailArrivals = arrivalMatched.filter((car) =>
+      car.arrivalKind === "new-res"
+      || car.arrivalKind === "backdated-res"
+      || isRetailElectronicSales(car.searchAreaDesc)
+    );
+    matchedRetailArrivals.forEach((car) => pushBasMonthCar(byLeafRetail, car));
+
+    const lateCars = matched.filter((car) => car.isLate && isRetailElectronicSales(car.searchAreaDesc));
+    lateCars.forEach((car) => {
+      const row = byLeafRetail.get(car.leafId);
+      if (row) row.late += 1;
+      const rowAll = byLeaf.get(car.leafId);
+      if (rowAll) rowAll.late += 1;
+    });
+
+    const delivery = basAttachSalesDelivery(matchedRetailArrivals);
+    basAttachSalesDelivery(retailArrivalCars);
+    basAttachSalesDelivery(freeStockCars);
+    basAttachSalesDelivery(resChangeCars.filter((c) => c.changeKind === "to-res"));
+
+    const movedOutCars = resChangeCars.filter((c) => c.changeKind === "from-res");
+    const newInCars = resChangeCars.filter((c) => c.changeKind === "to-res");
+
+    // Day ops: same-day AG received + Sales Raw + moved — drives schedule RES strip + day cards
+    const dayOps = buildBasDayOpsPack(ctx, hasDayFiles ? dayFiles : null);
+    if (dayOps && dayOps.days) {
+      for (let d = 1; d <= 30; d += 1) {
+        const slot = dayOps.days[d];
+        if (slot && slot.hasFile) {
+          dayRetailTotals[d] = (slot.received || []).length;
+        }
+      }
+    }
+
+    const rowsAll = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
+    const rows = [...byLeafRetail.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
+    return {
+      ctx,
+      rows,
+      rowsAll,
+      matched: matchedRetailArrivals,
+      matchedAll: arrivalMatched,
+      retailArrivalCars,
+      freeStockCars,
+      resChangeCars,
+      movedOutCars,
+      newInCars,
+      lateCars,
+      delivery,
+      dayOps,
+      dayTotals,
+      dayRetailTotals,
+      dayHasFile,
+      dayFileVinCount,
+      dayAge0Count,
+      resByProduct: [...resByProduct.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))),
+      mode,
+      activeDayCount: hasDayFiles ? Object.keys(dayFiles).length : 0,
+    };
+  }
+
+  function filteredBasMonthlyRows(rows) {
+    const q = basView.search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (basView.seg && r.seg !== basView.seg) return false;
+      if (basView.product && r.product !== basView.product) return false;
+      if (basView.sfx && r.sfx !== basView.sfx) return false;
+      if (q) {
+        const hay = `${r.seg} ${r.product} ${r.sfx}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  /* ——— RES VIN Movement / Reconciliation (distinct VIN ledger) ——— */
+  let resMoveView = {
+    kpi: "",
+    q: "",
+    movement: "",
+    presence: "",
+    sales: "",
+  };
+  let resMoveLastPack = null;
+
+  function resMoveNormVin(raw) {
+    return extractVinValue(raw) || upperTrim(String(raw || "").replace(/[^A-Za-z0-9]/g, ""));
+  }
+
+  function resMoveFmtDate(d) {
+    if (!d) return "";
+    if (typeof formatRvDate === "function") {
+      const s = formatRvDate(d);
+      if (s && s !== "—" && s !== "N/A") return s;
+    }
+    try {
+      const dt = d instanceof Date ? d : parseDate(d);
+      if (!dt) return cellToString(d).slice(0, 10);
+      return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return cellToString(d).slice(0, 10);
+    }
+  }
+
+  function resMoveSalesClass(sales) {
+    if (!sales || sales.kind === "none") {
+      return {
+        found: false,
+        badge: "NOT FOUND IN SALES RAW",
+        label: "REMOVED / NOT FOUND IN SALES RAW",
+        exitType: "REMOVED",
+        proformaDate: null,
+        invoiceDate: null,
+      };
+    }
+    const hasInv = !!(sales.invoiceDate && parseDate(sales.invoiceDate))
+      || !!(sales.deliveryDate && parseDate(sales.deliveryDate))
+      || sales.kind === "delivered";
+    const hasPro = !!(sales.proformaDate && parseDate(sales.proformaDate));
+    if (hasInv && hasPro) {
+      return {
+        found: true,
+        badge: "PROFORMA + INVOICE",
+        label: "PROFORMA + INVOICE",
+        exitType: "PROFORMA_INVOICE",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+      };
+    }
+    if (hasInv) {
+      return {
+        found: true,
+        badge: "INVOICE",
+        label: "INVOICE",
+        exitType: "INVOICE",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+      };
+    }
+    if (hasPro) {
+      return {
+        found: true,
+        badge: "PROFORMA",
+        label: "PROFORMA",
+        exitType: "PROFORMA",
+        proformaDate: sales.proformaDate,
+        invoiceDate: null,
+      };
+    }
+    return {
+      found: true,
+      badge: "FOUND IN SALES RAW",
+      label: "REMOVED / NOT FOUND IN SALES RAW",
+      exitType: "REMOVED",
+      proformaDate: sales.proformaDate,
+      invoiceDate: sales.invoiceDate || sales.deliveryDate,
+    };
+  }
+
+  /**
+   * Build chronological VIN observations from RTL day snapshots (+ live RTL as latest).
+   * Classification uses historical movement first, then Sales Raw for disappeared VINs.
+   */
+  function buildResVinMovementPack() {
+    const ctx = basMonthContext();
+    const pack = getCachedRtlActiveMonth(ctx.monthKey);
+    const dayFiles = pack && pack.days && typeof pack.days === "object" ? pack.days : {};
+    const dateKeys = Object.keys(dayFiles).sort();
+    const salesLookup = typeof buildSalesVinLookup === "function" ? buildSalesVinLookup() : new Map();
+
+    const history = new Map(); // vin -> observations[]
+    const quality = {
+      blankVins: 0,
+      invalidVins: 0,
+      duplicateRowsInSnapshots: 0,
+      productConflicts: 0,
+      areaFlips: 0,
+      salesOnly: 0,
+    };
+
+    const pushObs = (vin, obs) => {
+      if (!history.has(vin)) history.set(vin, []);
+      history.get(vin).push(obs);
+    };
+
+    dateKeys.forEach((dateKey) => {
+      const snap = dayFiles[dateKey];
+      const vehicles = (snap && snap.vehicles) || [];
+      const seenInSnap = new Set();
+      vehicles.forEach((v, i) => {
+        const car = mapRtlDailyVehicle(v, dateKey, snap && snap.id, i);
+        const vin = resMoveNormVin(car.vin);
+        if (!vin) {
+          quality.blankVins += 1;
+          return;
+        }
+        if (vin.length < 11) {
+          quality.invalidVins += 1;
+        }
+        if (seenInSnap.has(vin)) {
+          quality.duplicateRowsInSnapshots += 1;
+          return;
+        }
+        seenInSnap.add(vin);
+        const searchArea = (typeof dayVehicleSearchArea === "function"
+          ? dayVehicleSearchArea(v)
+          : "") || car.searchAreaDesc || "";
+        const agDate = typeof dayVehicleAgDate === "function" ? dayVehicleAgDate(v) : null;
+        const ageRaw = car.ageing;
+        const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+        pushObs(vin, {
+          dateKey,
+          searchArea: searchArea || "",
+          isRes: isRetailElectronicSales(searchArea),
+          product: car.product || "—",
+          suffix: car.suffix || "—",
+          year: car.year || "",
+          age,
+          allocationDate: agDate,
+          agLabel: agDate ? resMoveFmtDate(agDate) : "",
+          location: car.location || "—",
+          status: car.status || "",
+          source: "day",
+        });
+      });
+    });
+
+    // Live RTL overlays as authoritative "current" observation (same day key as today)
+    const liveCars = mapStockInv(slots.rtl.rows || [], "RTL");
+    const liveKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
+    if (liveCars.length) {
+      // Drop same-day day-file rows so live alone defines "today"
+      history.forEach((list, vin) => {
+        history.set(vin, list.filter((o) => !(o.dateKey === liveKey && o.source === "day")));
+      });
+      const seenLive = new Set();
+      liveCars.forEach((car) => {
+        const vin = resMoveNormVin(car.vin);
+        if (!vin) {
+          quality.blankVins += 1;
+          return;
+        }
+        if (seenLive.has(vin)) {
+          quality.duplicateRowsInSnapshots += 1;
+          return;
+        }
+        seenLive.add(vin);
+        const searchArea = car.searchAreaDesc || "";
+        const ageRaw = car.ageing;
+        const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+        const agDate = car._raw && typeof rtlAgDateFromRaw === "function" ? rtlAgDateFromRaw(car._raw) : null;
+        pushObs(vin, {
+          dateKey: liveKey,
+          searchArea,
+          isRes: isRetailElectronicSales(searchArea),
+          product: car.product || "—",
+          suffix: car.suffix || "—",
+          year: car.year || "",
+          age,
+          allocationDate: agDate,
+          agLabel: agDate ? resMoveFmtDate(agDate) : "",
+          location: car.location || "—",
+          status: car.status || "",
+          source: "live",
+        });
+      });
+      if (!dateKeys.includes(liveKey)) dateKeys.push(liveKey);
+      dateKeys.sort();
+    }
+
+    const latestKey = dateKeys.length ? dateKeys[dateKeys.length - 1] : "";
+    const transferEvents = [];
+    const ledger = [];
+
+    history.forEach((obsList, vin) => {
+      obsList.sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+      const everRes = obsList.some((o) => o.isRes);
+      if (!everRes) return;
+
+      const products = new Set(obsList.map((o) => o.product).filter(Boolean));
+      if (products.size > 1) quality.productConflicts += 1;
+
+      let entryType = "CARRYOVER"; // NEW_ALLOCATION | TRANSFER_IN | CARRYOVER
+      let entryFrom = "";
+      let entryAt = "";
+      let firstRes = null;
+      let lastRes = null;
+      let prevObs = null;
+
+      obsList.forEach((o) => {
+        if (o.isRes) {
+          if (!firstRes) {
+            firstRes = o;
+            entryAt = o.dateKey;
+            if (prevObs && !prevObs.isRes) {
+              entryType = "TRANSFER_IN";
+              entryFrom = prevObs.searchArea || "(other)";
+              transferEvents.push({
+                direction: "IN",
+                vin,
+                product: o.product,
+                prevArea: entryFrom,
+                currArea: o.searchArea || "Retail Electronic Sales",
+                prevDate: prevObs.dateKey,
+                currDate: o.dateKey,
+              });
+            } else if (!prevObs) {
+              // First observation overall is RES
+              if (o.age == null || o.age === 0) entryType = "NEW_ALLOCATION";
+              else entryType = "CARRYOVER";
+            } else {
+              entryType = "CARRYOVER";
+            }
+          }
+          lastRes = o;
+        } else if (prevObs && prevObs.isRes) {
+          transferEvents.push({
+            direction: "OUT",
+            vin,
+            product: prevObs.product,
+            prevArea: prevObs.searchArea || "Retail Electronic Sales",
+            currArea: o.searchArea || "(other)",
+            prevDate: prevObs.dateKey,
+            currDate: o.dateKey,
+          });
+          quality.areaFlips += 1;
+        }
+        prevObs = o;
+      });
+
+      const lastObs = obsList[obsList.length - 1];
+      const inLatestSnap = latestKey && obsList.some((o) => o.dateKey === latestKey);
+      const latestObs = inLatestSnap
+        ? obsList.filter((o) => o.dateKey === latestKey).slice(-1)[0]
+        : null;
+      const isCurrentRes = !!(latestObs && latestObs.isRes);
+
+      const sales = typeof resolveAaSalesStatus === "function"
+        ? resolveAaSalesStatus(vin, salesLookup)
+        : { kind: "none" };
+      const salesClass = resMoveSalesClass(sales);
+
+      let exitType = "";
+      let finalClassification = "CURRENT";
+      let movementType = "CURRENT";
+
+      if (isCurrentRes) {
+        finalClassification = "CURRENT";
+        movementType = entryType === "NEW_ALLOCATION"
+          ? "NEW ALLOCATION"
+          : entryType === "TRANSFER_IN"
+            ? "TRANSFER IN"
+            : "PREVIOUS / CARRYOVER";
+      } else if (latestObs && !latestObs.isRes && lastRes) {
+        // Still in latest RTL but left RES
+        exitType = "TRANSFER_OUT";
+        finalClassification = "TRANSFER OUT";
+        movementType = "TRANSFER OUT";
+      } else if (!inLatestSnap || !latestObs) {
+        // Disappeared from latest RTL — Sales Raw first
+        exitType = salesClass.exitType;
+        finalClassification = salesClass.label;
+        movementType = salesClass.label;
+      } else {
+        exitType = "REMOVED";
+        finalClassification = "REMOVED / NOT FOUND IN SALES RAW";
+        movementType = finalClassification;
+      }
+
+      const cur = latestObs || lastObs || lastRes || firstRes;
+      ledger.push({
+        vin,
+        product: (lastRes && lastRes.product) || (firstRes && firstRes.product) || "—",
+        suffix: (lastRes && lastRes.suffix) || (firstRes && firstRes.suffix) || "—",
+        year: (lastRes && lastRes.year) || "",
+        firstSnapshot: obsList[0].dateKey,
+        lastSnapshot: lastObs.dateKey,
+        firstRetailDate: firstRes ? firstRes.dateKey : "",
+        allocationDate: (lastRes && lastRes.agLabel) || (firstRes && firstRes.agLabel) || "",
+        allocationAgeing: lastRes ? lastRes.age : (firstRes ? firstRes.age : null),
+        previousSearchArea: entryFrom || (entryType === "CARRYOVER" ? "Retail Electronic Sales" : ""),
+        currentSearchArea: isCurrentRes
+          ? (latestObs.searchArea || "Retail Electronic Sales")
+          : (latestObs ? latestObs.searchArea : "(missing from latest RTL)"),
+        entryType,
+        exitType,
+        movementType,
+        finalClassification,
+        isCurrent: isCurrentRes,
+        salesFound: salesClass.found,
+        salesBadge: salesClass.badge,
+        proformaDate: salesClass.proformaDate,
+        invoiceDate: salesClass.invoiceDate,
+        location: (cur && cur.location) || "—",
+        status: (cur && cur.status) || "",
+        observations: obsList.length,
+      });
+    });
+
+    // Sales Raw VINs not in any RTL RES history (informational quality)
+    salesLookup.forEach((_s, vin) => {
+      if (!history.has(vin)) quality.salesOnly += 1;
+    });
+
+    const kpis = {
+      historical: ledger.length,
+      carryover: ledger.filter((r) => r.entryType === "CARRYOVER").length,
+      newAlloc: ledger.filter((r) => r.entryType === "NEW_ALLOCATION").length,
+      transferIn: ledger.filter((r) => r.entryType === "TRANSFER_IN").length,
+      transferOut: ledger.filter((r) => r.exitType === "TRANSFER_OUT" || r.finalClassification === "TRANSFER OUT").length,
+      current: ledger.filter((r) => r.isCurrent).length,
+      proforma: ledger.filter((r) => r.exitType === "PROFORMA").length,
+      invoice: ledger.filter((r) => r.exitType === "INVOICE" || r.exitType === "PROFORMA_INVOICE").length,
+      removed: ledger.filter((r) => r.exitType === "REMOVED").length,
+    };
+
+    // Reconciliation: every historical VIN has one entry type and one outcome
+    const entered = kpis.carryover + kpis.newAlloc + kpis.transferIn;
+    const outcomes = kpis.current + kpis.transferOut + kpis.proforma + kpis.invoice + kpis.removed;
+    const impliedCurrent = entered - (kpis.transferOut + kpis.proforma + kpis.invoice + kpis.removed);
+    const unreconciled = (entered - kpis.historical) || (outcomes - kpis.historical) || (kpis.current - impliedCurrent);
+    const unreconciledVins = [];
+    if (unreconciled !== 0) {
+      ledger.forEach((r) => {
+        const outcomeOk = r.isCurrent
+          || r.exitType === "TRANSFER_OUT"
+          || r.exitType === "PROFORMA"
+          || r.exitType === "INVOICE"
+          || r.exitType === "PROFORMA_INVOICE"
+          || r.exitType === "REMOVED";
+        const entryOk = r.entryType === "CARRYOVER" || r.entryType === "NEW_ALLOCATION" || r.entryType === "TRANSFER_IN";
+        if (!outcomeOk || !entryOk) unreconciledVins.push(r.vin);
+      });
+    }
+
+    // Transfer corridor summary
+    const corridor = new Map();
+    transferEvents.forEach((e) => {
+      const key = `${e.prevArea} → ${e.currArea}`;
+      corridor.set(key, (corridor.get(key) || 0) + 1);
+    });
+
+    return {
+      ctx,
+      latestKey,
+      snapshotCount: dateKeys.length,
+      ledger,
+      transferEvents,
+      corridor: [...corridor.entries()].map(([k, n]) => ({ path: k, count: n }))
+        .sort((a, b) => b.count - a.count),
+      kpis,
+      recon: {
+        entered,
+        outcomes,
+        left: kpis.transferOut + kpis.proforma + kpis.invoice + kpis.removed,
+        impliedCurrent,
+        actualCurrent: kpis.current,
+        unreconciled,
+        unreconciledVins: unreconciledVins.slice(0, 40),
+      },
+      quality,
+    };
+  }
+
+  function filteredResMoveRows(pack) {
+    const rows = (pack && pack.ledger) || [];
+    const q = String(resMoveView.q || "").trim().toLowerCase();
+    const move = resMoveView.movement || resMoveView.kpi || "";
+    return rows.filter((r) => {
+      if (move === "CURRENT" && !r.isCurrent) return false;
+      if (move === "PREVIOUS / CARRYOVER" && r.entryType !== "CARRYOVER") return false;
+      if (move === "NEW ALLOCATION" && r.entryType !== "NEW_ALLOCATION") return false;
+      if (move === "TRANSFER IN" && r.entryType !== "TRANSFER_IN") return false;
+      if (move === "TRANSFER OUT" && r.finalClassification !== "TRANSFER OUT" && r.exitType !== "TRANSFER_OUT") return false;
+      if (move === "PROFORMA" && r.exitType !== "PROFORMA") return false;
+      if (move === "INVOICE" && r.exitType !== "INVOICE" && r.exitType !== "PROFORMA_INVOICE") return false;
+      if (move === "PROFORMA + INVOICE" && r.exitType !== "PROFORMA_INVOICE") return false;
+      if (move === "REMOVED / NOT FOUND IN SALES RAW" && r.exitType !== "REMOVED") return false;
+      if (move === "HISTORICAL" && false) return false;
+      if (resMoveView.kpi === "historical") { /* all */ }
+      if (resMoveView.presence === "current" && !r.isCurrent) return false;
+      if (resMoveView.presence === "removed" && r.isCurrent) return false;
+      if (resMoveView.sales === "found" && !r.salesFound) return false;
+      if (resMoveView.sales === "notfound" && r.salesFound) return false;
+      if (resMoveView.sales === "proforma" && !r.proformaDate) return false;
+      if (resMoveView.sales === "invoice" && !r.invoiceDate) return false;
+      if (q) {
+        const hay = `${r.vin} ${r.product} ${r.suffix} ${r.previousSearchArea} ${r.currentSearchArea} ${r.finalClassification} ${r.location}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderResVinMovement() {
+    const panel = $("#bas-res-move-panel");
+    if (!panel) return;
+    const ctx = basMonthContext();
+    const packCache = getCachedRtlActiveMonth(ctx.monthKey);
+    const hasDaily = packCache && packCache.days && Object.keys(packCache.days).length > 0;
+    if (!hasDaily && !(slots.rtl.rows || []).length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+
+    const pack = buildResVinMovementPack();
+    resMoveLastPack = pack;
+    const k = pack.kpis;
+
+    const kpiEl = $("#bas-res-move-kpis");
+    if (kpiEl) {
+      const items = [
+        ["historical", "Historical RES", k.historical, "Ever entered Retail Electronic Sales", ""],
+        ["CURRENT", "Current RES", k.current, "In latest RTL snapshot", "ok"],
+        ["PREVIOUS / CARRYOVER", "Previous / Carryover", k.carryover, "Already RES before first seen / age ≥ 1", ""],
+        ["NEW ALLOCATION", "New Allocation", k.newAlloc, "First seen as RES · age 0 / blank", "ok"],
+        ["TRANSFER IN", "Transfer IN", k.transferIn, "Other area → RES", "info"],
+        ["TRANSFER OUT", "Transfer OUT", k.transferOut, "RES → other area in RTL", "warn"],
+        ["PROFORMA", "Proforma", k.proforma, "Missing from RTL · open proforma in Sales Raw", "warn"],
+        ["INVOICE", "Invoice", k.invoice, "Missing from RTL · invoiced / delivered", "ok"],
+        ["REMOVED / NOT FOUND IN SALES RAW", "Removed / Unmatched", k.removed, "Missing from RTL · not in Sales Raw", "bad"],
+      ];
+      kpiEl.innerHTML = items.map(([id, lab, val, sub, cls]) => {
+        const active = (resMoveView.kpi === id || resMoveView.movement === id) ? " is-active" : "";
+        return `<button type="button" class="bo-kpi bas-res-move-kpi${active}${cls ? ` ${cls}` : ""}" data-res-move-kpi="${escapeHtml(id)}" title="${escapeHtml(sub)}">
+          <div class="lab">${escapeHtml(lab)}</div>
+          <div class="val">${escapeHtml(formatNumber(val))}</div>
+          <div class="sub">${escapeHtml(sub)}</div>
+        </button>`;
+      }).join("");
+      $$("[data-res-move-kpi]", kpiEl).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-res-move-kpi") || "";
+          if (resMoveView.kpi === id) {
+            resMoveView.kpi = "";
+            resMoveView.movement = "";
+          } else {
+            resMoveView.kpi = id;
+            resMoveView.movement = id === "historical" ? "" : id;
+          }
+          const sel = $("#bas-res-move-f-move");
+          if (sel) sel.value = resMoveView.movement;
+          renderResVinMovement();
+        });
+      });
+    }
+
+    const flow = $("#bas-res-move-flow");
+    if (flow) {
+      flow.innerHTML = `
+        <div class="bas-res-flow-row">
+          <span class="bas-res-flow-chip">Previous ${formatNumber(k.carryover)}</span>
+          <span class="bas-res-flow-arrow">↓</span>
+          <span class="bas-res-flow-chip is-ok">New Allocation ${formatNumber(k.newAlloc)}</span>
+          <span class="bas-res-flow-plus">+</span>
+          <span class="bas-res-flow-chip is-info">Transfer IN ${formatNumber(k.transferIn)}</span>
+          <span class="bas-res-flow-arrow">→</span>
+          <span class="bas-res-flow-chip is-core">RES ${formatNumber(k.historical)}</span>
+          <span class="bas-res-flow-arrow">→</span>
+          <span class="bas-res-flow-chip is-warn">Transfer OUT ${formatNumber(k.transferOut)}</span>
+        </div>
+        <div class="bas-res-flow-row">
+          <span class="bas-res-flow-chip is-warn">Proforma ${formatNumber(k.proforma)}</span>
+          <span class="bas-res-flow-chip is-ok">Invoice ${formatNumber(k.invoice)}</span>
+          <span class="bas-res-flow-chip is-bad">Removed ${formatNumber(k.removed)}</span>
+          <span class="bas-res-flow-arrow">⇒</span>
+          <span class="bas-res-flow-chip is-core">Current ${formatNumber(k.current)}</span>
+        </div>`;
+    }
+
+    const recon = $("#bas-res-move-recon");
+    if (recon) {
+      const r = pack.recon;
+      const balCls = r.unreconciled === 0 ? "ok" : "bad";
+      recon.innerHTML = `
+        <div class="bas-res-recon-card">
+          <strong>Reconciliation</strong>
+          <p class="hint" style="margin:6px 0 0">
+            Carryover ${formatNumber(k.carryover)}
+            + New ${formatNumber(k.newAlloc)}
+            + Transfer IN ${formatNumber(k.transferIn)}
+            = Entered ${formatNumber(r.entered)}
+            · − Transfer OUT ${formatNumber(k.transferOut)}
+            − Proforma/Invoice ${formatNumber(k.proforma + k.invoice)}
+            − Removed ${formatNumber(k.removed)}
+            = Implied current ${formatNumber(r.impliedCurrent)}
+            · Actual current ${formatNumber(r.actualCurrent)}
+            · <span class="badge ${balCls}">${r.unreconciled === 0 ? "Balanced" : `UNRECONCILED ${r.unreconciled > 0 ? "+" : ""}${formatNumber(r.unreconciled)}`}</span>
+          </p>
+          ${r.unreconciled !== 0 && r.unreconciledVins.length
+            ? `<p class="foot" style="margin:8px 0 0">Sample multi-flip VINs: ${r.unreconciledVins.map((v) => escapeHtml(v)).join(", ")}</p>`
+            : ""}
+          <p class="foot" style="margin:6px 0 0">${formatNumber(pack.snapshotCount)} RTL snapshot(s) · latest ${escapeHtml(pack.latestKey || "—")}</p>
+        </div>`;
+    }
+
+    const xferEl = $("#bas-res-move-transfers");
+    if (xferEl) {
+      const events = (pack.transferEvents || []).slice().reverse().slice(0, 80);
+      const corridors = pack.corridor || [];
+      xferEl.innerHTML = `
+        <p class="hint" style="margin:0 0 8px">Other area → RES (IN) · RES → other area (OUT)</p>
+        ${corridors.length ? `<table class="bas-table" style="margin-bottom:10px">
+          <thead><tr><th>From → To</th><th class="num">VINs</th></tr></thead>
+          <tbody>${corridors.slice(0, 20).map((c) => `<tr>
+            <td>${escapeHtml(c.path)}</td><td class="num">${formatNumber(c.count)}</td>
+          </tr>`).join("")}</tbody>
+        </table>` : "<p class=\"foot\">No transfer corridors yet.</p>"}
+        ${events.length ? `<table class="bas-table">
+          <thead><tr><th>Dir</th><th>VIN</th><th>Product</th><th>From</th><th>To</th><th>Prev day</th><th>Curr day</th></tr></thead>
+          <tbody>${events.map((e) => `<tr class="${e.direction === "IN" ? "bas-row-above" : "bas-row-below"}">
+            <td><span class="badge ${e.direction === "IN" ? "ok" : "warn"}">${e.direction}</span></td>
+            <td>${escapeHtml(e.vin)}</td>
+            <td>${escapeHtml(e.product || "—")}</td>
+            <td>${escapeHtml(e.prevArea)}</td>
+            <td>${escapeHtml(e.currArea)}</td>
+            <td>${escapeHtml(e.prevDate)}</td>
+            <td>${escapeHtml(e.currDate)}</td>
+          </tr>`).join("")}</tbody>
+        </table>` : ""}`;
+    }
+
+    const qualEl = $("#bas-res-move-quality");
+    if (qualEl) {
+      const q = pack.quality || {};
+      qualEl.innerHTML = `<div class="status-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+        ${[
+          ["Blank VINs", q.blankVins],
+          ["Short / invalid VINs", q.invalidVins],
+          ["Dup rows in snapshots", q.duplicateRowsInSnapshots],
+          ["Product conflicts", q.productConflicts],
+          ["RES area flips", q.areaFlips],
+          ["Sales-only VINs", q.salesOnly],
+        ].map(([lab, n]) => `<div class="status-chip" style="cursor:default"><div class="n">${formatNumber(n || 0)}</div><div class="l">${escapeHtml(lab)}</div></div>`).join("")}
+      </div>`;
+    }
+
+    const rows = filteredResMoveRows(pack);
+    const foot = $("#bas-res-move-foot");
+    if (foot) {
+      foot.textContent = `${formatNumber(rows.length)} VIN(s) shown · ${formatNumber(pack.ledger.length)} historical RES · filters apply to the audit table`;
+    }
+    const tableEl = $("#bas-res-move-table");
+    if (tableEl) {
+      if (!rows.length) {
+        tableEl.innerHTML = `<p class="foot" style="padding:12px">No VINs match these filters. Upload day RTL files and Sales Raw, then Refresh.</p>`;
+      } else {
+        tableEl.innerHTML = `<table class="bas-table">
+          <thead><tr>
+            <th>VIN</th><th>Product</th><th>SFX</th><th>Alloc Date</th><th class="num">Age</th>
+            <th>First seen</th><th>Last seen</th><th>Prev area</th><th>Curr area</th>
+            <th>Movement</th><th>Sales Raw</th><th>Proforma</th><th>Invoice</th>
+            <th>Final</th><th>Location</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rows.map((r) => {
+            const salesCls = r.salesFound ? (r.exitType === "INVOICE" || r.exitType === "PROFORMA_INVOICE" ? "ok" : "warn") : "bad";
+            return `<tr class="${r.isCurrent ? "bas-row-above" : "bas-row-below"}">
+              <td class="mono">${escapeHtml(r.vin)}</td>
+              <td>${escapeHtml(r.product)}</td>
+              <td>${escapeHtml(r.suffix)}</td>
+              <td>${escapeHtml(r.allocationDate || "—")}</td>
+              <td class="num">${r.allocationAgeing == null ? "—" : formatNumber(r.allocationAgeing)}</td>
+              <td>${escapeHtml(r.firstRetailDate || r.firstSnapshot || "—")}</td>
+              <td>${escapeHtml(r.lastSnapshot || "—")}</td>
+              <td>${escapeHtml(r.previousSearchArea || "—")}</td>
+              <td>${escapeHtml(r.currentSearchArea || "—")}</td>
+              <td><span class="badge">${escapeHtml(r.movementType)}</span></td>
+              <td><span class="badge ${salesCls}">${escapeHtml(r.salesBadge)}</span></td>
+              <td>${escapeHtml(resMoveFmtDate(r.proformaDate) || "—")}</td>
+              <td>${escapeHtml(resMoveFmtDate(r.invoiceDate) || "—")}</td>
+              <td><strong>${escapeHtml(r.finalClassification)}</strong></td>
+              <td>${escapeHtml(r.location || "—")}</td>
+              <td>${escapeHtml(r.status || "—")}</td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>`;
+      }
+    }
+  }
+
+  function exportResVinMovementExcel() {
+    const pack = resMoveLastPack || buildResVinMovementPack();
+    const rows = filteredResMoveRows(pack);
+    if (typeof XLSX === "undefined") {
+      setStatus("Excel library not loaded", "err");
+      return;
+    }
+    const aoa = [[
+      "VIN", "Product", "Suffix", "Year", "Allocation Date", "Allocation Ageing",
+      "First Snapshot", "Last Snapshot", "First Retail Date",
+      "Previous Search Area", "Current Search Area", "Entry Type", "Exit Type",
+      "Movement Type", "Final Classification", "Sales Raw", "Proforma Date", "Invoice Date",
+      "Location", "Status", "Observations",
+    ]];
+    rows.forEach((r) => {
+      aoa.push([
+        r.vin, r.product, r.suffix, r.year, r.allocationDate, r.allocationAgeing,
+        r.firstSnapshot, r.lastSnapshot, r.firstRetailDate,
+        r.previousSearchArea, r.currentSearchArea, r.entryType, r.exitType,
+        r.movementType, r.finalClassification, r.salesBadge,
+        resMoveFmtDate(r.proformaDate), resMoveFmtDate(r.invoiceDate),
+        r.location, r.status, r.observations,
+      ]);
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "RES VIN Movement");
+    XLSX.writeFile(wb, `res-vin-movement-${pack.latestKey || "export"}.xlsx`);
+  }
+
+  function bindResVinMovementUi() {
+    const q = $("#bas-res-move-q");
+    if (q && !q.dataset.bound) {
+      q.dataset.bound = "1";
+      q.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        resMoveView.q = q.value.trim();
+        renderResVinMovement();
+      });
+      q.addEventListener("change", () => {
+        resMoveView.q = q.value.trim();
+        renderResVinMovement();
+      });
+    }
+    ["bas-res-move-f-move", "bas-res-move-f-presence", "bas-res-move-f-sales"].forEach((id) => {
+      const el = $(`#${id}`);
+      if (!el || el.dataset.bound) return;
+      el.dataset.bound = "1";
+      el.addEventListener("change", () => {
+        if (id.endsWith("move")) {
+          resMoveView.movement = el.value;
+          resMoveView.kpi = el.value;
+        }
+        if (id.endsWith("presence")) resMoveView.presence = el.value;
+        if (id.endsWith("sales")) resMoveView.sales = el.value;
+        renderResVinMovement();
+      });
+    });
+    const clear = $("#bas-res-move-clear");
+    if (clear && !clear.dataset.bound) {
+      clear.dataset.bound = "1";
+      clear.addEventListener("click", () => {
+        resMoveView = { kpi: "", q: "", movement: "", presence: "", sales: "" };
+        if (q) q.value = "";
+        ["bas-res-move-f-move", "bas-res-move-f-presence", "bas-res-move-f-sales"].forEach((id) => {
+          const el = $(`#${id}`);
+          if (el) el.value = "";
+        });
+        renderResVinMovement();
+      });
+    }
+    const exp = $("#bas-res-move-export");
+    if (exp && !exp.dataset.bound) {
+      exp.dataset.bound = "1";
+      exp.addEventListener("click", () => {
+        try { exportResVinMovementExcel(); }
+        catch (err) { setStatus(err.message || "Export failed", "err"); }
+      });
+    }
+  }
+
+  function renderBasMonthlyCollection(d) {
+    const section = $("#bas-month-section");
+    if (!section) return;
+
+    const ctxProbe = basMonthContext();
+    const pack = getCachedRtlActiveMonth(ctxProbe.monthKey);
+    const hasDaily = pack && pack.days && Object.keys(pack.days).length > 0;
+    if (!slotHasRows("rtl") && !hasDaily) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+
+    const {
+      ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, dayFileVinCount,
+      mode, activeDayCount, lateCars, resChangeCars, movedOutCars, delivery, freeStockCars,
+      dayOps,
+    } = buildBasMonthlyData();
+    const hint = $("#bas-month-hint");
+    if (hint) {
+      const live = ctx.live || window._globalLivePeriod;
+      const rangeNote = live && (live.preset === "this_month" || live.preset === "today")
+        ? ` · MTD 1–${ctx.todayDay}`
+        : "";
+      if (mode === "daily") {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · RES schedule = Allocation Date on that file day · Sales Raw delivered / proforma · free stock · moved out · today day ${ctx.todayDay}`;
+      } else {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · today day ${ctx.todayDay}`;
+      }
+    }
+
+    const filteredRows = filteredBasMonthlyRows(rows);
+    const filteredMatched = matched.filter((car) => {
+      const row = rows.find((r) => r.id === car.leafId);
+      if (!row) return false;
+      return filteredRows.some((fr) => fr.id === row.id);
+    });
+    const filteredLate = (lateCars || []).filter((car) => filteredRows.some((fr) => fr.id === car.leafId));
+    const movedList = movedOutCars || (resChangeCars || []).filter((c) => c.changeKind === "from-res");
+    const filteredMoved = movedList.filter((car) => {
+      if (!basView.seg && !basView.product && !basView.sfx && !String(basView.search || "").trim()) return true;
+      if (!car.leafId) return true;
+      return filteredRows.some((fr) => fr.id === car.leafId);
+    });
+    const freeList = freeStockCars || [];
+    const filteredFree = freeList.filter((car) => {
+      if (!basView.seg && !basView.product && !basView.sfx && !String(basView.search || "").trim()) return true;
+      if (!car.leafId) return true;
+      return filteredRows.some((fr) => fr.id === car.leafId);
+    });
+
+    const planTotal = filteredRows.reduce((s, r) => s + r.allocation, 0);
+    const mtdTotal = filteredRows.reduce((s, r) => s + r.mtd, 0);
+    const resAllMtd = basScheduleResReceived({ dayRetailTotals, ctx }) || 0;
+    const unmatchedToPlan = Math.max(0, resAllMtd - mtdTotal);
+    const receivedToday = filteredMatched.filter((c) =>
+      c.firstSeenDay === ctx.todayDay || c.collectionDay === ctx.todayDay
+    ).length;
+    const movedToday = filteredMoved.filter((c) => c.collectionDay === ctx.todayDay).length;
+    const movedTotal = filteredMoved.length;
+    const freeTotal = filteredFree.length;
+    const lateTotal = filteredLate.length;
+    const gap = planTotal - resAllMtd;
+    const del = delivery || { delivered: 0, proforma: 0, pending: 0, notFound: 0, total: 0 };
+    const filteredDelivery = {
+      delivered: filteredMatched.filter((c) => c.salesKind === "delivered").length,
+      proforma: filteredMatched.filter((c) => c.salesKind === "proforma").length,
+      pending: filteredMatched.filter((c) => c.salesKind !== "delivered").length,
+    };
+
+    const kpiEl = $("#bas-month-kpis");
+    if (kpiEl) {
+      kpiEl.innerHTML = [
+        { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
+        { label: "RES Received MTD", val: formatNumber(resAllMtd), sub: "Same-day Allocation Date · Retail Electronic Sales", cls: "ok" },
+        { label: "Matched to plan", val: formatNumber(mtdTotal), sub: unmatchedToPlan ? `${formatNumber(unmatchedToPlan)} unmatched to allocation` : "All RES map to plan rows", cls: unmatchedToPlan ? "warn" : "ok" },
+        { label: "Received today", val: formatNumber(receivedToday), sub: "First seen / collected today", cls: receivedToday ? "ok" : "" },
+        { label: "Free stock", val: formatNumber(freeTotal), sub: "New RES · could not place on a month day", cls: freeTotal ? "warn" : "ok" },
+        { label: "Moved out", val: formatNumber(movedTotal), sub: `Left RES · ${formatNumber(movedToday)} today`, cls: movedTotal ? "bad" : "ok" },
+        { label: "Delivered", val: formatNumber(filteredDelivery.delivered), sub: "Sales Raw · RES received", cls: filteredDelivery.delivered ? "ok" : "" },
+        { label: "Plan / Gap", val: `${formatNumber(planTotal)} / ${(gap > 0 ? "+" : "") + formatNumber(gap)}`, sub: gap >= 0 ? "Plan above RES received" : "RES above plan", cls: gap >= 0 ? "warn" : "ok" },
+      ].map((k) => `
+        <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+          <div class="lbl">${k.label}</div>
+          <div class="val">${escapeHtml(String(k.val))}</div>
+          <div class="sub">${k.sub}</div>
+        </article>
+      `).join("");
+    }
+
+    const stripEl = $("#bas-day-strip");
+    if (stripEl) {
+      let stripHtml = "";
+      for (let day = 1; day <= 30; day += 1) {
+        const total = dayTotals[day] || 0;
+        const retail = (dayRetailTotals && dayRetailTotals[day]) || 0;
+        const isToday = day === ctx.todayDay;
+        const isFuture = day > ctx.todayDay;
+        const hasFile = dayHasFile && dayHasFile[day];
+        const fileVins = (dayFileVinCount && dayFileVinCount[day]) || 0;
+        const cls = [
+          "bas-day-pill",
+          "bas-day-pill-split",
+          isToday ? "is-today" : "",
+          isFuture ? "is-future" : "",
+          total || retail ? "has-cars" : "",
+          hasFile ? "has-file" : "",
+          hasFile && !(total || retail) ? "has-file-empty" : "",
+        ].filter(Boolean).join(" ");
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs · Tot = age 0 in that file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · no same-day RES allocation in that file" : ""} · Tot ${total} · RES same-day AG ${retail}">
+          <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
+          <span class="bas-day-split">
+            <span class="bas-day-part">
+              <span class="bas-day-part-lab">Tot</span>
+              <span class="bas-day-count bas-day-count-total">${hasFile ? (total || "0") : (total || "—")}</span>
+            </span>
+            <span class="bas-day-part">
+              <span class="bas-day-part-lab">RES</span>
+              <span class="bas-day-count bas-day-count-retail">${hasFile ? (retail || "0") : (retail || "—")}</span>
+            </span>
+          </span>
+        </div>`;
+      }
+      stripEl.innerHTML = stripHtml;
+    }
+
+    renderRetailElectronicSalesPanel(ctx, mode === "daily" ? pack : null, {
+      matched: filteredMatched,
+      changes: filteredMoved,
+      todayDay: ctx.todayDay,
+    });
+
+    const tableEl = $("#bas-month-table");
+    const footEl = $("#bas-month-foot");
+    if (tableEl) {
+      if (!filteredRows.length) {
+        tableEl.innerHTML = `<p class="foot" style="padding:16px">No age-0 Retail Electronic Sales rows match filters.${mode === "daily" ? " Day columns only show new RES VINs that were age 0 when first seen." : ""}</p>`;
+      } else {
+        const dayHeaders = Array.from({ length: 30 }, (_, i) => {
+          const day = i + 1;
+          const cls = day === ctx.todayDay ? "bas-day-col is-today" : day > ctx.todayDay ? "bas-day-col is-future" : "bas-day-col";
+          return `<th class="${cls}">${day}</th>`;
+        }).join("");
+        const body = filteredRows.map((r) => {
+          const rowGap = r.allocation - r.mtd;
+          const gapCls = rowGap > 0 ? "bas-gap-pos" : rowGap < 0 ? "bas-gap-neg" : "";
+          const dayCells = Array.from({ length: 30 }, (_, i) => {
+            const day = i + 1;
+            const n = r.dayCounts[day] || 0;
+            const cls = day === ctx.todayDay ? "is-today" : "";
+            return `<td class="num bas-day-cell ${cls}${n ? " has-val" : ""}">${n || ""}</td>`;
+          }).join("");
+          return `<tr>
+            <td>${escapeHtml(r.seg)}</td>
+            <td>${escapeHtml(r.product)}</td>
+            <td>${escapeHtml(r.sfx)}</td>
+            <td class="num">${formatNumber(r.allocation)}</td>
+            ${dayCells}
+            <td class="num"><b>${formatNumber(r.mtd)}</b></td>
+            <td class="num ${gapCls}">${rowGap > 0 ? "+" : ""}${formatNumber(rowGap)}</td>
+            <td class="num">${formatNumber(r.late)}</td>
+          </tr>`;
+        }).join("");
+        const totals = filteredRows.reduce((acc, r) => {
+          acc.mtd += r.mtd;
+          acc.alloc += r.allocation;
+          acc.late += r.late;
+          for (let d = 1; d <= 30; d += 1) acc.days[d] = (acc.days[d] || 0) + (r.dayCounts[d] || 0);
+          return acc;
+        }, { mtd: 0, alloc: 0, late: 0, days: {} });
+        const totalDayCells = Array.from({ length: 30 }, (_, i) => {
+          const day = i + 1;
+          const n = totals.days[day] || 0;
+          return `<td class="num"><b>${n || ""}</b></td>`;
+        }).join("");
+        const totalGap = totals.alloc - totals.mtd;
+        tableEl.innerHTML = `<table class="bas-table bas-month-grid">
+          <thead><tr>
+            <th>Seg</th><th>Product</th><th>SFX</th><th>Plan</th>
+            ${dayHeaders}
+            <th>MTD</th><th>Gap</th><th>Late</th>
+          </tr></thead>
+          <tbody>${body}
+          <tr class="bas-row-total">
+            <td colspan="3"><b>Total</b></td>
+            <td class="num"><b>${formatNumber(totals.alloc)}</b></td>
+            ${totalDayCells}
+            <td class="num"><b>${formatNumber(totals.mtd)}</b></td>
+            <td class="num"><b>${totalGap > 0 ? "+" : ""}${formatNumber(totalGap)}</b></td>
+            <td class="num"><b>${formatNumber(totals.late)}</b></td>
+          </tr>
+          </tbody>
+        </table>`;
+      }
+      if (footEl) {
+        footEl.textContent = mode === "daily"
+          ? `${formatNumber(filteredMatched.length)} age-0 on schedule · ${formatNumber(freeTotal)} free stock · ${formatNumber(receivedToday)} today · ${formatNumber(movedTotal)} moved out · Delivered ${formatNumber(filteredDelivery.delivered)} · Pending ${formatNumber(filteredDelivery.pending)} · ${formatNumber(lateTotal)} late · scroll days 1–30`
+          : `${formatNumber(filteredMatched.length)} age-0 · ${formatNumber(freeTotal)} free stock · Delivered ${formatNumber(filteredDelivery.delivered)} · scroll days 1–30`;
+      }
+    }
+
+    const freeTotalEl = $("#bas-free-stock-total");
+    if (freeTotalEl) freeTotalEl.textContent = formatNumber(freeTotal);
+    const freeTableEl = $("#bas-free-stock-table");
+    const freeFootEl = $("#bas-free-stock-foot");
+    if (freeTableEl) {
+      const freeSorted = filteredFree
+        .slice()
+        .sort((a, b) => (b.age || 0) - (a.age || 0)
+          || (b.firstSeenDay || b.collectionDay || 0) - (a.firstSeenDay || a.collectionDay || 0)
+          || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!freeSorted.length) {
+        freeTableEl.innerHTML = `<p class="foot" style="padding:12px">No free-stock VINs. Free stock = new RES cars that were age ≥ 1 when first seen (not placed on the day schedule).</p>`;
+      } else {
+        freeTableEl.innerHTML = `<table class="bas-table">
+          <thead><tr><th>First seen</th><th>Product</th><th>SFX</th><th>VIN</th><th class="num">Age</th><th>Alloc Date</th><th>Delivery</th></tr></thead>
+          <tbody>${freeSorted.map((c) => `<tr class="bas-row-below">
+            <td class="num">${formatNumber(c.firstSeenDay || c.collectionDay || "—")}</td>
+            <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
+            <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
+            <td>${escapeHtml(c.vin || "—")}</td>
+            <td class="num bas-gap-neg">${formatNumber(c.age)}${c.age != null ? "d" : ""}</td>
+            <td>${escapeHtml(c.agLabel || c.collectionLabel || "—")}</td>
+            <td><span class="badge ${c.salesKind === "delivered" ? "ok" : c.salesKind === "proforma" ? "warn" : "bad"}">${escapeHtml(c.deliveryStatus || "—")}</span></td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+      if (freeFootEl) {
+        freeFootEl.textContent = `${formatNumber(freeSorted.length)} free-stock VIN(s) · new to RES with age ≥ 1 · excluded from day schedule / Received MTD`;
+      }
+    }
+
+    const age0El = $("#bas-age0-table");
+    if (age0El) {
+      const recvCars = filteredMatched
+        .slice()
+        .sort((a, b) => (b.collectionDay || 0) - (a.collectionDay || 0) || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!recvCars.length) {
+        age0El.innerHTML = `<p class="foot" style="padding:12px">No age-0 Retail Electronic Sales VINs on the schedule yet.</p>`;
+      } else {
+        age0El.innerHTML = `<table class="bas-table">
+          <thead><tr><th>Day</th><th>Product</th><th>SFX</th><th>VIN</th><th>Alloc Date</th><th>Delivery</th></tr></thead>
+          <tbody>${recvCars.map((c) => `<tr class="bas-row-above">
+            <td class="num">${formatNumber(c.collectionDay)}</td>
+            <td>${escapeHtml(c.allocProduct)}</td>
+            <td>${escapeHtml(c.allocSfx)}</td>
+            <td>${escapeHtml(c.vin || "—")}</td>
+            <td>${escapeHtml(c.agLabel || c.collectionLabel || "—")}</td>
+            <td><span class="badge ${c.salesKind === "delivered" ? "ok" : c.salesKind === "proforma" ? "warn" : "bad"}">${escapeHtml(c.deliveryStatus || "—")}</span></td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+    }
+
+    const changeEl = $("#bas-res-change-table");
+    if (changeEl) {
+      const changeList = filteredMoved
+        .slice()
+        .sort((a, b) => (b.collectionDay || 0) - (a.collectionDay || 0)
+          || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!changeList.length) {
+        changeEl.innerHTML = `<p class="foot" style="padding:12px">No VINs moved out of Retail Electronic Sales vs a previous day file yet.</p>`;
+      } else {
+        changeEl.innerHTML = `<table class="bas-table">
+          <thead><tr><th>Day</th><th>Product</th><th>SFX</th><th>VIN</th><th>From</th><th>To</th></tr></thead>
+          <tbody>${changeList.map((c) => {
+            const badge = basResArrivalBadge(c);
+            return `<tr class="bas-row-below">
+              <td class="num">${formatNumber(c.collectionDay)}</td>
+              <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
+              <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
+              <td>${escapeHtml(c.vin || "—")}</td>
+              <td>${escapeHtml(c.prevSearchArea || "Retail Electronic Sales")}</td>
+              <td><span class="badge ${badge.cls}">${escapeHtml(c.newSearchArea || badge.text)}</span></td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>`;
+      }
+    }
+
+    const lateEl = $("#bas-late-table");
+    if (lateEl) {
+      const lateList = (filteredLate.length ? filteredLate : filteredMatched.filter((c) => c.isLate))
+        .sort((a, b) => (b.age || 0) - (a.age || 0) || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!lateList.length) {
+        lateEl.innerHTML = `<p class="foot" style="padding:12px">No late (age ≥ 1) Retail Electronic Sales cars in today's active RTL file.</p>`;
+      } else {
+        lateEl.innerHTML = `<table class="bas-table">
+          <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Collected</th><th>Status</th><th>Location</th></tr></thead>
+          <tbody>${lateList.map((c) => `<tr class="bas-row-below">
+            <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
+            <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
+            <td>${escapeHtml(c.vin || "—")}</td>
+            <td class="num bas-gap-neg">${formatNumber(c.age)}${c.age != null ? "d" : ""}</td>
+            <td>${escapeHtml(c.collectionLabel || "—")}</td>
+            <td><span class="badge bad">Late · ${formatNumber(c.age)}d in RTL</span></td>
+            <td>${escapeHtml(c.location || "—")}</td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+    }
+
+    const daySectionsEl = $("#bas-day-sections");
+    if (daySectionsEl) daySectionsEl.hidden = true;
+    try {
+      renderBasDayOps(dayOps, ctx, dayHasFile);
+    } catch (err) {
+      console.warn("Day ops render failed", err);
+      const root = $("#bas-day-ops");
+      if (root) root.innerHTML = `<p class="foot" style="padding:8px 0">${escapeHtml(err && err.message ? err.message : "Day breakdown failed")}</p>`;
+    }
+
+    bindResVinMovementUi();
+    try {
+      renderResVinMovement();
+    } catch (err) {
+      console.warn("RES VIN Movement render failed", err);
+      const foot = $("#bas-res-move-foot");
+      if (foot) foot.textContent = err && err.message ? err.message : "VIN movement failed to render";
+    }
+  }
+
+  /* ——— BO Errors dashboard ——— */
+  const BOE_COL_FALLBACK = {
+    F: "Back Order Number",
+    H: "Confirm Flag",
+    J: "Column J",
+    N: "Exterior Color 1",
+    O: "Exterior Color 2",
+    P: "Exterior Color 3",
+    Q: "Interior Color 1",
+    R: "Interior Color 2",
+    S: "Interior Color 3",
+    T: "Sold to Party",
+    AB: "Column AB",
+  };
+
+  const BOE_RAV4_SH_FORBIDDEN = new Set(["089", "1L6", "1M6", "4V8", "8X8", "6X7", "3T3"]);
+  /** Suggested replacement exterior codes for RAV4 SH (written to Col AC, green in export). */
+  const BOE_RAV4_SH_CORRECTIONS = {
+    "089": "2VP",
+    "1L6": "M22",
+    "4V8": "2SQ",
+    "8X8": "M40",
+    // 1M6, 6X7, 3T3: still flagged; no mapped correction
+  };
+
+  let boeView = { search: "", severity: "", type: "", employee: "", page: 1, pageSize: 50, empMore: false, empQuery: "" };
+  let boeLastPack = null;
+
+  /** Resolve Excel letter → header name from the live Back Order file. */
+  function boeColName(letter) {
+    const L = String(letter || "").trim().toUpperCase();
+    const fallback = BOE_COL_FALLBACK[L] || `Column ${L}`;
+    const rows = slots.backorder.rows || [];
+    const headers = rows[0] && Array.isArray(rows[0].__headers) ? rows[0].__headers : [];
+    const idx = colLetterToIndex(L);
+    if (idx < 0 || idx >= headers.length) return fallback;
+    const h = cellToString(headers[idx]).trim();
+    if (!h || /^column\s+[a-z0-9]+$/i.test(h)) return fallback;
+    return h;
+  }
+
+  function boeColorGroupLabel(letters, compactFallback) {
+    const names = (letters || []).map((L) => boeColName(L));
+    const looksNumbered = names.every((n, i) => {
+      const num = String(i + 1);
+      return new RegExp(`(?:color|colour).*${num}\\b|\\b${num}\\b.*(?:color|colour)`, "i").test(n)
+        || n === BOE_COL_FALLBACK[letters[i]];
+    });
+    if (looksNumbered && compactFallback) return compactFallback;
+    return names.join(" / ");
+  }
+
+  function getBoeErrorDefs() {
+    const f = boeColName("F");
+    const h = boeColName("H");
+    const j = boeColName("J");
+    const ship = boeShipToPartyName();
+    const ab = boeColName("AB");
+    const nop = boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3");
+    const qrs = boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3");
+    const defs = {
+      dup_col_f: { id: "dup_col_f", label: `Duplicate ${f}`, severity: "critical" },
+      missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70·RAV4·HILUX DC/SC)`, severity: "critical" },
+      paid_other_product: { id: "paid_other_product", label: `${j} filled (not CAMRY·LC300·LC70·RAV4·HILUX DC/SC)`, severity: "critical" },
+      sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: `ALJUF/Bank not Confirmed (${h})`, severity: "critical" },
+      rav4_nop_040: { id: "rav4_nop_040", label: `RAV4 ${nop} = 040`, severity: "critical" },
+      rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} → Col AC correction`, severity: "critical" },
+      rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: `RAV4 (not SH/VH) ${qrs} = 20`, severity: "critical" },
+      dup_ship_to: { id: "dup_ship_to", label: `Duplicate ${ship}`, severity: "critical" },
+      col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe (except EB2C)`, severity: "critical" },
+      camry_nop_00_20: { id: "camry_nop_00_20", label: `CAMRY ${nop} = 00 or 20`, severity: "critical" },
+      lc300_nop_00_20: { id: "lc300_nop_00_20", label: `LC300 ${nop} = 00 or 20`, severity: "critical" },
+      veloz_nop_s28: { id: "veloz_nop_s28", label: `VELOZ ${nop} = S28 or 3Q3`, severity: "critical" },
+      crown_qrs_20: { id: "crown_qrs_20", label: `CROWN ${qrs} = 20`, severity: "critical" },
+      yaris_qrs_20: { id: "yaris_qrs_20", label: `YARIS ${qrs} = 20`, severity: "critical" },
+      bad_model_year: { id: "bad_model_year", label: "Model Year = 2027 (LC·FJ·URBAN·HILUX DC/SC)", severity: "warn" },
+    };
+    const phoneLetter = boePhoneLetter();
+    if (phoneLetter) {
+      const phoneName = boeColName(phoneLetter);
+      defs.phone_empty = {
+        id: "phone_empty",
+        label: `${phoneName && !/^column\s+/i.test(phoneName) ? phoneName : "Phone"} empty`,
+        severity: "warn",
+      };
+    }
+    customBoeRules().forEach((rule) => {
+      defs[`custom_${rule.id}`] = {
+        id: `custom_${rule.id}`,
+        label: rule.name || "Submitted condition",
+        severity: rule.severity || "critical",
+      };
+    });
+    return defs;
+  }
+
+  function customBoeRules() {
+    if (!window.BoeConditions || !window.ReportSheetStore || typeof ReportSheetStore.readBoErrorRules !== "function") return [];
+    return BoeConditions.activeRules(ReportSheetStore.readBoErrorRules());
+  }
+
+  function isBlankBoField(v) {
+    const s = cellToString(v).trim();
+    return !s || s === "—" || s === "-" || s.toLowerCase() === "n/a";
+  }
+
+  function boeToken(v) {
+    return upperTrim(cellToString(v)).replace(/[^A-Z0-9]/g, "");
+  }
+
+  function boeNormProductKey(product) {
+    return upperTrim(String(product || ""))
+      .replace(/^TOYOTA\s+/i, "")
+      .replace(/[^A-Z0-9]/g, "");
+  }
+
+  function boeIsProduct(product, aliases) {
+    const key = boeNormProductKey(product);
+    if (!key) return false;
+    return (aliases || []).some((a) => {
+      const ak = boeNormProductKey(a);
+      return key === ak || key.startsWith(ak) || key.includes(ak);
+    });
+  }
+
+  /** Exact product match — avoids "LC" matching "LC300" / "LC70". */
+  function boeIsProductExact(product, aliases) {
+    const key = boeNormProductKey(product);
+    if (!key) return false;
+    return (aliases || []).some((a) => key === boeNormProductKey(a));
+  }
+
+  function boeIsYear2027Product(product) {
+    const key = boeNormProductKey(product);
+    if (!key) return false;
+    if (key === "LC" || key === "FJ" || key === "LCFJ") return true;
+    if (key === "URBAN" || key === "URBANCRUISER" || key.startsWith("URBAN")) return true;
+    return boeIsProductExact(product, ["HILUX DC", "HILUX SC"]);
+  }
+
+  const BOE_PAID_PRODUCTS = ["CAMRY", "LC300", "LC70", "RAV4", "RAV 4", "HILUX DC", "HILUX SC"];
+
+  function boeIsRav4(product) {
+    return boeIsProduct(product, ["RAV4", "RAV 4"]);
+  }
+
+  function boeIsCorollaCross(product) {
+    return boeIsProduct(product, ["COROLLA CROSS", "COROLLACROSS"]);
+  }
+
+  function boeColsTokens(row, letters) {
+    return (letters || []).map((L) => boeToken(cellByLetter(row, L))).filter(Boolean);
+  }
+
+  function boeColsHaveAny(row, letters, banned) {
+    const set = banned instanceof Set ? banned : new Set(banned);
+    return boeColsTokens(row, letters).some((t) => set.has(t));
+  }
+
+  function boeDupKey(v) {
+    const s = cellToString(v).trim();
+    if (!s) return "";
+    if (/^\d+\.0+$/.test(s)) return s.replace(/\.0+$/, "");
+    return upperTrim(s);
+  }
+
+  /** Find Excel column letter by header name on the live BO sheet. */
+  function boeFindColLetterByHeader(tests) {
+    const rows = slots.backorder.rows || [];
+    const headers = rows[0] && Array.isArray(rows[0].__headers) ? rows[0].__headers : [];
+    for (let i = 0; i < headers.length; i += 1) {
+      const n = normHeader(headers[i]);
+      if (!n) continue;
+      if ((tests || []).some((t) => t(n))) return indexToColLetter(i);
+    }
+    return "";
+  }
+
+  /** Duplicate party check uses Ship to Party (not Sold to Party). */
+  function boeShipToPartyLetter() {
+    return boeFindColLetterByHeader([
+      (n) => n === "ship to party" || n === "ship-to party" || n === "shipto party" || n === "ship to party name",
+      (n) => n.includes("ship") && n.includes("party") && !n.includes("sold"),
+      (n) => n === "ship to" || n === "ship-to" || n === "shipto",
+    ]);
+  }
+
+  function boeShipToPartyName() {
+    const letter = boeShipToPartyLetter();
+    if (letter) {
+      const name = boeColName(letter);
+      if (name && !/^column\s+/i.test(name)) return name;
+    }
+    return "Ship to Party";
+  }
+
+  /** Phone / mobile column on the live BO sheet. Empty cells are flagged; the number is never shown. */
+  function boePhoneLetter() {
+    return boeFindColLetterByHeader([
+      (n) => {
+        const t = String(n || "").replace(/[._\-/#]/g, " ").replace(/\s+/g, " ").trim();
+        if (!t || t.includes("ship")) return false;
+        if (/^(phone|phone no|phone number|mobile|mobile no|mobile number|contact|contact number|contact no|customer phone|customer mobile|tel|telephone|cell|cell phone)$/.test(t)) return true;
+        return t.includes("phone") || t.includes("mobile") || t.includes("جوال") || t.includes("هاتف") || t.includes("موبايل");
+      },
+    ]);
+  }
+
+  function boeIsEmployeeSalesType(row) {
+    const get = buildFieldGetter(row || {});
+    // Sales type only — never use المبلغ المدفوع / paid
+    const salesType = inferSalesType(get(row, "salesType"), false);
+    if (salesType === "Employee") return true;
+    const raw = upperTrim(cellToString(get(row, "salesType")));
+    return /employee|emp|موظف|staff/.test(raw);
+  }
+
+  /** BO Errors sales type from Sales Type column only (ignore المبلغ المدفوع). */
+  function boeSalesTypeForErrors(row) {
+    const get = buildFieldGetter(row || {});
+    return inferSalesType(get(row, "salesType"), false);
+  }
+
+  /** Bank / ALJUF: Confirm Flag (Col H) only — paid amount is ignored. */
+  function boeIsConfirmedColH(row) {
+    return isConfirmedFlag(cellByLetter(row, "H"));
+  }
+
+  function buildBoeDupMaps(rawRows) {
+    const fMap = new Map();
+    const shipMap = new Map();
+    const shipLetter = boeShipToPartyLetter();
+    (rawRows || []).forEach((r) => {
+      if (boeIsEmployeeSalesType(r)) return;
+      const f = boeDupKey(cellByLetter(r, "F"));
+      if (f) fMap.set(f, (fMap.get(f) || 0) + 1);
+      if (shipLetter) {
+        const ship = boeDupKey(cellByLetter(r, shipLetter));
+        if (ship) shipMap.set(ship, (shipMap.get(ship) || 0) + 1);
+      }
+    });
+    return { fMap, shipMap, shipLetter };
+  }
+
+  function boeYearValue(row, get) {
+    let year = cellToString(get(row, "year")).trim();
+    if (!year) {
+      const letter = boeYearColLetter(row);
+      if (letter) year = cellToString(cellByLetter(row, letter)).trim();
+    }
+    if (/^\d+\.0+$/.test(year)) year = year.replace(/\.0+$/, "");
+    const m = String(year).match(/(20\d{2})/);
+    return m ? m[1] : year;
+  }
+
+  /** Rows of one sheet share one __headers array: find the year column once per sheet. */
+  var boeYearLetterByHeaders;
+  function boeYearColLetter(row) {
+    if (!boeYearLetterByHeaders) boeYearLetterByHeaders = new WeakMap();
+    const headers = row && Array.isArray(row.__headers) ? row.__headers : null;
+    if (headers) {
+      const hit = boeYearLetterByHeaders.get(headers);
+      if (hit && hit.len === headers.length) return hit.letter;
+    }
+    const letter = findHeaderLetter(row, [
+      (n) => n === "model year" || n === "model yr" || n === "my",
+      (n) => n === "year",
+    ]) || "";
+    if (headers) boeYearLetterByHeaders.set(headers, { len: headers.length, letter });
+    return letter;
+  }
+
+  function boeRav4ShCorrectionValue(row) {
+    const hits = boeMatchingColorLetters(row, ["N", "O", "P"], BOE_RAV4_SH_FORBIDDEN);
+    const corrections = [];
+    const seen = new Set();
+    hits.forEach((L) => {
+      const tok = boeToken(cellByLetter(row, L));
+      const fix = BOE_RAV4_SH_CORRECTIONS[tok];
+      if (!fix || seen.has(fix)) return;
+      seen.add(fix);
+      corrections.push(fix);
+    });
+    return { hitLetters: hits, correction: corrections.join(" / ") };
+  }
+
+  function boeMatchingColorLetters(row, letters, banned) {
+    const set = banned instanceof Set ? banned : new Set(banned);
+    return (letters || []).filter((L) => {
+      const t = boeToken(cellByLetter(row, L));
+      return t && set.has(t);
+    });
+  }
+
+  /**
+   * The error scan reads every Back Order row; filters, paging and the employee picker only change
+   * what is shown. Reuse the last scan while the file, the custom rules and the roster are unchanged.
+   */
+  var boePackCache = null;
+  function boeCachedPack() {
+    const rawRows = slots.backorder.rows || [];
+    let rulesSig = "";
+    try { rulesSig = JSON.stringify(customBoeRules()); } catch { rulesSig = String(Date.now()); }
+    const c = boePackCache;
+    if (c && c.rows === rawRows && c.len === rawRows.length && c.rules === rulesSig && c.names === NAME_IDENTITY_MAP) {
+      return c.pack;
+    }
+    const pack = buildBoErrorsPack();
+    boePackCache = { rows: rawRows, len: rawRows.length, rules: rulesSig, names: NAME_IDENTITY_MAP, pack };
+    return pack;
+  }
+
+  function buildBoErrorsPack() {
+    const rawRows = slots.backorder.rows || [];
+    const checkedRows = rawRows.filter((r) => !boeIsEmployeeSalesType(r));
+    const { fMap, shipMap, shipLetter } = buildBoeDupMaps(rawRows);
+    const phoneLetter = boePhoneLetter();
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const rows = [];
+    const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
+
+    rawRows.forEach((r, idx) => {
+      const get = buildFieldGetter(r);
+      const mapped = boRowProductSuffix(r, get);
+      const product = mapped.product || cellToString(cellByLetter(r, "B")).trim();
+      const suffix = normalizeProductSuffix(product, mapped.rawSuffix || cellToString(cellByLetter(r, "G")).trim());
+      const sfxKey = boeToken(suffix);
+      const salesType = boeSalesTypeForErrors(r);
+      const isEmployee = salesType === "Employee" || boeIsEmployeeSalesType(r);
+      const colA = cellToString(cellByLetter(r, "A")).trim();
+      const colATok = boeToken(colA);
+      const colF = cellToString(cellByLetter(r, "F")).trim();
+      const colH = cellToString(cellByLetter(r, "H")).trim();
+      const colJ = cellToString(cellByLetter(r, "J")).trim();
+      const colShip = shipLetter ? cellToString(cellByLetter(r, shipLetter)).trim() : "";
+      const colAB = cellToString(cellByLetter(r, "AB")).trim();
+      const nop = ["N", "O", "P"].map((L) => cellToString(cellByLetter(r, L)).trim());
+      const qrs = ["Q", "R", "S"].map((L) => cellToString(cellByLetter(r, L)).trim());
+      const year = boeYearValue(r, get);
+      const yearLetter = boeYearColLetter(r);
+      const boNumber = colF || cellToString(get(r, "boNumber")).trim();
+      const salesman = employeeNameFromCodeFields(r) || resolveSalesmanName(get(r, "salesman"));
+
+      const errors = [];
+      const errorLetters = new Set();
+      let acCorrection = "";
+      const pushErr = (id, letters) => {
+        const def = BOE_ERROR_DEFS[id];
+        if (!def) return;
+        if (errors.some((e) => e.id === id)) return;
+        errors.push(def);
+        typeCounts[id] += 1;
+        (letters || []).forEach((L) => {
+          if (L) errorLetters.add(String(L).toUpperCase());
+        });
+      };
+
+      // CRM Lead Source: all rows, ignore only when Col A is EB2C
+      const abTok = boeToken(colAB);
+      if (colATok !== "EB2C" && (isBlankBoField(colAB) || abTok === "ALJRE")) {
+        pushErr("col_ab_aljre_or_blank", ["AB"]);
+      }
+
+      // Empty phone: all rows, including Employee. Number is never displayed.
+      if (phoneLetter && isBlankBoField(cellByLetter(r, phoneLetter))) {
+        pushErr("phone_empty", [phoneLetter]);
+      }
+
+      // Employee sales type: only CRM Lead and empty-phone rules above apply
+      if (!isEmployee) {
+        const fKey = boeDupKey(colF);
+        if (fKey && (fMap.get(fKey) || 0) > 1) pushErr("dup_col_f", ["F"]);
+
+        const shipKey = boeDupKey(colShip);
+        if (shipLetter && shipKey && (shipMap.get(shipKey) || 0) > 1) {
+          pushErr("dup_ship_to", [shipLetter]);
+        }
+
+        // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70/RAV4/HILUX DC/SC — skip ALJUF & Bank.
+        // Any other product with a paid amount is an error.
+        if (salesType !== "ALJUF" && salesType !== "Bank") {
+          const paidAllowed = boeIsProduct(product, BOE_PAID_PRODUCTS);
+          const jTok = boeToken(colJ);
+          const paidBlank = isBlankBoField(colJ) || !jTok || /^0+$/.test(jTok);
+          if (paidAllowed && paidBlank) pushErr("missing_col_j", ["J"]);
+          if (!paidAllowed && !paidBlank) pushErr("paid_other_product", ["J"]);
+        }
+
+        // Bank / ALJUF: only Confirm Flag (Col H). Ignore المبلغ المدفوع entirely.
+        if (salesType === "ALJUF" || salesType === "Bank") {
+          if (!boeIsConfirmedColH(r)) pushErr("sales_type_not_confirmed", ["H"]);
+        }
+
+        if (boeIsRav4(product)) {
+          const hit040 = boeMatchingColorLetters(r, ["N", "O", "P"], ["040"]);
+          if (hit040.length) pushErr("rav4_nop_040", hit040);
+          if (sfxKey === "SH") {
+            const shFix = boeRav4ShCorrectionValue(r);
+            if (shFix.hitLetters.length) {
+              pushErr("rav4_sh_forbidden_color", shFix.hitLetters);
+              if (shFix.correction) acCorrection = shFix.correction;
+            }
+          }
+          if (sfxKey !== "SH" && sfxKey !== "VH") {
+            const hit20 = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
+            if (hit20.length) pushErr("rav4_other_sfx_qrs_20", hit20);
+          }
+        }
+
+        if (boeIsProduct(product, ["CAMRY"])) {
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["00", "20"]);
+          if (hit.length) pushErr("camry_nop_00_20", hit);
+        }
+        if (boeIsProduct(product, ["LC300"])) {
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["00", "20"]);
+          if (hit.length) pushErr("lc300_nop_00_20", hit);
+        }
+        if (boeIsProduct(product, ["VELOZ"])) {
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["S28", "3Q3"]);
+          if (hit.length) pushErr("veloz_nop_s28", hit);
+        }
+        if (boeIsProduct(product, ["CROWN"])) {
+          const hit = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
+          if (hit.length) pushErr("crown_qrs_20", hit);
+        }
+        if (boeIsProduct(product, ["YARIS", "YARIS SD"])) {
+          const hit = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
+          if (hit.length) pushErr("yaris_qrs_20", hit);
+        }
+
+        if (year === "2027" && boeIsYear2027Product(product)) {
+          pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
+        }
+      }
+
+      if (window.BoeConditions) {
+        customBoeRules().forEach((rule) => {
+          const hit = BoeConditions.rowMatches(r, rule, product);
+          if (hit && hit.pass) pushErr(`custom_${rule.id}`, hit.letters || []);
+        });
+      }
+
+      if (!errors.length) return;
+      const sevRank = errors.some((e) => e.severity === "critical") ? 0
+        : errors.some((e) => e.severity === "warn") ? 1 : 2;
+      rows.push({
+        idx,
+        boNumber: boNumber || "—",
+        product: product || "—",
+        sfx: suffix || "—",
+        salesman: salesman || "—",
+        year: year || "—",
+        salesType: salesType || "—",
+        colA: colA || "—",
+        colF: colF || "—",
+        colH: colH || "—",
+        colJ: colJ || "—",
+        colShip: colShip || "—",
+        shipLetter: shipLetter || "",
+        colAB: colAB || "—",
+        nop: nop.map((x) => x || "—").join(" / "),
+        qrs: qrs.map((x) => x || "—").join(" / "),
+        confirmed: boeIsConfirmedColH(r),
+        errors,
+        errorIds: errors.map((e) => e.id),
+        errorLetters: Array.from(errorLetters),
+        acCorrection: acCorrection || "",
+        severity: sevRank === 0 ? "critical" : sevRank === 1 ? "warn" : "info",
+        sevRank,
+      });
+    });
+
+    // Keep Back Order file order (no severity/product sort)
+    rows.sort((a, b) => a.idx - b.idx);
+
+    const totals = {
+      totalBos: rawRows.length,
+      skippedEmployee: Math.max(0, rawRows.length - checkedRows.length),
+      errorRows: rows.length,
+      cleanRows: Math.max(0, rawRows.length - rows.length),
+      critical: rows.filter((r) => r.severity === "critical").length,
+      warn: rows.filter((r) => r.severity === "warn").length,
+      info: rows.filter((r) => r.severity === "info").length,
+      errorHits: Object.values(typeCounts).reduce((s, n) => s + n, 0),
+      typeCounts,
+    };
+
+    return { rows, totals };
+  }
+
+  const BOE_HIGHLIGHT_BASE = ["F", "H", "J", "N", "O", "P", "Q", "R", "S", "AB"];
+
+  function boeHighlightLetters() {
+    const set = new Set(BOE_HIGHLIGHT_BASE);
+    const ship = boeShipToPartyLetter();
+    if (ship) set.add(ship);
+    const phone = boePhoneLetter();
+    if (phone) set.add(phone);
+    return set;
+  }
+
+  function formatBoeCellDisplay(v) {
+    if (v == null || v === "") return "—";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) return formatRvDate(v) || cellToString(v);
+    const s = cellToString(v).trim();
+    return s || "—";
+  }
+
+  function openBoeRowDetail(rowIdx) {
+    const idx = Number(rowIdx);
+    const raw = (slots.backorder.rows || [])[idx];
+    const pack = boeLastPack || buildBoErrorsPack();
+    const errRow = (pack.rows || []).find((r) => r.idx === idx) || null;
+    const titleEl = $("#aa-drill-title");
+    const subEl = $("#aa-drill-sub");
+    const bodyEl = $("#aa-drill-body");
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (!bodyEl || !drawer || !backdrop) return;
+
+    if (!raw) {
+      if (titleEl) titleEl.textContent = "Back Order row";
+      if (subEl) subEl.textContent = "BO Errors";
+      bodyEl.innerHTML = `<p class="foot">Row not found in the Back Order file.</p>`;
+      backdrop.classList.add("show");
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      return;
+    }
+
+    const headers = Array.isArray(raw.__headers) ? raw.__headers : Object.keys(raw).filter((k) => !String(k).startsWith("__"));
+    const cells = Array.isArray(raw.__cells) ? raw.__cells : headers.map((h) => raw[h]);
+    const boLabel = errRow ? (errRow.colF || errRow.boNumber) : formatBoeCellDisplay(cellByLetter(raw, "F"));
+
+    if (titleEl) titleEl.textContent = boLabel && boLabel !== "—" ? `BO ${boLabel}` : "Back Order row";
+    if (subEl) {
+      subEl.textContent = [
+        errRow && errRow.product ? errRow.product : "",
+        errRow && errRow.sfx ? errRow.sfx : "",
+        errRow ? `${(errRow.errors || []).length} error(s)` : "Full row",
+        `row #${idx + 1}`,
+      ].filter(Boolean).join(" · ");
+    }
+
+    const errorTags = errRow && errRow.errors && errRow.errors.length
+      ? `<div class="boe-detail-errors">${errRow.errors.map((e) =>
+          `<span class="boe-tag sev-${escapeHtml(e.severity)}">${escapeHtml(e.label)}</span>`
+        ).join("")}</div>`
+      : "";
+
+    const phoneLetter = boePhoneLetter();
+    const fieldRows = headers.map((h, i) => {
+      const letter = indexToColLetter(i);
+      const rawVal = cells[i] != null ? cells[i] : raw[h];
+      const value = phoneLetter && letter === phoneLetter ? maskPhone(rawVal) : formatBoeCellDisplay(rawVal);
+      const hi = boeHighlightLetters().has(letter) ? " is-hot" : "";
+      return `<tr class="boe-detail-row${hi}">
+        <td class="boe-detail-letter mono">${escapeHtml(letter)}</td>
+        <td class="boe-detail-name">${escapeHtml(cellToString(h).trim() || `Column ${letter}`)}</td>
+        <td class="boe-detail-val">${escapeHtml(value)}</td>
+      </tr>`;
+    }).join("");
+
+    bodyEl.innerHTML = `
+      <div class="boe-detail">
+        ${errorTags}
+        <p class="aa-drill-note">Full Back Order row · highlighted fields are used by error rules</p>
+        <div class="table-wrap aa-drill-table-wrap boe-detail-wrap">
+          <table class="data-table aa-table boe-detail-table">
+            <thead>
+              <tr>
+                <th>Col</th>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>${fieldRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    backdrop.classList.add("show");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+
+  function filteredBoeRows(rows) {
+    if (String(boeView.focus || "") === "clean") return [];
+    const q = String(boeView.search || "").trim().toLowerCase();
+    const sev = String(boeView.severity || "").trim();
+    const typ = String(boeView.type || "").trim();
+    const emp = String(boeView.employee || "").trim();
+    return rows.filter((r) => {
+      if (emp) {
+        const key = nameKey(r.salesman);
+        if (key !== emp && String(r.salesman || "").trim() !== emp) return false;
+      }
+      if (sev && r.severity !== sev) return false;
+      if (typ && !(r.errorIds || []).includes(typ)) return false;
+      if (!q) return true;
+      const hay = [
+        r.boNumber, r.product, r.sfx, r.salesman, r.salesType, r.year,
+        r.colF, r.colH, r.colJ, r.colShip, r.colAB, r.nop, r.qrs, r.acCorrection,
+        ...(r.errors || []).map((e) => e.label),
+      ].map((x) => String(x || "").toLowerCase()).join(" ");
+      return hay.includes(q);
+    });
+  }
+
+  function boeTotalsFromRows(rows) {
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
+    (rows || []).forEach((r) => {
+      (r.errorIds || []).forEach((id) => {
+        if (typeCounts[id] != null) typeCounts[id] += 1;
+      });
+    });
+    return {
+      errorRows: (rows || []).length,
+      critical: (rows || []).filter((r) => r.severity === "critical").length,
+      warn: (rows || []).filter((r) => r.severity === "warn").length,
+      info: (rows || []).filter((r) => r.severity === "info").length,
+      errorHits: Object.values(typeCounts).reduce((s, n) => s + n, 0),
+      typeCounts,
+    };
+  }
+
+  function populateBoeEmployeeFilter(rows) {
+    const sel = $("#boe-filter-employee");
+    const chips = $("#boe-employee-chips");
+    const counts = new Map();
+    (rows || []).forEach((r) => {
+      const name = String(r.salesman || "").trim();
+      if (!name || name === "—") return;
+      const key = nameKey(name) || name;
+      const prev = counts.get(key) || { name, key, n: 0 };
+      prev.n += 1;
+      if (!prev.name || prev.name === "—") prev.name = name;
+      counts.set(key, prev);
+    });
+    const list = Array.from(counts.values()).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+    const cur = String(boeView.employee || "").trim();
+    if (sel) {
+      const opts = [`<option value="">All employees (${formatNumber((rows || []).length)} errors)</option>`];
+      list.forEach((e) => {
+        opts.push(`<option value="${escapeHtml(e.key)}"${e.key === cur ? " selected" : ""}>${escapeHtml(e.name)} (${formatNumber(e.n)})</option>`);
+      });
+      sel.innerHTML = opts.join("");
+      if (cur && !counts.has(cur)) {
+        boeView.employee = "";
+        sel.value = "";
+      }
+    }
+    if (chips) {
+      const qEmp = String(boeView.empQuery || "").trim().toLowerCase();
+      const matched = qEmp
+        ? list.filter((e) => String(e.name || "").toLowerCase().includes(qEmp))
+        : list;
+      const cap = 12;
+      const visible = boeView.empMore || qEmp ? matched : matched.slice(0, cap);
+      const hidden = Math.max(0, matched.length - visible.length);
+      if (!list.length) {
+        chips.innerHTML = `<span class="rv-muted">No employees on error rows</span>`;
+      } else if (!matched.length) {
+        chips.innerHTML = `<span class="rv-muted">No employees match that search</span>`;
+      } else {
+        chips.innerHTML = visible.map((e) => {
+          const active = e.key === cur ? " is-active" : "";
+          const initials = boeInitials(e.name);
+          const hue = boeAvatarHue(e.name);
+          return `<button type="button" class="boe-chip boe-emp-chip${active}" data-boe-employee="${escapeHtml(e.key)}" title="${escapeHtml(e.name)}">
+            <span class="boe-avatar" style="--boe-hue:${hue}">${escapeHtml(initials)}</span>
+            <span class="boe-chip-lab">${escapeHtml(e.name)}</span>
+            <strong>${formatNumber(e.n)}</strong>
+          </button>`;
+        }).join("") + (hidden
+          ? `<button type="button" class="boe-more" data-boe-emp-more="1">Show more ↓</button>`
+          : (boeView.empMore && !qEmp && list.length > cap
+            ? `<button type="button" class="boe-more" data-boe-emp-more="1">Show less ↑</button>`
+            : ""));
+      }
+    }
+  }
+
+  function boeInitials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    const a = parts[0] ? parts[0].charAt(0) : "?";
+    const b = parts.length > 1 ? parts[1].charAt(0) : "";
+    return (a + b).toUpperCase();
+  }
+
+  function boeAvatarHue(name) {
+    let h = 0;
+    const s = String(name || "");
+    for (let i = 0; i < s.length; i += 1) h = (h * 33 + s.charCodeAt(i)) >>> 0;
+    return [210, 262, 168, 24, 332, 198][h % 6];
+  }
+
+  function populateBoeTypeFilter(totals) {
+    const sel = $("#boe-filter-type");
+    if (!sel) return;
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const cur = boeView.type || "";
+    const opts = [`<option value="">All error types</option>`];
+    Object.values(BOE_ERROR_DEFS).forEach((def) => {
+      const n = (totals && totals.typeCounts && totals.typeCounts[def.id]) || 0;
+      opts.push(`<option value="${escapeHtml(def.id)}"${def.id === cur ? " selected" : ""}>${escapeHtml(def.label)} (${formatNumber(n)})</option>`);
+    });
+    sel.innerHTML = opts.join("");
+    if (cur && !(totals && totals.typeCounts && totals.typeCounts[cur] != null)) {
+      boeView.type = "";
+      sel.value = "";
+    }
+  }
+
+  function renderBoErrorsDashboard() {
+    const empty = $("#boe-empty");
+    const dash = $("#boe-dash");
+    if (!empty || !dash) return;
+
+    if (!hasBackOrder()) {
+      empty.hidden = false;
+      empty.style.display = "";
+      dash.hidden = true;
+      return;
+    }
+
+    empty.hidden = true;
+    empty.style.display = "none";
+    dash.hidden = false;
+
+    const pack = boeCachedPack();
+    boeLastPack = pack;
+    const { rows, totals } = pack;
+    const empKey = String(boeView.employee || "").trim();
+    const employeeScoped = empKey
+      ? rows.filter((r) => nameKey(r.salesman) === empKey || String(r.salesman || "").trim() === empKey)
+      : rows;
+    const viewTotals = empKey
+      ? { ...totals, ...boeTotalsFromRows(employeeScoped), cleanRows: totals.cleanRows }
+      : totals;
+    const filtered = filteredBoeRows(rows);
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const colNames = {
+      f: boeColName("F"),
+      h: boeColName("H"),
+      j: boeColName("J"),
+      ship: boeShipToPartyName(),
+      ab: boeColName("AB"),
+      nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
+      qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
+    };
+    populateBoeEmployeeFilter(rows);
+    populateBoeTypeFilter(viewTotals);
+
+    const empLabel = empKey
+      ? (employeeScoped[0] && employeeScoped[0].salesman) || empKey
+      : "";
+    const statusEl = $("#status");
+    const readyEl = $("#boe-ready");
+    if (readyEl) {
+      const live = statusEl && String(statusEl.textContent || "").trim();
+      readyEl.textContent = live ? `● ${live}` : "● Ready";
+    }
+    const updatedEl = $("#boe-updated");
+    const srUpdated = $("#sr-last-updated");
+    if (updatedEl) {
+      const liveUpdated = srUpdated && String(srUpdated.textContent || "").trim();
+      updatedEl.textContent = liveUpdated && liveUpdated !== "—" ? liveUpdated : "—";
+    }
+
+    const hint = $("#boe-live-hint");
+    if (hint) {
+      const empNote = empKey
+        ? ` · ${empLabel} (${formatNumber(employeeScoped.length)} errors)`
+        : "";
+      hint.textContent = `Back Order Error Report${empNote}`;
+      hint.title = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(viewTotals.critical)} critical · ${formatNumber(viewTotals.warn)} warning · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee sales type (${formatNumber(totals.skippedEmployee || 0)})`;
+    }
+
+    const empHint = document.querySelector("#boe-employee-section .hint");
+    if (empHint) {
+      empHint.textContent = empKey
+        ? `${empLabel} · ${formatNumber(employeeScoped.length)} errors`
+        : `All employees · ${formatNumber(rows.length)} errors`;
+    }
+
+    const shareOf = (n, d) => {
+      const den = Number(d) || 0;
+      if (!den) return "0%";
+      return `${((Number(n) || 0) / den * 100).toFixed(1)}%`;
+    };
+    const kpis = $("#boe-kpis");
+    if (kpis) {
+      const focus = String(boeView.focus || "");
+      const cards = [
+        ["total", "Total BOs", totals.totalBos, "blue", `${formatNumber(totals.totalBos)} checked`],
+        ["errors", "BOs With Errors", viewTotals.errorRows, "red", `${shareOf(viewTotals.errorRows, totals.totalBos)} of BOs`],
+        ["critical", "Critical Errors", viewTotals.critical, "red", `${shareOf(viewTotals.critical, viewTotals.errorRows)} of errors`],
+        ["warn", "Warnings", viewTotals.warn, "orange", `${shareOf(viewTotals.warn, viewTotals.errorRows)} of errors`],
+        ["flags", "Issue Flags", viewTotals.errorHits, "purple", "rule hits"],
+        ["clean", "Clean BOs", totals.cleanRows, "green", `${shareOf(totals.cleanRows, totals.totalBos)} of BOs`],
+      ];
+      kpis.innerHTML = cards.map(([key, lab, val, tone, note]) => `
+        <button type="button" class="boe-kpi tone-${tone}${focus === key ? " is-on" : ""}" data-boe-kpi="${escapeHtml(key)}">
+          <span class="boe-kpi-lab">${escapeHtml(lab)}</span>
+          <strong class="boe-kpi-val">${escapeHtml(formatNumber(val))}</strong>
+          <span class="boe-kpi-note">${escapeHtml(note)}</span>
+        </button>`).join("");
+    }
+
+    const chips = $("#boe-type-chips");
+    if (chips) {
+      chips.innerHTML = Object.values(BOE_ERROR_DEFS).map((def) => {
+        const n = (viewTotals.typeCounts && viewTotals.typeCounts[def.id]) || 0;
+        const active = boeView.type === def.id ? " is-active" : "";
+        return `<button type="button" class="boe-chip sev-${escapeHtml(def.severity)}${active}" data-boe-type="${escapeHtml(def.id)}" title="${escapeHtml(def.label)}">
+          <span class="boe-chip-lab">${escapeHtml(def.label)}</span>
+          <strong>${formatNumber(n)}</strong>
+        </button>`;
+      }).join("");
+    }
+
+    const bars = $("#boe-type-bars");
+    if (bars) {
+      const hitTotal = Number(viewTotals.errorHits) || 0;
+      const ranked = Object.values(BOE_ERROR_DEFS)
+        .map((def) => ({
+          def,
+          n: (viewTotals.typeCounts && viewTotals.typeCounts[def.id]) || 0,
+        }))
+        .filter((x) => x.n > 0 || boeView.type === x.def.id)
+        .sort((a, b) => b.n - a.n || a.def.label.localeCompare(b.def.label));
+      const maxN = ranked.reduce((m, x) => Math.max(m, x.n), 0) || 1;
+      bars.innerHTML = ranked.length
+        ? ranked.map(({ def, n }) => {
+          const active = boeView.type === def.id ? " is-active" : "";
+          const width = Math.max(2, Math.round((n / maxN) * 100));
+          return `<button type="button" class="boe-bar sev-${escapeHtml(def.severity)}${active}" data-boe-type="${escapeHtml(def.id)}">
+            <span class="boe-bar-lab">${escapeHtml(def.label)}</span>
+            <span class="boe-bar-track"><span style="width:${width}%"></span></span>
+            <strong>${formatNumber(n)}</strong>
+            <em>${escapeHtml(shareOf(n, hitTotal))}</em>
+          </button>`;
+        }).join("")
+        : `<p class="foot">No issue flags in the current view.</p>`;
+    }
+
+    const pageSize = Math.max(1, Number(boeView.pageSize) || 50);
+    const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize) || 1);
+    if (!Number.isFinite(boeView.page) || boeView.page < 1) boeView.page = 1;
+    if (boeView.page > maxPage) boeView.page = maxPage;
+    const pageStart = (boeView.page - 1) * pageSize;
+    const pageRows = filtered.slice(pageStart, pageStart + pageSize);
+    const scheduleCount = $("#boe-schedule-count");
+    if (scheduleCount) {
+      scheduleCount.textContent = boeView.focus === "clean"
+        ? `${formatNumber(totals.cleanRows)} Clean`
+        : `${formatNumber(filtered.length)} Errors`;
+    }
+
+    const wrap = $("#boe-table-wrap");
+    const foot = $("#boe-table-foot");
+    if (wrap) {
+      if (boeView.focus === "clean") {
+        wrap.innerHTML = `<p class="foot" style="padding:16px">${formatNumber(totals.cleanRows)} clean BOs passed every checked rule. They do not appear as error rows.</p>`;
+      } else if (!rows.length) {
+        wrap.innerHTML = `<p class="foot" style="padding:16px">No BO errors found — all checked rules passed.</p>`;
+      } else if (!filtered.length) {
+        wrap.innerHTML = `<p class="foot" style="padding:16px">No rows match the current filters${empKey ? " for this employee" : ""}.</p>`;
+      } else {
+        const boeCols = [
+          ["Severity", "92px"],
+          [colNames.f, "148px"],
+          ["Employee", "156px"],
+          ["Product", "112px"],
+          ["SFX", "72px"],
+          ["Sales type", "132px"],
+          ["Model Year", "96px"],
+          [colNames.h, "128px"],
+          [colNames.j, "128px"],
+          [colNames.nop, "176px"],
+          [colNames.qrs, "176px"],
+          [colNames.ship, "168px"],
+          [colNames.ab, "132px"],
+          ["Col AC correction", "148px"],
+          ["Errors", "240px"],
+        ];
+        const boeTip = (value) => {
+          const raw = value == null || String(value).trim() === "" ? "—" : String(value);
+          return escapeHtml(raw);
+        };
+        wrap.innerHTML = `<table class="data-table aa-table boe-table">
+          <colgroup>${boeCols.map(([, w]) => `<col style="width:${w}">`).join("")}</colgroup>
+          <thead>
+            <tr>
+              ${boeCols.map(([label]) => `<th title="${boeTip(label)}"><span class="boe-cell" dir="auto">${boeTip(label)}</span></th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${pageRows.map((r) => {
+              const errTitle = (r.errors || []).map((e) => e.label).join(" · ") || "—";
+              return `
+              <tr class="boe-row sev-${escapeHtml(r.severity)} boe-row-click" data-boe-idx="${escapeHtml(String(r.idx))}" tabindex="0" role="button" title="Open full Back Order row">
+                <td title="${escapeHtml(r.severity)}"><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
+                <td class="mono" title="${boeTip(r.colF)}"><span class="boe-cell" dir="auto">${boeTip(r.colF)}</span></td>
+                <td title="${boeTip(r.salesman || "—")}"><span class="boe-cell" dir="auto">${boeTip(r.salesman || "—")}</span></td>
+                <td title="${boeTip(r.product)}"><strong class="boe-cell" dir="auto">${boeTip(r.product)}</strong></td>
+                <td title="${boeTip(r.sfx)}"><span class="aa-sfx boe-cell" dir="auto">${boeTip(r.sfx)}</span></td>
+                <td title="${boeTip(r.salesType)}"><span class="boe-cell" dir="auto">${boeTip(r.salesType)}</span></td>
+                <td title="${boeTip(r.year)}"><span class="boe-cell" dir="auto">${boeTip(r.year)}</span></td>
+                <td title="${boeTip(r.colH)}"><span class="boe-flag ${r.confirmed ? "is-ok" : "is-pend"} boe-cell" dir="auto">${boeTip(r.colH)}</span></td>
+                <td title="${boeTip(r.colJ)}"><span class="boe-cell" dir="auto">${boeTip(r.colJ)}</span></td>
+                <td class="mono" title="${boeTip(r.nop)}"><span class="boe-cell" dir="auto">${boeTip(r.nop)}</span></td>
+                <td class="mono" title="${boeTip(r.qrs)}"><span class="boe-cell" dir="auto">${boeTip(r.qrs)}</span></td>
+                <td class="mono" title="${boeTip(r.colShip)}"><span class="boe-cell" dir="auto">${boeTip(r.colShip)}</span></td>
+                <td title="${boeTip(r.colAB)}"><span class="boe-cell" dir="auto">${boeTip(r.colAB)}</span></td>
+                <td class="mono${r.acCorrection ? " boe-ac-fix" : ""}" title="${boeTip(r.acCorrection || "—")}"><span class="boe-cell" dir="auto">${boeTip(r.acCorrection || "—")}</span></td>
+                <td class="boe-tags" title="${escapeHtml(errTitle)}">${(r.errors || []).map((e) =>
+                  `<span class="boe-tag sev-${escapeHtml(e.severity)}" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>`
+                ).join("")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`;
+      }
+    }
+    if (foot) {
+      const from = filtered.length ? pageStart + 1 : 0;
+      const to = filtered.length ? pageStart + pageRows.length : 0;
+      const pages = [];
+      const windowStart = Math.max(1, boeView.page - 2);
+      const windowEnd = Math.min(maxPage, windowStart + 4);
+      if (windowStart > 1) pages.push(1);
+      for (let p = windowStart; p <= windowEnd; p += 1) pages.push(p);
+      if (windowEnd < maxPage) pages.push(maxPage);
+      const uniquePages = [];
+      pages.forEach((p) => { if (uniquePages[uniquePages.length - 1] !== p) uniquePages.push(p); });
+      const pageBtns = uniquePages.map((p, i) => {
+        const gap = i > 0 && p - uniquePages[i - 1] > 1 ? `<span class="boe-page-gap">…</span>` : "";
+        return `${gap}<button type="button" class="boe-page${p === boeView.page ? " is-on" : ""}" data-boe-page="${p}">${p}</button>`;
+      }).join("");
+      foot.innerHTML = `
+        <span>Showing ${formatNumber(from)}–${formatNumber(to)} of ${formatNumber(filtered.length)} errors</span>
+        <div class="boe-page-nav">
+          <button type="button" class="boe-page" data-boe-page="prev"${boeView.page <= 1 ? " disabled" : ""}>Previous</button>
+          ${pageBtns}
+          <button type="button" class="boe-page" data-boe-page="next"${boeView.page >= maxPage ? " disabled" : ""}>Next</button>
+        </div>
+        <span>50 / page</span>`;
+    }
+  }
+
+  function boeExcelCellValue(v) {
+    if (v == null || v === "") return "";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "boolean") return v;
+    return cellToString(v);
+  }
+
+  function exportBoErrorsExcel() {
+    if (!hasBackOrder()) {
+      setStatus("No Back Order file to export", "busy");
+      return;
+    }
+    const pack = boeLastPack || buildBoErrorsPack();
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const rawRows = slots.backorder.rows || [];
+    if (!rawRows.length) {
+      setStatus("No Back Order rows to export", "busy");
+      return;
+    }
+
+    const AC_IDX = colLetterToIndex("AC");
+    let headers = Array.isArray(rawRows[0].__headers) && rawRows[0].__headers.length
+      ? rawRows[0].__headers.slice()
+      : [];
+    // Keep through Col AC only (drop AD–AI)
+    while (headers.length <= AC_IDX) {
+      headers.push(`Column ${indexToColLetter(headers.length)}`);
+    }
+    headers = headers.slice(0, AC_IDX + 1);
+    if (!cellToString(headers[AC_IDX]).trim() || /^column\s+ac$/i.test(cellToString(headers[AC_IDX]))) {
+      headers[AC_IDX] = "Color Correction";
+    }
+
+    const headerLabels = headers.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const headerNorms = headerLabels.map((h) => normHeader(h));
+    const empKey = String(boeView.employee || "").trim();
+    const employeeRows = empKey
+      ? (pack.rows || []).filter((r) => {
+        const key = nameKey(r.salesman);
+        return key === empKey || String(r.salesman || "").trim() === empKey;
+      })
+      : null;
+    const employeeIdx = employeeRows ? new Set(employeeRows.map((r) => r.idx)) : null;
+    const employeeName = employeeRows && employeeRows[0] ? String(employeeRows[0].salesman || empKey) : empKey;
+    const errByIdx = new Map((pack.rows || []).map((r) => [r.idx, r]));
+    const aoa = [];
+    aoa.push([...headerLabels, "Error Definition"]);
+
+    const redStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "FFCDD2" } },
+      font: { color: { rgb: "B71C1C" }, bold: true },
+    };
+    const greenStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "C8E6C9" } },
+      font: { color: { rgb: "1B5E20" }, bold: true },
+    };
+    const redCells = [];
+    const greenCells = [];
+
+    const sanitizeBoeExportCell = (v, colIdx) => {
+      const raw = boeExcelCellValue(v);
+      const s = cellToString(raw).trim();
+      if (!s) return "";
+      if (headerNorms[colIdx] && normHeader(s) === headerNorms[colIdx]) return "";
+      if (normHeader(s) === normHeader(headerLabels[colIdx])) return "";
+      return raw;
+    };
+
+    rawRows.forEach((raw, idx) => {
+      if (employeeIdx && !employeeIdx.has(idx)) return;
+      const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
+      const row = [];
+      for (let i = 0; i <= AC_IDX; i += 1) {
+        const v = cells[i] != null && cells[i] !== "" ? cells[i] : raw[headers[i]];
+        row.push(sanitizeBoeExportCell(v, i));
+      }
+      // Skip rows that are empty after stripping leaked header labels
+      if (row.every((v) => cellToString(v).trim() === "")) return;
+
+      const err = errByIdx.get(idx);
+      if (err && err.acCorrection) {
+        row[AC_IDX] = err.acCorrection;
+      }
+
+      const errText = err && err.errors && err.errors.length
+        ? err.errors.map((e) => e.label).join("; ")
+        : "";
+      row.push(errText);
+      aoa.push(row);
+
+      if (err) {
+        const excelRow = aoa.length - 1;
+        (err.errorLetters || []).forEach((L) => {
+          const c = colLetterToIndex(L);
+          if (c >= 0 && c <= AC_IDX && c !== AC_IDX) redCells.push({ r: excelRow, c });
+        });
+        redCells.push({ r: excelRow, c: headers.length }); // Error Definition
+        if (err.acCorrection) greenCells.push({ r: excelRow, c: AC_IDX });
+      }
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    redCells.forEach(({ r, c }) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[addr]) ws[addr] = { t: "s", v: "" };
+      ws[addr].s = redStyle;
+    });
+    greenCells.forEach(({ r, c }) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[addr]) ws[addr] = { t: "s", v: "" };
+      ws[addr].s = greenStyle;
+    });
+
+    ws["!cols"] = headerLabels.map(() => ({ wch: 14 })).concat([{ wch: 48 }]);
+
+    const summaryRows = employeeRows || (pack.rows || []);
+    const summaryTotals = employeeRows ? boeTotalsFromRows(employeeRows) : pack.totals;
+    const summary = Object.values(BOE_ERROR_DEFS).map((def) => ({
+      Error: def.label,
+      Severity: def.severity,
+      Count: (summaryTotals.typeCounts && summaryTotals.typeCounts[def.id]) || 0,
+    }));
+    summary.push({
+      Error: "RAV4 SH corrections (Col AC)",
+      Severity: "info",
+      Count: summaryRows.filter((r) => r.acCorrection).length,
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Back Order");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Error Summary");
+    const safeEmployee = String(employeeName || "")
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+    const name = safeEmployee
+      ? `BO-Errors-${safeEmployee}-${excelFileStamp()}.xlsx`
+      : `BO-Errors-${excelFileStamp()}.xlsx`;
+    XLSX.writeFile(wb, name, { cellStyles: true, bookType: "xlsx" });
+    setStatus(
+      safeEmployee
+        ? `BO Errors Excel exported for ${employeeName} · ${formatNumber(employeeRows.length)} error rows`
+        : "BO Errors Excel exported · AC corrections green · AD–AI removed",
+      "ok",
+    );
+  }
+
+  function boAggRows(list, keyFn) {
+    return [...groupBoBy(list, keyFn).entries()]
+      .map(([name, rows]) => ({ name, ...boMetrics(rows) }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function renderBoMiniTable(el, rows, nameKey, dataAttr) {
+    if (!el) return;
+    const top = rows.slice(0, 6);
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr><th>${nameKey}</th><th class="num">Total</th><th class="num">Conf.</th><th class="num">Open</th><th class="num">%</th><th class="num">Age</th></tr></thead>
+      <tbody>${top.map((row) => `<tr>
+        <td><button type="button" class="bo-link" ${dataAttr}="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button></td>
+        <td class="num">${formatNumber(row.total)}</td>
+        <td class="num">${formatNumber(row.confirmed)}</td>
+        <td class="num">${formatNumber(row.notConfirmed)}</td>
+        <td class="num ${heatConfirm(row.confirmPct)}">${(row.confirmPct * 100).toFixed(1)}%</td>
+        <td class="num ${heatAging(row.avgAging)}">${formatNumber(row.avgAging)}</td>
+      </tr>`).join("") || `<tr><td colspan="6" class="foot">No rows</td></tr>`}</tbody>
+    </table>`;
+  }
+
+  function renderBoTowerExtras(list, m) {
+    renderBoMiniTable($("#bo-showroom-table"), boAggRows(list, (b) => b.salesChannel || b.salesScope || "—"), "Showroom", "data-bo-channel");
+    const people = boAggRows(list, (b) => b.salesman || "—");
+    renderBoMiniTable($("#bo-salesman-table"), people, "Salesman", "data-bo-salesman");
+    const oldest = list.filter((b) => !b.confirmed && Number.isFinite(Number(b.aging)))
+      .slice()
+      .sort((a, b) => Number(b.aging) - Number(a.aging))
+      .slice(0, 6);
+    const oldEl = $("#bo-oldest");
+    if (oldEl) {
+      oldEl.innerHTML = `<table class="bo-table">
+        <thead><tr><th>BO</th><th>Product</th><th>VIN</th><th>Salesman</th><th>Age</th><th>Status</th></tr></thead>
+        <tbody>${oldest.map((b) => {
+          const age = Number(b.aging) || 0;
+          const tone = age > 180 ? "heat-bad" : age > 90 ? "heat-mid" : "";
+          return `<tr>
+            <td><button type="button" class="bo-link" data-bo-record="${b.id}">${escapeHtml(b.boNumber || "—")}</button></td>
+            <td>${escapeHtml(b.product)}</td>
+            <td>${escapeHtml(b.vin || "—")}</td>
+            <td>${escapeHtml(b.salesman || "—")}</td>
+            <td class="num ${tone}">${formatNumber(age)}d</td>
+            <td>${b.confirmed ? "Confirmed" : "Not confirmed"}</td>
+          </tr>`;
+        }).join("") || `<tr><td colspan="6" class="foot">No open orders with an age.</td></tr>`}</tbody>
+      </table>`;
+    }
+    const over180 = list.filter((b) => Number(b.aging) > 180).length;
+    const missingSales = list.filter((b) => !b.salesman || b.salesman === "—").length;
+    const attn = $("#bo-attention");
+    if (attn) {
+      const bits = [
+        m.notConfirmed ? `${formatNumber(m.notConfirmed)} not confirmed` : "",
+        m.avgAging ? `${formatNumber(m.avgAging)} average waiting days` : "",
+        missingSales ? `${formatNumber(missingSales)} missing salesman` : "",
+        over180 ? `${formatNumber(over180)} orders older than 180 days` : "",
+      ].filter(Boolean);
+      attn.innerHTML = bits.length ? `<b>Attention</b> ${bits.map((bit) => `<span>${escapeHtml(bit)}</span>`).join("")}` : `<b>Attention</b> <span>No backlog warnings for this filter.</span>`;
+    }
+    const vins = new Map();
+    let dup = 0;
+    list.forEach((b) => {
+      const vin = String(b.vin || "").trim();
+      if (!vin) return;
+      vins.set(vin, (vins.get(vin) || 0) + 1);
+    });
+    vins.forEach((n) => { if (n > 1) dup += 1; });
+    const quality = $("#bo-quality");
+    if (quality) {
+      quality.innerHTML = `<div class="pbi-viz-head"><h2>Data quality</h2></div>
+        <ul class="bo-quality-list">
+          <li><span>In view</span><b>${formatNumber(list.length)}</b></li>
+          <li><span>Missing VIN</span><b>${formatNumber(list.filter((b) => !b.vin).length)}</b></li>
+          <li><span>Missing product</span><b>${formatNumber(list.filter((b) => !b.product || b.product === "—").length)}</b></li>
+          <li><span>Missing salesman</span><b>${formatNumber(missingSales)}</b></li>
+          <li><span>Missing confirm flag</span><b>${formatNumber(list.filter((b) => !b.confirm).length)}</b></li>
+          <li><span>Duplicate VIN</span><b>${formatNumber(dup)}</b></li>
+          <li><span>No order date</span><b>${formatNumber(list.filter((b) => !b.orderDateObj).length)}</b></li>
+        </ul>`;
+    }
+    const chips = $("#bo-chips");
+    if (chips) {
+      const items = [
+        ["product", "Product", boView.product],
+        ["category", "Category", boView.category],
+        ["year", "Year", boView.year],
+        ["channel", "Showroom", boView.channel],
+        ["type", "Sales type", boView.type],
+        ["salesman", "Salesman", boView.salesman],
+        ["confirm", "Confirmation", boView.confirm === "yes" ? "Confirmed" : boView.confirm === "no" ? "Not confirmed" : ""],
+        ["aging", "Aging", boView.aging],
+        ["datePreset", "Order date", boView.datePreset],
+      ].filter((item) => item[2]);
+      chips.innerHTML = items.map(([key, label, value]) => `<button type="button" class="bo-chip" data-bo-clear="${key}">${escapeHtml(label)}: ${escapeHtml(value)} ×</button>`).join("");
+    }
+    document.querySelectorAll("[data-bo-date]").forEach((btn) => {
+      btn.classList.toggle("is-on", (btn.getAttribute("data-bo-date") || "") === (boView.datePreset || ""));
+    });
+    const src = $("#bo-data-source");
+    if (src) src.textContent = (slots.backorder && slots.backorder.sheet) || "Back Order file";
+  }
+
+  function boRecordHtml(row) {
+    if (!row) return `<p class="foot">Record not found.</p>`;
+    const fields = [
+      ["BO number", row.boNumber],
+      ["VIN", row.vin],
+      ["Product", row.product],
+      ["Suffix", row.sfx],
+      ["Category", row.category],
+      ["Model year", row.year],
+      ["Exterior", row.ext],
+      ["Interior", row.int],
+      ["Sales type", row.salesType],
+      ["Showroom", row.salesChannel],
+      ["Scope", row.salesScope],
+      ["Salesman", row.salesman],
+      ["Customer", row.customer],
+      ["Order date", row.orderDate],
+      ["Aging days", row.aging],
+      ["Confirm flag", row.confirm],
+      ["Confirmed", row.confirmed ? "Yes" : "No"],
+      ["Paid", row.paid ? "Yes" : "No"],
+    ].filter((pair) => pair[1] != null && String(pair[1]) !== "");
+    return `<dl class="bo-record-list">${fields.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>`;
+  }
+
+  const BO_ALL_COLS = [
+    ["boNumber", "BO"],
+    ["vin", "VIN"],
+    ["product", "Product"],
+    ["sfx", "Suffix"],
+    ["year", "Year"],
+    ["salesType", "Sales type"],
+    ["salesman", "Salesman"],
+    ["salesChannel", "Showroom"],
+    ["orderDate", "Date"],
+    ["aging", "Age"],
+    ["confirmed", "Status"],
+  ];
+
+  function boAllCell(row, key) {
+    if (key === "boNumber") return `<button type="button" class="bo-link" data-bo-record="${row.id}">${escapeHtml(row.boNumber || "—")}</button>`;
+    if (key === "aging") return row.aging == null ? "—" : formatNumber(row.aging);
+    if (key === "confirmed") return row.confirmed ? "Confirmed" : "Not confirmed";
+    return escapeHtml(row[key] || "—");
+  }
+
+  function renderBoAllTable() {
+    const host = $("#bo-all-table");
+    const pager = $("#bo-all-pager");
+    if (!host || !window._data) return;
+    if (!boView.hiddenCols) boView.hiddenCols = {};
+    const cols = BO_ALL_COLS.filter((col) => !boView.hiddenCols[col[0]]);
+    let list = filteredBos(window._data).slice();
+    if (boView.sortKey) {
+      const key = boView.sortKey;
+      const dir = boView.sortDir === "desc" ? -1 : 1;
+      list.sort((a, b) => {
+        const av = key === "aging" ? Number(a.aging) : key === "confirmed" ? (a.confirmed ? 1 : 0) : String(a[key] || "");
+        const bv = key === "aging" ? Number(b.aging) : key === "confirmed" ? (b.confirmed ? 1 : 0) : String(b[key] || "");
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+        return String(av).localeCompare(String(bv)) * dir;
+      });
+    }
+    const size = 40;
+    const pages = Math.max(1, Math.ceil(list.length / size));
+    boView.page = Math.min(Math.max(1, boView.page || 1), pages);
+    const slice = list.slice((boView.page - 1) * size, boView.page * size);
+    const toggles = BO_ALL_COLS.map(([key, label]) => `<label class="bo-col-toggle"><input type="checkbox" data-bo-col="${key}" ${boView.hiddenCols[key] ? "" : "checked"} /> ${escapeHtml(label)}</label>`).join("");
+    host.innerHTML = `<div class="bo-col-toggles">${toggles}</div><table class="bo-table">
+      <thead><tr>${cols.map(([key, label]) => `<th><button type="button" class="bo-sort" data-bo-sort="${key}">${escapeHtml(label)}${boView.sortKey === key ? (boView.sortDir === "desc" ? " ↓" : " ↑") : ""}</button></th>`).join("")}</tr></thead>
+      <tbody>${slice.map((b) => `<tr>${cols.map(([key]) => `<td class="${key === "aging" ? "num" : ""}">${boAllCell(b, key)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length || 1}" class="foot">No rows.</td></tr>`}</tbody>
+    </table>`;
+    if (pager) {
+      pager.innerHTML = `<span>${formatNumber(list.length)} rows</span>
+        <button type="button" class="btn" data-bo-page="${boView.page - 1}" ${boView.page <= 1 ? "disabled" : ""}>Previous</button>
+        <span>${boView.page} / ${pages}</span>
+        <button type="button" class="btn" data-bo-page="${boView.page + 1}" ${boView.page >= pages ? "disabled" : ""}>Next</button>`;
+    }
+  }
+
+  function boDefinitionsHtml() {
+    return `<dl class="bo-record-list">
+      <div><dt>Total back orders</dt><dd>Count of Back Order rows after the current filters. Each row is one record from worksheet 1.</dd></div>
+      <div><dt>Confirmed</dt><dd>Rows whose confirm flag is classified as confirmed by the existing confirm rule.</dd></div>
+      <div><dt>Not confirmed</dt><dd>Total minus confirmed. These are still waiting.</dd></div>
+      <div><dt>Confirmation rate</dt><dd>Confirmed divided by total back orders.</dd></div>
+      <div><dt>Average waiting days</dt><dd>Average of the aging value already stored on each row. Aging comes from the file aging column, or from the order date when that column is empty.</dd></div>
+      <div><dt>Cars in pipeline</dt><dd>Same count as not confirmed.</dd></div>
+      <div><dt>Returned orders</dt><dd>Count of rows in the cancelled Back Order file. This card is not reduced by the product filters.</dd></div>
+      <div><dt>Order date filter</dt><dd>Optional. All file leaves every row in place, which is the previous dashboard. Today, yesterday, this week, this month, or a custom range keeps rows whose order date falls in that range.</dd></div>
+      <div><dt>Aging buckets</dt><dd>0–30, 31–60, 61–90, 91–180, and over 180 days, using the same aging number as the chart.</dd></div>
+    </dl>`;
+  }
+
+  function applyBoDatePreset(preset) {
+    boView.datePreset = preset || "";
+    boView.page = 1;
+    if (!preset) {
+      boView.dateFrom = null;
+      boView.dateTo = null;
+      refreshBoFromFilters();
+      return;
+    }
+    const today = startOfDay(saudiToday());
+    let from = today;
+    let to = today;
+    if (preset === "yesterday") {
+      from = new Date(today.getTime() - 86400000);
+      to = from;
+    } else if (preset === "week") {
+      const day = today.getDay();
+      from = new Date(today.getTime() - day * 86400000);
+    } else if (preset === "month") {
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+    }
+    boView.dateFrom = from;
+    boView.dateTo = to;
+    const fromEl = $("#bo-date-from");
+    const toEl = $("#bo-date-to");
+    if (fromEl) fromEl.value = toIsoDateInput(from);
+    if (toEl) toEl.value = toIsoDateInput(to);
+    refreshBoFromFilters();
+  }
+
+  function wireBoChartClicks() {
+    const bind = (id, apply) => {
+      const chart = charts[id];
+      if (!chart) return;
+      chart.canvas.onclick = (evt) => {
+        const points = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
+        if (!points.length) return;
+        apply(points[0].index, chart.data.labels[points[0].index]);
+      };
+    };
+    bind("chart-bo-top5", (_index, label) => {
+      boView.product = label;
+      boView.car = label;
+      refreshBoFromFilters();
+    });
+    bind("chart-bo-status", (index) => {
+      boView.confirm = index === 0 ? "yes" : "no";
+      refreshBoFromFilters();
+    });
+    bind("chart-bo-aging-buckets", (_index, label) => {
+      boView.aging = label;
+      refreshBoFromFilters();
+    });
+    bind("chart-bo-salestype", (_index, label) => {
+      boView.type = label;
+      refreshBoFromFilters();
+    });
+  }
+
+  function renderBoDashboard(d) {
+    const empty = $("#bo-empty");
+    const dash = $("#bo-dash");
+    if (!hasBackOrder()) {
+      if (empty) empty.hidden = false;
+      if (dash) dash.hidden = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (dash) dash.hidden = false;
+
+    const all = d.bos || [];
+    const showrooms = new Set();
+    all.forEach((b) => {
+      if (b.salesChannel && b.salesChannel !== "—") showrooms.add(b.salesChannel);
+      if (b.salesScope && b.salesScope !== "—") showrooms.add(b.salesScope);
+    });
+    fillBoSelect("#bo-f-product", new Set(all.map((b) => b.product).filter(Boolean)), boView.product, "All Products");
+    fillBoSelect("#bo-f-category", new Set(all.map((b) => b.category).filter(Boolean)), boView.category, "All Categories");
+    fillBoSelect("#bo-f-year", new Set(all.map((b) => b.year).filter(Boolean)), boView.year, "All Model Years");
+    fillBoSelect("#bo-f-channel", showrooms, boView.channel, "All Showrooms");
+    fillBoSelect("#bo-f-type", new Set(all.map((b) => b.salesType).filter(Boolean)), boView.type, "All Sales Types");
+    fillBoSelect("#bo-f-salesman", new Set(all.map((b) => b.salesman).filter((name) => name && name !== "—")), boView.salesman, "All salesmen");
+    fillBoSelect("#bo-f-scope", new Set(all.map((b) => b.salesScope).filter(Boolean)), boView.scope, "All sales scopes");
+    fillBoSelect("#bo-f-sfx", new Set(all.map((b) => b.sfx).filter(Boolean)), boView.sfx, "All SFX / grades");
+    if ($("#bo-f-confirm")) $("#bo-f-confirm").value = boView.confirm || "";
+    if ($("#bo-search")) $("#bo-search").value = boView.search || "";
+
+    const updated = $("#bo-last-updated");
+    if (updated) {
+      const rawN = (slots.backorder.rows || []).length;
+      const mappedN = all.length;
+      const stamp = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
+      const sheet = slots.backorder.sheet ? ` · ${slots.backorder.sheet}` : " · first worksheet";
+      updated.textContent = `${stamp} · ${formatNumber(mappedN)} BO${sheet}` + (rawN !== mappedN ? ` (${formatNumber(rawN)} file rows)` : "");
+    }
+    const rangeEl = $("#bo-date-range");
+    if (rangeEl) {
+      const live = window._globalLivePeriod || (typeof ensureGlobalLivePeriod === "function" ? ensureGlobalLivePeriod() : null);
+      rangeEl.textContent = (live && live.rangeLabel) || (typeof globalDatePresetLabel === "function"
+        ? globalDatePresetLabel((globalDateFilter && globalDateFilter.preset) || "today")
+        : "—");
+      if (boView.datePreset && boView.dateFrom && boView.dateTo) {
+        const fmt = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        rangeEl.textContent = `${fmt(boView.dateFrom)} – ${fmt(boView.dateTo)}`;
+      }
+    }
+
+    const list = filteredBos(d);
+    const m = boMetrics(list);
+    const aggs = productAgg(list);
+    const returned = Array.isArray(d.cancelled) ? d.cancelled.length : 0;
+    renderBoKpis(m, { returned });
+    renderBo20PctCars(list);
+    renderBoInsights(list, m);
+    renderBoStrategic(list);
+    renderBoProductTable(aggs, m);
+    renderBoCarDetail(all, list);
+    renderBoSalesTypeTable(list);
+    renderBoSfxTable(list);
+    renderBoCharts(list, aggs, m);
+    renderBoTowerExtras(list, m);
+    wireBoChartClicks();
+    if ($("#bo-all-modal") && !$("#bo-all-modal").hidden) renderBoAllTable();
+
+    const detail = $("#bo-car-detail");
+    if (detail && boView.car) detail.open = true;
+  }
+
+  /* ——— Stock Dashboard · same layout as BO Dashboard ——— */
+  const STOCK_DISPLAY_COLS = ["E", "K", "L", "M", "P", "G", "H", "AB", "AC", "AF", "AG", "AI", "AH"];
+  const STOCK_MAIN_SALES = "__MAIN_SALES__";
+
+  let stockInvView = {
+    search: "",
+    source: "",
+    product: "",
+    suffix: "",
+    year: "",
+    usage: "",
+    location: "",
+    car: "",
+  };
+  let stockBoView = { product: "", suffix: "", year: "", salesman: "", source: "" };
+
+  const MATCHED_CAR_COLS = [
+    "Back Order Number",
+    "VIN",
+    "Product",
+    "Alj Suffix",
+    "Model Year",
+    "Salesman Name",
+    "Order Date",
+    "Confirm Flag",
+    "Exterior Color",
+    "Interior Color",
+    "Source",
+    "Current Location",
+    "Allocation Ageing",
+    "Cust Group",
+  ];
+
+  function stockCol(row, letter, aliasKey) {
+    const direct = cellToString(cellByLetter(row, letter)).trim();
+    if (direct) return direct;
+    if (aliasKey) {
+      const get = buildFieldGetter(row);
+      return cellToString(get(row, aliasKey)).trim();
+    }
+    return "";
+  }
+
+  function mapStockInv(rows, source) {
+    return (rows || []).map((r, i) => {
+      const ageingRaw = cellByLetter(r, "J");
+      const ageingNum = toNumber(ageingRaw);
+      const get = buildFieldGetter(r);
+      const product = stockCol(r, "B", "product") || "—";
+      const suffix = normalizeProductSuffix(product, stockCol(r, "G", "suffix") || "—");
+      return {
+        id: `${source}-${i}`,
+        source,
+        product,
+        vin: extractVinValue(cellByLetter(r, "E")) || stockCol(r, "E", "vin"),
+        suffix,
+        year: stockCol(r, "F", "year"),
+        ext: stockCol(r, "H", "ext"),
+        int: stockCol(r, "I", "int"),
+        ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
+        usage: stockFieldByAlias(r, "usage", ["K"]) || "—",
+        location: stockCol(r, "N", "location") || stockCol(r, "O", "location") || "—",
+        status: stockCol(r, "D") || stockCol(r, "L", "status"),
+        // RTL RawData: Col M = Search Area Desc
+        searchAreaDesc: stockFieldByAlias(r, "searchAreaDesc", ["M"])
+          || cellToString(get(r, "searchAreaDesc") || get(r, "vehicleSearchArea")).trim(),
+        _raw: r,
+      };
+    });
+  }
+
+  function isRetailElectronicSales(desc) {
+    const s = normHeader(desc || "");
+    if (!s) return false;
+    return s === "retail electronic sales" || s.includes("retail electronic sales");
+  }
+
+  function detailByHeader(details, needles) {
+    if (!details || typeof details !== "object") return "";
+    const want = (needles || []).map((n) => normHeader(n));
+    for (const key of Object.keys(details)) {
+      const name = normHeader(key);
+      if (!want.some((needle) => name === needle || name.includes(needle))) continue;
+      const val = cellToString(details[key]).trim();
+      if (val) return val;
+    }
+    return "";
+  }
+
+  /** Usage description: DB = damage, DS = display. */
+  function usageKind(raw) {
+    const s = String(raw || "").trim().toUpperCase().replace(/\s+/g, " ");
+    if (!s || s === "—") return "";
+    const code = s.split(/[\s\-/|]+/)[0];
+    if (code === "DB" || s === "DAMAGE") return "damage";
+    if (code === "DS" || s === "DISPLAY") return "display";
+    return "";
+  }
+
+  function renderUsageByCar(cars) {
+    const tableEl = $("#bas-usage-table");
+    const footEl = $("#bas-usage-foot");
+    const damageEl = $("#bas-usage-damage");
+    const displayEl = $("#bas-usage-display");
+    if (!tableEl) return;
+    const resCars = (cars || []).filter((car) => isRetailElectronicSales(car.searchAreaDesc));
+    const byCar = new Map();
+    resCars.forEach((car) => {
+      const product = car.product || "—";
+      if (!byCar.has(product)) byCar.set(product, { product, total: 0, damage: 0, display: 0, other: 0 });
+      const row = byCar.get(product);
+      row.total += 1;
+      const kind = usageKind(car.usage);
+      if (kind === "damage") row.damage += 1;
+      else if (kind === "display") row.display += 1;
+      else row.other += 1;
+    });
+    const rows = [...byCar.values()].sort((a, b) => (b.damage + b.display) - (a.damage + a.display) || b.total - a.total || String(a.product).localeCompare(String(b.product)));
+    const damage = rows.reduce((sum, row) => sum + row.damage, 0);
+    const display = rows.reduce((sum, row) => sum + row.display, 0);
+    if (damageEl) damageEl.textContent = formatNumber(damage);
+    if (displayEl) displayEl.textContent = formatNumber(display);
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">No cars with Search Area Desc = Retail Electronic Sales.</p>`;
+      if (footEl) footEl.textContent = "0 cars";
+      return;
+    }
+    const totals = rows.reduce((sum, row) => {
+      sum.total += row.total;
+      sum.other += row.other;
+      return sum;
+    }, { total: 0, other: 0 });
+    tableEl.innerHTML = `<table class="bas-table">
+      <thead><tr>
+        <th>Car</th>
+        <th class="num">Retail Electronic Sales</th>
+        <th class="num">Damage · DB</th>
+        <th class="num">Display · DS</th>
+        <th class="num">Other usage</th>
+      </tr></thead>
+      <tbody>${rows.map((row) => `<tr>
+          <td>${escapeHtml(row.product)}</td>
+          <td class="num">${formatNumber(row.total)}</td>
+          <td class="num">${formatNumber(row.damage)}</td>
+          <td class="num">${formatNumber(row.display)}</td>
+          <td class="num">${formatNumber(row.other)}</td>
+        </tr>`).join("")}
+        <tr>
+          <td><b>Total</b></td>
+          <td class="num"><b>${formatNumber(totals.total)}</b></td>
+          <td class="num"><b>${formatNumber(damage)}</b></td>
+          <td class="num"><b>${formatNumber(display)}</b></td>
+          <td class="num"><b>${formatNumber(totals.other)}</b></td>
+        </tr>
+      </tbody>
+    </table>`;
+    if (footEl) {
+      footEl.textContent = `${formatNumber(rows.length)} cars · ${formatNumber(totals.total)} Retail Electronic Sales · ${formatNumber(damage)} damage (DB) · ${formatNumber(display)} display (DS)`;
+    }
+  }
+
+  function buildRetailElectronicSalesCars(ctx, dayPack) {
+    const today = (ctx && ctx.today) || saudiToday();
+    const todayKey = ctx && ctx.monthKey
+      ? `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`
+      : "";
+    const todaySnap = dayPack && dayPack.days && todayKey ? dayPack.days[todayKey] : null;
+    if (todaySnap && Array.isArray(todaySnap.vehicles)) {
+      return todaySnap.vehicles
+        .map((v, i) => mapRtlDailyVehicle(v, todayKey, todaySnap.id, i))
+        .filter((car) => isRetailElectronicSales(car.searchAreaDesc))
+        .map((car) => {
+          const leaf = matchRtlToAllocLeaf(car);
+          const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+          const isAge0Arrival = age == null || age === 0;
+          const arrivedOn = isAge0Arrival ? today : inferCollectionDateFromAge(age, today);
+          return {
+            ...car,
+            seg: leaf ? leaf.seg : "—",
+            collectionDate: arrivedOn || today,
+            collectionDay: arrivedOn ? arrivedOn.getDate() : ctx.todayDay,
+            collectionLabel: arrivedOn
+              ? arrivedOn.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+              : "—",
+            age,
+            isAge0Arrival,
+          };
+        })
+        .sort((a, b) => {
+          const aa = a.age == null ? -1 : a.age;
+          const bb = b.age == null ? -1 : b.age;
+          return aa - bb || String(a.product).localeCompare(String(b.product));
+        });
+    }
+    return mapStockInv(slots.rtl.rows || [], "RTL")
+      .filter((car) => isRetailElectronicSales(car.searchAreaDesc))
+      .map((car) => {
+        const collDate = inferCollectionDateFromAge(car.ageing, today);
+        const leaf = matchRtlToAllocLeaf(car);
+        const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+        return {
+          ...car,
+          seg: leaf ? leaf.seg : "—",
+          collectionDate: collDate,
+          collectionDay: collDate ? collDate.getDate() : null,
+          collectionLabel: collDate
+            ? collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+            : "—",
+          age,
+          isAge0Arrival: age == null || age === 0,
+        };
+      })
+      .sort((a, b) => {
+        const aa = a.age == null ? -1 : a.age;
+        const bb = b.age == null ? -1 : b.age;
+        return aa - bb || String(a.product).localeCompare(String(b.product));
+      });
+  }
+
+  function renderRetailElectronicSalesPanel(ctx, dayPack, arrivalHints) {
+    const panel = $("#bas-retail-panel");
+    const tableEl = $("#bas-retail-table");
+    const footEl = $("#bas-retail-foot");
+    const totalEl = $("#bas-retail-total");
+    if (!panel || !tableEl) return;
+
+    const cars = buildRetailElectronicSalesCars(ctx, dayPack || null);
+    renderUsageByCar(cars);
+    const arrivalByVin = new Map();
+    const changeByVin = new Map();
+    const hintList = (arrivalHints && arrivalHints.matched) || [];
+    const changeList = (arrivalHints && arrivalHints.changes) || [];
+    const todayDay = (arrivalHints && arrivalHints.todayDay) || (ctx && ctx.todayDay);
+    hintList.forEach((c) => {
+      const vin = extractVinValue(c.vin) || upperTrim(c.vin);
+      if (!vin) return;
+      if (!arrivalByVin.has(vin) || c.collectionDay === todayDay) arrivalByVin.set(vin, c);
+    });
+    changeList.forEach((c) => {
+      const vin = extractVinValue(c.vin) || upperTrim(c.vin);
+      if (!vin || c.collectionDay !== todayDay) return;
+      changeByVin.set(vin, c);
+    });
+
+    const annotated = cars.map((c) => {
+      const vin = extractVinValue(c.vin) || upperTrim(c.vin);
+      const hit = vin ? arrivalByVin.get(vin) : null;
+      const chg = vin ? changeByVin.get(vin) : null;
+      return {
+        ...c,
+        arrivalKind: hit && hit.collectionDay === todayDay ? hit.arrivalKind : (c.isAge0Arrival ? "age0" : null),
+        changeKind: chg ? chg.changeKind : null,
+        prevSearchArea: chg ? chg.prevSearchArea : "",
+        newSearchArea: chg ? chg.newSearchArea : "",
+      };
+    });
+
+    // Also list cars that left RES today (no longer in RES file list)
+    const leftRes = changeList.filter((c) => c.changeKind === "from-res" && c.collectionDay === todayDay);
+    leftRes.forEach((c) => {
+      const vin = extractVinValue(c.vin) || upperTrim(c.vin);
+      if (!vin || annotated.some((a) => (extractVinValue(a.vin) || upperTrim(a.vin)) === vin)) return;
+      annotated.push({
+        ...c,
+        seg: c.seg || "—",
+        product: c.allocProduct || c.product || "—",
+        suffix: c.allocSfx || c.suffix || "—",
+        isAge0Arrival: false,
+        changeKind: "from-res",
+      });
+    });
+
+    const age0Cars = annotated.filter((c) => c.isAge0Arrival);
+    const toRes = annotated.filter((c) => c.changeKind === "to-res").length;
+    const fromRes = leftRes.length;
+    if (totalEl) totalEl.textContent = formatNumber(cars.length);
+
+    if (!cars.length && !leftRes.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">No RTL cars with Search Area Desc = Retail Electronic Sales${dayPack ? " in today's active day file" : ""}.</p>`;
+      if (footEl) footEl.textContent = "0 cars";
+      return;
+    }
+
+    const age0 = age0Cars.length;
+    const late = cars.filter((c) => c.age != null && c.age >= 1).length;
+
+    tableEl.innerHTML = `<table class="bas-table bas-retail-table">
+      <thead><tr>
+        <th>Seg</th><th>Product</th><th>SFX</th><th>VIN</th>
+        <th>Age</th><th>Received</th><th>Location</th><th>Search Area Desc</th><th>Usage description</th><th>Flag</th>
+      </tr></thead>
+      <tbody>${annotated.map((c) => {
+        const ageCls = c.isAge0Arrival ? "bas-gap-pos" : c.age != null && c.age >= 1 ? "bas-gap-neg" : "";
+        let badge = { cls: "", text: "—" };
+        if (c.changeKind === "to-res" || c.changeKind === "from-res") badge = basResArrivalBadge(c);
+        else if (c.isAge0Arrival) badge = { cls: "ok", text: "Received · age 0" };
+        else if (c.age != null && c.age >= 1) badge = { cls: "bad", text: `Late · ${c.age}d` };
+        const rowCls = c.changeKind === "from-res" ? "bas-row-below" : (c.changeKind === "to-res" || c.isAge0Arrival ? "bas-row-above" : "");
+        return `<tr class="${rowCls}">
+          <td>${escapeHtml(c.seg || "—")}</td>
+          <td>${escapeHtml(c.product || "—")}</td>
+          <td>${escapeHtml(c.suffix || "—")}</td>
+          <td class="bas-vin">${escapeHtml(c.vin || "—")}</td>
+          <td class="num ${ageCls}">${c.age == null ? "—" : formatNumber(c.age)}</td>
+          <td>${escapeHtml(c.collectionLabel || "—")}</td>
+          <td>${escapeHtml(c.location || "—")}</td>
+          <td>${escapeHtml(c.searchAreaDesc || c.newSearchArea || "—")}</td>
+          <td>${escapeHtml(usageKind(c.usage) === "damage" ? `Damage · ${c.usage}` : usageKind(c.usage) === "display" ? `Display · ${c.usage}` : (c.usage || "—"))}</td>
+          <td>${badge.text === "—" ? "—" : `<span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>`}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+
+    if (footEl) {
+      footEl.textContent = `${formatNumber(cars.length)} RES in file · ${formatNumber(age0)} received age 0 · Other→RES ${formatNumber(toRes)} · RES→Other ${formatNumber(fromRes)} · late ${formatNumber(late)}${dayPack ? " · today's day file" : ""} · changes not counted in MTD`;
+    }
+  }
+
+  function allStockInv() {
+    return [
+      ...mapStockInv(slots.rtl.rows, "RTL"),
+      ...mapStockInv(slots.central.rows, "Central"),
+    ];
+  }
+
+  function stockInvMetrics(list) {
+    const total = list.length;
+    const vinSet = new Set();
+    list.forEach((s) => { if (s.vin) vinSet.add(s.vin); });
+    const agingVals = list.map((s) => s.aging).filter((n) => n != null && Number.isFinite(n));
+    const avgAging = agingVals.length
+      ? Math.round(agingVals.reduce((a, b) => a + b, 0) / agingVals.length)
+      : 0;
+    const suffixSet = new Set(list.map((s) => s.suffix).filter((x) => x && x !== "—"));
+    const productSet = new Set(list.map((s) => s.product).filter((x) => x && x !== "—"));
+    const rtl = list.filter((s) => s.source === "RTL").length;
+    const central = list.filter((s) => s.source === "Central").length;
+    return { total, vins: vinSet.size, avgAging, suffixes: suffixSet.size, products: productSet.size, rtl, central };
+  }
+
+  function filteredStockInv() {
+    let list = allStockInv();
+    const q = stockInvView.search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s) =>
+        [s.product, s.vin, s.suffix, s.location, s.usage, s.year, s.ext, s.source]
+          .some((v) => String(v || "").toLowerCase().includes(q))
+      );
+    }
+    if (stockInvView.source) list = list.filter((s) => s.source === stockInvView.source);
+    if (stockInvView.product) list = list.filter((s) => s.product === stockInvView.product);
+    if (stockInvView.suffix) list = list.filter((s) => s.suffix === stockInvView.suffix);
+    if (stockInvView.year) list = list.filter((s) => s.year === stockInvView.year);
+    if (stockInvView.usage) list = list.filter((s) => s.usage === stockInvView.usage);
+    if (stockInvView.location) list = list.filter((s) => s.location === stockInvView.location);
+    return list;
+  }
+
+  function stockProductAgg(list) {
+    return [...groupBoBy(list, (s) => s.product).entries()]
+      .map(([product, rows]) => {
+        const m = stockInvMetrics(rows);
+        const suffixSet = new Set(rows.map((r) => r.suffix).filter((x) => x && x !== "—"));
+        return { product, ...m, suffixCount: suffixSet.size };
+      })
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function renderStockInvKpis(m) {
+    const el = $("#stock-kpis");
+    if (!el) return;
+    const cards = [
+      { lab: "Total stock units", val: m.total, sub: "RTL + Central", status: "ok" },
+      { lab: "Unique VINs", val: m.vins, sub: "in stock files", status: "ok" },
+      { lab: "Products", val: m.products, sub: "distinct models", status: "ok" },
+      { lab: "Avg allocation ageing", val: m.avgAging, sub: "days · Col J", status: kpiStatus("aging", { avgAging: m.avgAging, total: m.total }) },
+      { lab: "RTL units", val: m.rtl, sub: "slot 2 · retail", status: m.rtl ? "ok" : "warn" },
+      { lab: "Central units", val: m.central, sub: "slot 3 · central", status: m.central ? "ok" : "warn" },
+      { lab: "Suffixes", val: m.suffixes, sub: "unique grades", status: "ok" },
+    ];
+    el.innerHTML = cards.map((c) => `
+      <div class="bo-kpi ${c.status}">
+        <div class="lab">${c.lab}</div>
+        <div class="val">${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
+        <div class="sub">${escapeHtml(String(c.sub))}</div>
+      </div>`).join("");
+  }
+
+  function renderStockInsights(list, m) {
+    const el = $("#stock-insights");
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = "<h2>Executive insights</h2><p class=\"foot\">No stock rows match the current filters.</p>";
+      return;
+    }
+    const byProd = stockProductAgg(list);
+    const top = byProd[0];
+    const highestAging = byProd.slice().sort((a, b) => b.avgAging - a.avgAging)[0];
+    const share = top && m.total ? ((top.total / m.total) * 100).toFixed(1) : "0";
+    const bullets = [
+      top ? `<b>${escapeHtml(top.product)}</b> holds the largest share of stock (${share}%).` : null,
+      highestAging ? `<b>${escapeHtml(highestAging.product)}</b> has the highest average allocation ageing (${highestAging.avgAging} days).` : null,
+      `Total inventory: <b>${formatNumber(m.total)}</b> units · <b>${formatNumber(m.vins)}</b> unique VINs across <b>${formatNumber(m.products)}</b> products.`,
+      m.rtl && m.central ? `Split: <b>${formatNumber(m.rtl)}</b> RTL · <b>${formatNumber(m.central)}</b> Central.` : null,
+    ].filter(Boolean);
+    el.innerHTML = `<h2>Executive insights</h2><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
+  }
+
+  function renderStockProductTable(aggs, totals) {
+    const el = $("#stock-product-table");
+    if (!el) return;
+    if (!aggs.length) {
+      el.innerHTML = `<p class="foot" style="padding:12px">No products to show.</p>`;
+      return;
+    }
+    const t = totals || {
+      total: aggs.reduce((s, a) => s + a.total, 0),
+      vins: aggs.reduce((s, a) => s + a.vins, 0),
+      avgAging: 0,
+      suffixes: aggs.reduce((s, a) => s + a.suffixCount, 0),
+      products: aggs.length,
+    };
+    if (!totals) {
+      const allRows = filteredStockInv();
+      t.avgAging = stockInvMetrics(allRows).avgAging;
+    }
+    const summary = `
+      <div class="bo-product-totals">
+        <div class="bo-product-total">
+          <span class="lab">Total units</span>
+          <span class="val">${formatNumber(t.total)}</span>
+        </div>
+        <div class="bo-product-total ok">
+          <span class="lab">Unique VINs</span>
+          <span class="val">${formatNumber(t.vins)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Products</span>
+          <span class="val">${formatNumber(t.products)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Avg ageing</span>
+          <span class="val">${formatNumber(t.avgAging || 0)}d</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Suffixes</span>
+          <span class="val">${formatNumber(t.suffixes)}</span>
+        </div>
+      </div>`;
+    el.innerHTML = `${summary}<table class="bo-table">
+      <thead><tr>
+        <th>Product</th>
+        <th class="num">Total</th>
+        <th class="num">VINs</th>
+        <th class="num">Avg Ageing</th>
+        <th class="num">Suffixes</th>
+        <th class="num">RTL</th>
+        <th class="num">Central</th>
+      </tr></thead>
+      <tbody>${aggs.map((a) => {
+        const active = a.product === stockInvView.car ? " active" : "";
+        return `<tr data-stock-product="${escapeHtml(a.product)}" class="stock-row${active}">
+          <td><button type="button" class="bo-link" data-stock-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
+          <td class="num"><b>${formatNumber(a.total)}</b></td>
+          <td class="num">${formatNumber(a.vins)}</td>
+          <td class="num ${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
+          <td class="num">${formatNumber(a.suffixCount)}</td>
+          <td class="num">${formatNumber(a.rtl || 0)}</td>
+          <td class="num">${formatNumber(a.central || 0)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td class="num"><b>${formatNumber(t.total)}</b></td>
+        <td class="num"><b>${formatNumber(t.vins)}</b></td>
+        <td class="num ${heatAging(t.avgAging || 0)}"><b>${formatNumber(t.avgAging || 0)}d</b></td>
+        <td class="num"><b>${formatNumber(t.suffixes)}</b></td>
+        <td class="num"><b>${formatNumber(totals ? totals.rtl : aggs.reduce((s, a) => s + (a.rtl || 0), 0))}</b></td>
+        <td class="num"><b>${formatNumber(totals ? totals.central : aggs.reduce((s, a) => s + (a.central || 0), 0))}</b></td>
+      </tr></tfoot>
+    </table>`;
+  }
+
+  function renderStockCarDetail(allItems, filteredList) {
+    const select = $("#stock-car-select");
+    const summary = $("#stock-car-summary");
+    const tableEl = $("#stock-car-sfx-table");
+    if (!select || !summary || !tableEl) return;
+
+    const products = [...new Set((allItems || []).map((s) => s.product).filter((p) => p && p !== "—"))].sort();
+    select.innerHTML = `<option value="">Select a product…</option>` +
+      products.map((p) => `<option value="${escapeHtml(p)}"${p === stockInvView.car ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
+
+    if (!stockInvView.car) {
+      summary.innerHTML = `<p class="foot" style="margin:0">Select a car/product above (or click a product in the table) to see suffix counts and location mix.</p>`;
+      tableEl.innerHTML = "";
+      upsertChart("chart-stock-car-sfx", "bar", ["—"], [0], { horizontal: true, backgroundColor: "rgba(148,163,184,0.5)" });
+      upsertChart("chart-stock-car-loc", "doughnut", ["No selection"], [1]);
+      return;
+    }
+
+    const carRows = (filteredList || allItems || []).filter((s) => s.product === stockInvView.car);
+    const m = stockInvMetrics(carRows);
+
+    summary.innerHTML = `
+      <div class="bo-car-kpis">
+        <div class="bo-kpi ok"><div class="lab">Product</div><div class="val" style="font-size:1.05rem">${escapeHtml(stockInvView.car)}</div><div class="sub">selected car</div></div>
+        <div class="bo-kpi ok"><div class="lab">Total units</div><div class="val">${formatNumber(m.total)}</div><div class="sub">in stock</div></div>
+        <div class="bo-kpi ok"><div class="lab">Unique VINs</div><div class="val">${formatNumber(m.vins)}</div><div class="sub">vehicles</div></div>
+        <div class="bo-kpi ${kpiStatus("aging", { avgAging: m.avgAging, total: m.total })}"><div class="lab">Avg ageing</div><div class="val">${formatNumber(m.avgAging)}d</div><div class="sub">Col J</div></div>
+        <div class="bo-kpi ok"><div class="lab">RTL</div><div class="val">${formatNumber(m.rtl)}</div><div class="sub">units</div></div>
+        <div class="bo-kpi ok"><div class="lab">Central</div><div class="val">${formatNumber(m.central)}</div><div class="sub">units</div></div>
+      </div>`;
+
+    const sfxRows = [...groupBoBy(carRows, (s) => s.suffix || "—").entries()]
+      .map(([sfx, items]) => {
+        const metrics = stockInvMetrics(items);
+        const locMap = new Map();
+        items.forEach((it) => {
+          const loc = it.location || "—";
+          locMap.set(loc, (locMap.get(loc) || 0) + 1);
+        });
+        const topLoc = [...locMap.entries()].sort((a, b) => b[1] - a[1])[0];
+        return { sfx, ...metrics, topLoc: topLoc ? topLoc[0] : "—", topLocN: topLoc ? topLoc[1] : 0 };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    tableEl.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>Suffix / SFX</th>
+        <th>Total</th>
+        <th>VINs</th>
+        <th>Avg Ageing</th>
+        <th>RTL</th>
+        <th>Central</th>
+        <th>Top location</th>
+      </tr></thead>
+      <tbody>${sfxRows.map((r) => `
+        <tr>
+          <td><b>${escapeHtml(r.sfx)}</b></td>
+          <td><b>${formatNumber(r.total)}</b></td>
+          <td>${formatNumber(r.vins)}</td>
+          <td class="${heatAging(r.avgAging)}">${formatNumber(r.avgAging)}d</td>
+          <td>${formatNumber(r.rtl || 0)}</td>
+          <td>${formatNumber(r.central || 0)}</td>
+          <td>${escapeHtml(r.topLoc)} (${formatNumber(r.topLocN)})</td>
+        </tr>`).join("") || `<tr><td colspan="7" class="foot">No suffix rows for this product</td></tr>`}</tbody>
+    </table>`;
+
+    const topSfx = sfxRows.slice(0, 15);
+    upsertChart("chart-stock-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
+      horizontal: true,
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
+    });
+
+    const locMap = new Map();
+    carRows.forEach((it) => {
+      const loc = it.location || "—";
+      locMap.set(loc, (locMap.get(loc) || 0) + 1);
+    });
+    const locEntries = [...locMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    upsertChart("chart-stock-car-loc", "doughnut",
+      locEntries.map((x) => x[0]),
+      locEntries.map((x) => x[1])
+    );
+  }
+
+  function renderStockInvCharts(list, aggs) {
+    const top = aggs.slice(0, 10);
+    upsertChart("chart-stock-backlog", "bar", top.map((a) => a.product), top.map((a) => a.total), {
+      horizontal: top.length > 6,
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
+    });
+    const agingRows = aggs.filter((a) => a.avgAging > 0).slice(0, 12);
+    upsertChart("chart-stock-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
+      horizontal: agingRows.length > 6,
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(235, 10, 30, 0.88)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
+    });
+    const m = stockInvMetrics(list);
+    upsertChart("chart-stock-source", "doughnut",
+      ["RTL", "Central"],
+      [m.rtl || 0, m.central || 0]
+    );
+  }
+
+  function filterOutFleetBoRows(rows) {
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function rawBoRows() {
+    return slots.backorder.rows || [];
+  }
+
+  function stockDisplayLabel(sample, letter) {
+    const h = headerByLetter(sample, letter);
+    const clean = String(h || "").trim();
+    if (!clean || /^Column\s+\d+$/i.test(clean)) return `Col ${letter}`;
+    return `${clean}`;
+  }
+
+  function isFulfillableBo(row) {
+    const ae = availableStockValue(row);
+    const ad = boQtyValue(row);
+    return ae > 0 && ad <= ae;
+  }
+
+  function stockAllocStats(rows) {
+    let withStock = 0;
+    let fulfillable = 0;
+    let sampleAd = "";
+    let sampleAe = "";
+    let headerAd = "";
+    let headerAe = "";
+    let fromFileAe = 0;
+    rows.forEach((r, i) => {
+      const aeCol = toNumber(cellByLetter(r, "AE"));
+      const ae = availableStockValue(r);
+      const ad = boQtyValue(r);
+      if (i === 0) {
+        sampleAd = cellToString(cellByLetter(r, "AD"));
+        sampleAe = cellToString(cellByLetter(r, "AE"));
+        headerAd = headerByLetter(r, "AD");
+        headerAe = headerByLetter(r, "AE");
+      }
+      if (cellToString(cellByLetter(r, "AE")).trim() !== "" && aeCol > 0) fromFileAe += 1;
+      if (ae > 0) withStock += 1;
+      if (ae > 0 && ad <= ae) fulfillable += 1;
+    });
+    return {
+      total: rows.length,
+      withStock,
+      fulfillable,
+      fromFileAe,
+      sampleAd,
+      sampleAe,
+      headerAd,
+      headerAe,
+      computedAe: hasStockFiles() && fromFileAe === 0,
+    };
+  }
+
+  function buildMatchedCars(boRows, rtlRows, secondaryRows, opts = {}) {
+    const retailBo = filterOutFleetBoRows(boRows);
+    const getBo = buildFieldGetter(retailBo[0] || {});
+    const getRtl = buildFieldGetter(rtlRows[0] || {});
+    const getSec = buildFieldGetter(secondaryRows[0] || {});
+    const confirmedOnly = !!opts.confirmedOnly;
+    // "productSuffix" = confirmed BO ↔ stock by product + suffix only (BAS allocated table)
+    // "full" = also require year + exterior/interior colors (Stock fulfillable table)
+    const matchMode = opts.matchMode === "productSuffix" ? "productSuffix" : "full";
+    // Matched & allocated: RTL first, then E-Sales (secondary file = Admin slot "central" / Stock E-Sales)
+    const rtlThenEsales = !!opts.rtlThenEsales;
+    const secondaryLabel = opts.secondaryLabel || (rtlThenEsales ? "E-Sales" : "Central");
+
+    const fullKey = (product, suffix, year, ext, intc) =>
+      [upperTrim(product), upperTrim(suffix), String(year || "").trim(), colorKey(ext), colorKey(intc)].join("|");
+
+    const productSuffixKey = (product, suffix) => {
+      const p = allocCompact(product) || upperTrim(product);
+      const s = upperTrim(normalizeProductSuffix(product, suffix));
+      return `${p}|${s}`;
+    };
+
+    const makeKey = (product, suffix, year, ext, intc) =>
+      matchMode === "productSuffix"
+        ? productSuffixKey(product, suffix)
+        : fullKey(product, suffix, year, ext, intc);
+
+    const bos = (retailBo || []).map((r, idx) => {
+      const mapped = boRowProductSuffix(r, getBo);
+      const product = upperTrim(mapped.product);
+      const suffix = upperTrim(normalizeProductSuffix(product, mapped.rawSuffix));
+      const year = String(getBo(r, "year") || cellByLetter(r, "F") || "").trim();
+      const ext = cellToString(getBo(r, "ext") || cellByLetter(r, "H"));
+      const intc = cellToString(getBo(r, "int") || cellByLetter(r, "I"));
+      const orderRaw = getBo(r, "orderDate");
+      const orderDate = parseDate(orderRaw);
+      const confirm = cellToString(boConfirmRaw(r, getBo));
+      return {
+        idx,
+        product,
+        suffix,
+        year,
+        ext,
+        int: intc,
+        key: makeKey(product, suffix, year, ext, intc),
+        salesman: employeeNameFromCodeFields(r) || resolveSalesmanName(getBo(r, "salesman")),
+        boNumber: cellToString(getBo(r, "boNumber")),
+        orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
+        orderTs: orderDate ? orderDate.getTime() : idx,
+        confirm,
+        custGroup: cellToString(getBo(r, "salesType") || getBo(r, "custGroup")),
+        _raw: r,
+      };
+    }).filter((bo) => !confirmedOnly || isConfirmedFlag(bo.confirm));
+
+    const mapStock = (rows, get, source) =>
+      (rows || []).map((r, idx) => {
+        const product = upperTrim(get(r, "product") || cellByLetter(r, "B"));
+        const rawSuffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
+        const year = String(get(r, "year") || cellByLetter(r, "F") || "").trim();
+        const ext = cellToString(get(r, "ext") || cellByLetter(r, "H"));
+        const intc = cellToString(get(r, "int") || cellByLetter(r, "I"));
+        const vin = extractVinValue(get(r, "vin") || cellByLetter(r, "E")) || cellToString(get(r, "vin") || cellByLetter(r, "E")).trim();
+        return {
+          idx: source + "-" + idx,
+          product,
+          suffix,
+          year,
+          ext,
+          int: intc,
+          vin,
+          source,
+          location: cellToString(get(r, "location") || cellByLetter(r, "N") || cellByLetter(r, "M")),
+          ageing: cellToString(cellByLetter(r, "J")),
+          key: makeKey(product, suffix, year, ext, intc),
+          _raw: r,
+        };
+      });
+
+    const rtlStock = mapStock(rtlRows, getRtl, "RTL").filter((s) => s.vin);
+    const secondaryStock = mapStock(secondaryRows, getSec, secondaryLabel).filter((s) => s.vin);
+
+    const sortedBo = bos.slice().sort((a, b) => a.orderTs - b.orderTs || a.idx - b.idx);
+
+    function buildPools(list) {
+      const sorted = list
+      .slice()
+      .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
+    const pools = new Map();
+      sorted.forEach((s) => {
+      if (!pools.has(s.key)) pools.set(s.key, []);
+      pools.get(s.key).push(Object.assign({}, s, { used: false }));
+    });
+      return pools;
+    }
+
+    function takeFromPools(pools, key) {
+      const pool = pools.get(key) || [];
+      const hit = pool.find((s) => !s.used && s.vin);
+      if (!hit) return null;
+      hit.used = true;
+      return hit;
+    }
+
+    const out = [];
+    const pushMatch = (bo, hit) => {
+      out.push({
+        "Back Order Number": bo.boNumber || "—",
+        VIN: hit.vin,
+        Product: hit.product || bo.product || "—",
+        "Alj Suffix": hit.suffix || bo.suffix || "—",
+        "Model Year": hit.year || bo.year || "—",
+        "Salesman Name": bo.salesman || "—",
+        "Order Date": bo.orderDate || "—",
+        "Confirm Flag": bo.confirm || "—",
+        "Exterior Color": hit.ext || bo.ext || "—",
+        "Interior Color": hit.int || bo.int || "—",
+        Source: hit.source,
+        "Current Location": hit.location || "—",
+        "Allocation Ageing": hit.ageing || "—",
+        "Cust Group": bo.custGroup || "—",
+        "BO Product": bo.product || "—",
+        "BO Suffix": bo.suffix || "—",
+        _stockRaw: hit._raw || null,
+        _boRaw: bo._raw || null,
+      });
+    };
+
+    if (rtlThenEsales) {
+      // Priority: match RTL first; only if no RTL unit for that product+suffix, use E-Sales.
+      // Unmatched BOs are omitted (display matched only).
+      const rtlPools = buildPools(rtlStock);
+      const esalesPools = buildPools(secondaryStock);
+      sortedBo.forEach((bo) => {
+        const hit = takeFromPools(rtlPools, bo.key) || takeFromPools(esalesPools, bo.key);
+        if (!hit) return;
+        pushMatch(bo, hit);
+    });
+    return out;
+    }
+
+    // Default (Stock fulfillable): single pool RTL + Central, FIFO by VIN
+    const stocks = [...rtlStock, ...secondaryStock];
+    const pools = buildPools(stocks);
+    sortedBo.forEach((bo) => {
+      const hit = takeFromPools(pools, bo.key);
+      if (!hit) return;
+      pushMatch(bo, hit);
+    });
+    return out;
+  }
+
+  function stockStatusByHeader(row, tests, fallbackLetter) {
+    const letter = findHeaderLetter(row, tests);
+    if (letter) {
+      const v = cellToString(cellByLetter(row, letter)).trim();
+      if (v) return v;
+    }
+    if (fallbackLetter) return cellToString(cellByLetter(row, fallbackLetter)).trim();
+    return "";
+  }
+
+  function stockPrimaryStatus(row) {
+    return stockStatusByHeader(row, [
+      (n) => n === "primary status" || n === "primary status desc",
+      (n) => n.includes("primary") && n.includes("status"),
+    ], "");
+  }
+
+  function stockSecondaryStatus(row) {
+    return stockStatusByHeader(row, [
+      (n) => n === "secondary status" || n === "secondary status desc",
+      (n) => n.includes("secondary") && n.includes("status"),
+    ], "");
+  }
+
+  function stockFieldByAlias(row, aliasKey, fallbackLetters) {
+    const get = buildFieldGetter(row);
+    const fromAlias = cellToString(get(row, aliasKey)).trim();
+    if (fromAlias) return fromAlias;
+    const letter = findHeaderLetter(row, (HEADER_ALIASES[aliasKey] || []).map((a) => (n) => n === a || n.includes(a)));
+    if (letter) {
+      const v = cellToString(cellByLetter(row, letter)).trim();
+      if (v) return v;
+    }
+    for (const fb of fallbackLetters || []) {
+      const v = cellToString(cellByLetter(row, fb)).trim();
+      if (v) return v;
+    }
+    return "";
+  }
+
+  function parseStockAgeing(raw) {
+    const n = toNumber(raw);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+
+  function buildSalesVinLookup() {
+    const byVin = new Map();
+    (slots.sales.rows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin) || upperTrim(cellToString(r.vin));
+      if (!vin || vin.length < 11) return;
+      const location = cellToString(r.location).trim()
+        || cellToString(r["Allocated Location"]).trim()
+        || cellToString(r["Location"]).trim()
+        || stockFieldByAlias(r, "location", [])
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || "";
+      const entry = {
+        delivered: hasDeliveryDate(r),
+        invoiced: hasInvoiceDate(r),
+        proformaDate: r.proformaDate,
+        invoiceDate: r.invoiceDate || r.deliveryDate,
+        deliveryDate: r.deliveryDate,
+        salesman: resolveSalesmanName(r._salesmanRaw || r.salesman),
+        secondaryStatus: cellToString(r.secondaryStatus).trim(),
+        location,
+        product: cellToString(r.product || r.Product || "").trim(),
+        salesType: cellToString(r.salesType || "").trim(),
+      };
+      const prev = byVin.get(vin);
+      if (!prev) {
+        byVin.set(vin, entry);
+        return;
+      }
+      // Prefer delivered/invoiced row; otherwise keep earliest proforma with advisor.
+      if (entry.delivered && !prev.delivered) {
+        byVin.set(vin, {
+          ...entry,
+          secondaryStatus: entry.secondaryStatus || prev.secondaryStatus || "",
+          location: entry.location || prev.location || "",
+          salesman: entry.salesman || prev.salesman || "",
+        });
+        return;
+      }
+      if (!prev.salesman && entry.salesman) prev.salesman = entry.salesman;
+      if (!prev.secondaryStatus && entry.secondaryStatus) prev.secondaryStatus = entry.secondaryStatus;
+      if (!prev.location && entry.location) prev.location = entry.location;
+      if (!prev.proformaDate && entry.proformaDate) prev.proformaDate = entry.proformaDate;
+    });
+    return byVin;
+  }
+
+  function salesVinKey(raw) {
+    const full = extractVinValue(raw);
+    if (full) return full;
+    return String(raw == null ? "" : raw).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function salesVinMatchesAllocation(allocationVin, salesVin) {
+    const left = salesVinKey(allocationVin);
+    const right = salesVinKey(salesVin);
+    if (!left || !right) return false;
+    if (left === right) return true;
+    if (left.length >= 8 && right.length >= 8 && (left.endsWith(right) || right.endsWith(left))) return true;
+    if (left.length >= 8 && right.length >= 8 && left.slice(-8) === right.slice(-8)) return true;
+    return false;
+  }
+
+  function salesRawColumnVCell(row) {
+    if (!row) return "";
+    const idx = row._colDelivery != null ? Number(row._colDelivery) : colLetterToIndex("V");
+    if (Array.isArray(row.__cells) && idx >= 0 && idx < row.__cells.length) return row.__cells[idx];
+    if (row.deliveryDate != null && row.deliveryDate !== "") return row.deliveryDate;
+    return row.invoiceDate;
+  }
+
+  function salesRawColumnVDate(raw) {
+    if (raw == null || raw === "") return null;
+    if (typeof raw === "string" && !String(raw).trim()) return null;
+    const parsed = parseDate(raw);
+    return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  }
+
+  let salesColVCache = null;
+
+  function rememberSalesColV(exact, tail, token, date) {
+    if (!token || token.length < 8 || !/[A-Z]/.test(token)) return;
+    const prev = exact.get(token);
+    if (!prev) exact.set(token, { inFile: true, delivered: !!date, date: date || null });
+    else if (!prev.delivered && date) {
+      prev.delivered = true;
+      prev.date = date;
+    }
+    const end = token.slice(-8);
+    const prevTail = tail.get(end);
+    if (!prevTail) tail.set(end, { inFile: true, delivered: !!date, date: date || null, token });
+    else if (!prevTail.delivered && date) {
+      prevTail.delivered = true;
+      prevTail.date = date;
+      prevTail.token = token;
+    }
+  }
+
+  function salesColVIndex() {
+    const rows = (slots.sales && slots.sales.rows) || [];
+    if (salesColVCache && salesColVCache.rows === rows) return salesColVCache;
+    const exact = new Map();
+    const tail = new Map();
+    rows.forEach((row) => {
+      if (!row) return;
+      const date = salesRawColumnVDate(salesRawColumnVCell(row));
+      const direct = salesVinKey(row.vin);
+      if (direct) {
+        rememberSalesColV(exact, tail, direct, date);
+        return;
+      }
+      const cells = row.__cells;
+      if (!Array.isArray(cells)) return;
+      cells.forEach((cell) => rememberSalesColV(exact, tail, salesVinKey(cell), date));
+    });
+    salesColVCache = { rows, exact, tail };
+    return salesColVCache;
+  }
+
+  /** My Allocation VIN is delivered only when that VIN is in the Admin Push Sales Raw file and column V has a date. */
+  function allocationSalesRawColumnV(vin) {
+    const empty = { inFile: false, delivered: false, date: null };
+    const key = salesVinKey(vin);
+    if (!key || key.length < 8) return empty;
+    const index = salesColVIndex();
+    const exact = index.exact.get(key);
+    if (exact) return exact;
+    const tail = index.tail.get(key.slice(-8));
+    if (!tail) return empty;
+    if (tail.token === key || key.endsWith(tail.token) || tail.token.endsWith(key)) {
+      return { inFile: true, delivered: !!tail.delivered, date: tail.date || null };
+    }
+    return empty;
+  }
+  window.allocationSalesRawColumnV = allocationSalesRawColumnV;
+
+  function vinSalesStatusForLookup(vin, salesLookup, live) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    const s = salesLookup.get(key);
+    if (!s) return { label: "NA", cls: "na", inPeriod: false };
+    const period = live || window._globalLivePeriod || ensureGlobalLivePeriod();
+    const hasRange = !!(period && period.rangeFrom && period.rangeTo);
+    const delIn = hasRange
+      ? salesDateInActivePeriod(s.deliveryDate, period)
+      : !!(s.delivered && s.deliveryDate);
+    const proIn = hasRange
+      ? !!(s.proformaDate && parseDate(s.proformaDate) && !s.invoiced && !s.delivered && salesDateInActivePeriod(s.proformaDate, period))
+      : !!(s.proformaDate && parseDate(s.proformaDate) && !s.invoiced && !s.delivered);
+
+    // Period-aware: delivery in range → Delivered; else open Col P (no invoice) → Proforma
+    if (delIn) return { label: "Delivered", cls: "ok", inPeriod: true };
+    if (proIn) return { label: "Proforma", cls: "warn", inPeriod: true };
+    if (hasRange && period.preset !== "all") {
+      return { label: "Outside period", cls: "na", inPeriod: false };
+    }
+    if (s.delivered) return { label: "Delivered", cls: "ok", inPeriod: true };
+    if (s.proformaDate && parseDate(s.proformaDate) && !s.invoiced) return { label: "Proforma", cls: "warn", inPeriod: true };
+    return { label: "NA", cls: "na", inPeriod: false };
+  }
+
+  function productKeysEqual(a, b) {
+    const ca = allocCompact(a);
+    const cb = allocCompact(b);
+    if (!ca || !cb) return false;
+    return ca === cb || productMatchesAlloc(a, b) || productMatchesAlloc(b, a);
+  }
+
+  function suffixKeysEqual(product, a, b) {
+    const na = upperTrim(normalizeProductSuffix(product, a));
+    const nb = upperTrim(normalizeProductSuffix(product, b));
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    return suffixMatchesAlloc(a, b, product) || suffixMatchesAlloc(b, a, product);
+  }
+
+  function extractRtlColorStock(rows) {
+    const VCM = window.VinColorMatch;
+    return (rows || []).map((r, idx) => {
+      const product = cellToString(cellByLetter(r, "B")).trim();
+      const suffix = normalizeProductSuffix(product, cellByLetter(r, "G"));
+      const vin = extractVinValue(cellByLetter(r, "E")) || "";
+      // Col L = Secondary status (only Sales order created / Vehicle allocation completed)
+      const secondaryStatus = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r);
+      const status = stockPrimaryStatus(r);
+      // Col J = age · Col K = usage · Col Q = allocated location
+      const ageing = parseStockAgeing(cellByLetter(r, "J"));
+      const usage = cellToString(cellByLetter(r, "K")).trim();
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", []);
+      return {
+        idx: `RTL-${idx}`,
+        source: "RTL",
+        product,
+        suffix,
+        vin,
+        ext: cellToString(cellByLetter(r, "H")),
+        int: cellToString(cellByLetter(r, "I")),
+        status: status || "—",
+        secondaryStatus: secondaryStatus || "—",
+        location: location || "—",
+        usage: usage || "—",
+        ageing,
+        vehicleSearchArea: stockFieldByAlias(r, "vehicleSearchArea", []) || stockFieldByAlias(r, "searchAreaDesc", []),
+        sharingLevel: stockFieldByAlias(r, "sharingLevel", []),
+        _raw: r,
+      };
+    }).filter((s) => {
+      if (!s.vin || !s.product) return false;
+      // Secondary status (Col L) must be one of the two allowed values
+      if (VCM && typeof VCM.rtlStatusAllowed === "function") {
+        return VCM.rtlStatusAllowed(s.secondaryStatus);
+      }
+      const st = String(s.secondaryStatus || "").toLowerCase();
+      return st.includes("sales order created") || st.includes("vehicle allocation completed");
+    });
+  }
+
+  function extractEsalesColorStock(rows) {
+    return (rows || []).map((r, idx) => {
+      // Sheet «المخزون المتاح all retail»: D product · E suffix · H VIN · I ext · J int · K usage · L ageing
+      const product = cellToString(cellByLetter(r, "D")).trim();
+      const suffix = normalizeProductSuffix(product, cellByLetter(r, "E"));
+      const vin = extractVinValue(cellByLetter(r, "H")) || "";
+      const usage = cellToString(cellByLetter(r, "K")).trim();
+      const ageing = parseStockAgeing(cellByLetter(r, "L"));
+      return {
+        idx: `E-Sales-${idx}`,
+        source: "E-Sales",
+        product,
+        suffix,
+        vin,
+        ext: cellToString(cellByLetter(r, "I")),
+        int: cellToString(cellByLetter(r, "J")),
+        status: stockPrimaryStatus(r) || "—",
+        secondaryStatus: stockSecondaryStatus(r) || "—",
+        location: stockFieldByAlias(r, "allocatedLocation", ["M", "N", "O"])
+          || stockFieldByAlias(r, "location", ["M", "N", "O"])
+          || "—",
+        usage: usage || "—",
+        ageing,
+        vehicleSearchArea: stockFieldByAlias(r, "vehicleSearchArea", [])
+          || stockFieldByAlias(r, "searchAreaDesc", []),
+        sharingLevel: stockFieldByAlias(r, "sharingLevel", []),
+        _raw: r,
+      };
+    }).filter((s) => s.vin && s.product);
+  }
+
+  function extractBoColorOrders(rows) {
+    const retail = filterOutFleetBoRows(rows);
+    const getBo = buildFieldGetter(retail[0] || {});
+    return (retail || []).map((r, idx) => {
+      const product = cellToString(cellByLetter(r, "L") || getBo(r, "product")).trim();
+      const rawSuffix = cellToString(cellByLetter(r, "M") || getBo(r, "suffix") || getBo(r, "sfx")).trim();
+      const suffix = normalizeProductSuffix(product, rawSuffix);
+      const orderRaw = getBo(r, "orderDate");
+      const orderDate = parseDate(orderRaw);
+      const agingFromCol = toNumber(getBo(r, "agingDays"));
+      const aging = agingFromCol > 0
+        ? agingFromCol
+        : (orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null);
+      const confirm = cellToString(boConfirmRaw(r, getBo));
+      const pairs = [
+        { ext: cellByLetter(r, "N"), int: cellByLetter(r, "Q") },
+        { ext: cellByLetter(r, "O"), int: cellByLetter(r, "R") },
+        { ext: cellByLetter(r, "P"), int: cellByLetter(r, "S") },
+      ];
+      return {
+        idx,
+        product,
+        suffix,
+        pairs,
+        salesman: employeeNameFromCodeFields(r) || resolveSalesmanName(getBo(r, "salesman")),
+        boNumber: cellToString(getBo(r, "boNumber") || cellByLetter(r, "A")),
+        orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
+        orderTs: orderDate ? orderDate.getTime() : idx,
+        aging,
+        confirm,
+        confirmed: isConfirmedFlag(confirm),
+        year: cellToString(getBo(r, "year") || cellByLetter(r, "F")),
+        _raw: r,
+      };
+    }).filter((b) => b.product);
+  }
+
+  /**
+   * RTL VINs first (Col L secondary = Sales order created / Vehicle allocation completed),
+   * then E-Sales sheet «المخزون المتاح all retail».
+   * Match BO on product (L) + suffix (M) + one paired color slot (N/Q, O/R, or P/S).
+   * RTL: age Col J · usage Col K · allocated location Col Q · Ext/Int H/I.
+   * E-Sales/Central: usage Col K · age Col L · show Vehicle search area + Sharing level.
+   */
+  function buildVinColorPairedMatches() {
+    const VCM = window.VinColorMatch;
+    if (!VCM || typeof VCM.matchPairedColors !== "function") return [];
+
+    const bos = extractBoColorOrders(rawBoRows()).filter((b) => b.confirmed);
+    const rtl = extractRtlColorStock(slots.rtl.rows || []);
+    const esales = extractEsalesColorStock(slots.central.rows || []);
+
+    const usedBo = new Set();
+    const usedVin = new Set();
+    const out = [];
+
+    function tryStockList(list) {
+      list.forEach((stock) => {
+        const vinKey = upperTrim(stock.vin);
+        if (!vinKey || usedVin.has(vinKey)) return;
+
+        let best = null;
+        bos.forEach((bo) => {
+          if (usedBo.has(bo.idx)) return;
+          if (!productKeysEqual(bo.product, stock.product)) return;
+          if (!suffixKeysEqual(bo.product, bo.suffix, stock.suffix)
+            && !suffixKeysEqual(stock.product, bo.suffix, stock.suffix)) return;
+
+          const colorHit = VCM.matchPairedColors(stock.ext, stock.int, bo.pairs);
+          if (!colorHit) return;
+
+          const cand = { bo, colorHit, score: colorHit.score };
+          if (
+            !best
+            || cand.score > best.score
+            || (cand.score === best.score && bo.orderTs < best.bo.orderTs)
+          ) {
+            best = cand;
+          }
+        });
+
+        if (!best) return;
+        usedBo.add(best.bo.idx);
+        usedVin.add(vinKey);
+
+        const bo = best.bo;
+        const ch = best.colorHit;
+        out.push({
+          boNumber: bo.boNumber || "—",
+          product: stock.product || bo.product || "—",
+          salesman: bo.salesman || "—",
+          vin: stock.vin,
+          matchScore: best.score,
+          source: stock.source,
+          aging: stock.ageing != null ? stock.ageing : bo.aging,
+          suffix: stock.suffix || bo.suffix || "—",
+          boProduct: bo.product || "—",
+          boSuffix: bo.suffix || "—",
+          stockExt: stock.ext || "—",
+          stockInt: stock.int || "—",
+          matchPair: ch.pair,
+          boExt: ch.boExt || "—",
+          boInt: ch.boInt || "—",
+          location: stock.location || "—",
+          usage: stock.usage || "—",
+          status: stock.status || "—",
+          secondaryStatus: stock.secondaryStatus || "—",
+          vehicleSearchArea: stock.vehicleSearchArea || "—",
+          sharingLevel: stock.sharingLevel || "—",
+          year: bo.year || "—",
+          orderDate: bo.orderDate || "—",
+          confirm: bo.confirm || "—",
+          stockRaw: stock._raw || null,
+          boRaw: bo._raw || null,
+        });
+      });
+    }
+
+    tryStockList(rtl);
+    tryStockList(esales);
+    return out;
+  }
+
+  /**
+   * The pairing pass is the most expensive step on this page, so the result is reused while every input is the same:
+   * the four pushed row arrays (replaced as a whole by every Admin Push / refresh / clear), the roster identity map,
+   * the sales period, and the calendar day (BO aging uses today's date). Anything else forces a fresh run.
+   */
+  let basAllocMemo = null;
+  function basAllocMemoInputs(live) {
+    const stamp = (d) => (d && typeof d.getTime === "function" ? d.getTime() : String(d == null ? "" : d));
+    return [
+      slots.backorder.rows, slots.rtl.rows, slots.central.rows, slots.sales.rows,
+      NAME_IDENTITY_MAP, window.VinColorMatch,
+      live ? `${live.preset}|${live.filterMode}|${stamp(live.rangeFrom)}|${stamp(live.rangeTo)}` : "",
+      new Date().toDateString(),
+    ];
+  }
+
+  function buildBasAllocatedVehicles() {
+    if (!hasBackOrder()) return [];
+    const live = ensureGlobalLivePeriod();
+    const inputs = basAllocMemoInputs(live);
+    if (basAllocMemo && basAllocMemo.inputs.every((v, i) => v === inputs[i])) return basAllocMemo.rows;
+    const rows = buildBasAllocatedVehiclesUncached(live);
+    basAllocMemo = { inputs, rows };
+    return rows;
+  }
+
+  function buildBasAllocatedVehiclesUncached(live) {
+    const salesLookup = buildSalesVinLookup();
+    const paired = buildVinColorPairedMatches();
+
+    return paired.map((r) => {
+      const leaf = matchRtlToAllocLeaf({ product: r.product, suffix: r.suffix });
+      const salesSt = vinSalesStatusForLookup(r.vin, salesLookup, live);
+      const key = extractVinValue(r.vin) || upperTrim(r.vin);
+        const sales = salesLookup.get(key);
+      const salesSecondary = sales && sales.secondaryStatus ? sales.secondaryStatus : "";
+      const stockSecondary = r.secondaryStatus && r.secondaryStatus !== "—" ? r.secondaryStatus : "";
+        return {
+          seg: leaf ? leaf.seg : "—",
+        product: leaf ? leaf.product : r.product,
+        sfx: leaf ? leaf.sfx : r.suffix,
+          planMatch: !!leaf,
+        boNumber: r.boNumber,
+        boProduct: r.boProduct,
+        boSuffix: r.boSuffix,
+        vin: r.vin,
+        source: r.source,
+        confirm: r.confirm,
+        matchScore: r.matchScore,
+        matchPair: r.matchPair,
+        stockExt: r.stockExt,
+        stockInt: r.stockInt,
+        boExt: r.boExt,
+        boInt: r.boInt,
+          salesStatus: salesSt.label,
+          salesStatusCls: salesSt.cls,
+          inPeriod: !!salesSt.inPeriod,
+          proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
+          deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
+        salesman: r.salesman,
+          salesSalesman: sales && sales.salesman ? sales.salesman : "—",
+        location: r.location,
+        usage: r.usage || "—",
+        ageing: r.aging,
+        year: r.year,
+        ext: r.stockExt,
+        int: r.stockInt,
+        orderDate: r.orderDate,
+        status: r.status,
+        secondaryStatus: stockSecondary || salesSecondary || "—",
+        vehicleSearchArea: r.vehicleSearchArea || "—",
+        sharingLevel: r.sharingLevel || "—",
+        stockRaw: r.stockRaw || null,
+        };
+      });
+  }
+
+  function collectMatchedStockColumns(rows) {
+    const seen = new Map();
+    (rows || []).forEach((r) => {
+      if (!r.stockRaw) return;
+      boFileColumns(r.stockRaw).forEach((c) => {
+        const key = c.letter || c.label;
+        if (!seen.has(key)) seen.set(key, c);
+      });
+    });
+    return [...seen.values()];
+  }
+
+  function filteredBasAllocatedRows(rows) {
+    const q = basAllocView.search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (basView.seg && r.seg !== basView.seg) return false;
+      if (basView.product && r.product !== basView.product) return false;
+      if (basView.sfx && r.sfx !== basView.sfx) return false;
+      if (basAllocView.salesStatus && r.salesStatus !== basAllocView.salesStatus) return false;
+      if (basAllocView.source && r.source !== basAllocView.source) return false;
+      if (basAllocView.score) {
+        const n = Number(r.matchScore) || 0;
+        if (basAllocView.score === "high" && n < 80) return false;
+        if (basAllocView.score === "mid" && (n < 60 || n >= 80)) return false;
+        if (basAllocView.score === "low" && n >= 60) return false;
+      }
+      if (q) {
+        const hay = [
+          r.seg, r.product, r.sfx, r.vin, r.boNumber, r.salesman,
+          r.boProduct, r.boSuffix, r.stockExt, r.stockInt, r.source, r.location,
+          r.usage, r.status, r.secondaryStatus, r.salesStatus,
+        ].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function allocRowKey(row) {
+    return [row && row.vin, row && row.boNumber, row && row.source, row && row.sfx].map((value) => String(value || "")).join("|");
+  }
+
+  function allocMatchBand(score) {
+    const n = Number(score) || 0;
+    if (n >= 80) return { label: "Strong", cls: "ok" };
+    if (n >= 60) return { label: "Partial", cls: "warn" };
+    return { label: "Unmatched", cls: "bad" };
+  }
+
+  function paintBasAllocDetail(row) {
+    const empty = $("#bas-alloc-detail-empty");
+    const body = $("#bas-alloc-detail-body");
+    if (!body) return;
+    if (!row) {
+      if (empty) empty.hidden = false;
+      body.hidden = true;
+      body.innerHTML = "";
+      return;
+    }
+    if (empty) empty.hidden = true;
+    body.hidden = false;
+    const band = allocMatchBand(row.matchScore);
+    const tab = basAllocView.tab || "overview";
+    const field = (label, value) => `<div class="mv-field"><span>${escapeHtml(label)}</span><b>${escapeHtml(value || "—")}</b></div>`;
+    const colors = [row.stockExt, row.stockInt].filter((item) => item && item !== "—").join(" / ") || "—";
+    const panes = {
+      overview: [
+        field("Product", row.product),
+        field("Suffix", row.sfx || row.boSuffix),
+        field("Model year", row.year),
+        field("Segment", row.seg),
+        field("Colors", colors),
+        field("Stock source", row.source),
+        field("E-Sales allocation", row.planMatch ? "On plan" : "Off plan"),
+        field("BO order", row.boNumber),
+        field("Salesman", row.salesman),
+        field("Order date", row.orderDate),
+        field("Delivery date", row.deliveryDate),
+      ].join(""),
+      bo: [
+        field("BO order", row.boNumber),
+        field("BO product", row.boProduct),
+        field("BO suffix", row.boSuffix),
+        field("BO exterior", row.boExt),
+        field("BO interior", row.boInt),
+        field("Confirm", row.confirm),
+        field("Salesman", row.salesman),
+        field("Order date", row.orderDate),
+      ].join(""),
+      stock: [
+        field("VIN", row.vin),
+        field("Source", row.source),
+        field("Exterior", row.stockExt),
+        field("Interior", row.stockInt),
+        field("Location", row.location),
+        field("Usage", row.usage),
+        field("Aging", row.ageing != null && row.ageing !== "" ? `${row.ageing}d` : "—"),
+        field("Primary status", row.status),
+        field("Secondary status", row.secondaryStatus),
+        field("Search area", row.vehicleSearchArea),
+        field("Sharing level", row.sharingLevel),
+      ].join(""),
+      allocation: [
+        field("Segment", row.seg),
+        field("Product", row.product),
+        field("Suffix", row.sfx),
+        field("E-Sales allocation", row.planMatch ? "On plan" : "Off plan"),
+        field("Sales status", row.salesStatus),
+        field("Proforma date", row.proformaDate),
+        field("Delivery date", row.deliveryDate),
+        field("In period", row.inPeriod ? "Yes" : "No"),
+      ].join(""),
+    };
+    body.innerHTML = `
+      <div class="mv-detail-head">
+        <strong class="bas-vin">${escapeHtml(row.vin || "—")}</strong>
+        <span>${escapeHtml(row.product || "—")}</span>
+        <div class="mv-detail-badges">
+          <span class="badge ${band.cls}">${escapeHtml(String(Number(row.matchScore) || 0))}% · ${escapeHtml(band.label)}</span>
+          <span class="badge ${row.salesStatusCls === "ok" ? "ok" : row.salesStatusCls === "warn" ? "warn" : "na"}">${escapeHtml(row.salesStatus || "—")}</span>
+        </div>
+      </div>
+      <div class="mv-tabs" role="tablist">
+        ${[["overview", "Overview"], ["bo", "BO Details"], ["stock", "Stock Details"], ["allocation", "Allocation"]].map(([id, label]) =>
+          `<button type="button" class="mv-tab${tab === id ? " is-on" : ""}" data-mv-tab="${id}">${label}</button>`
+        ).join("")}
+      </div>
+      ${Object.entries(panes).map(([id, html]) => `<div class="mv-pane" data-mv-pane="${id}"${tab === id ? "" : " hidden"}>${html}</div>`).join("")}`;
+  }
+
+  function setAllocPanelWide(section) {
+    document.querySelectorAll("#panel-boallocstock details.bas-section-card").forEach((el) => {
+      const wasWide = el.classList.contains("is-section-wide");
+      el.classList.remove("is-section-wide");
+      if (section !== el && el.classList.contains("is-match-wide")) el.classList.remove("is-match-wide");
+      if (!section && wasWide) el.open = false;
+    });
+    const on = !!section;
+    document.body.classList.toggle("act-section-wide", on);
+    const match = !!(section && section.id === "bas-alloc-section");
+    document.body.classList.toggle("act-match-wide", match);
+    if (section) {
+      section.classList.add("is-section-wide");
+      section.classList.toggle("is-match-wide", match);
+      section.open = true;
+    }
+    const btn = $("#bas-alloc-wide");
+    if (btn) btn.setAttribute("aria-pressed", match ? "true" : "false");
+    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  }
+
+  function setMatchWide(on) {
+    setAllocPanelWide(on ? $("#bas-alloc-section") : null);
+  }
+
+  function renderBasAllocatedVehicles(d) {
+    const section = $("#bas-alloc-section");
+    if (!section) return;
+
+    const needsBo = !hasBackOrder();
+    const needsStock = !hasStockFiles();
+    if (needsBo || needsStock) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+
+    const live = ensureGlobalLivePeriod();
+    syncGlobalDateControls(live);
+
+    if ($("#bas-alloc-search")) $("#bas-alloc-search").value = basAllocView.search || "";
+    if ($("#bas-alloc-f-score")) $("#bas-alloc-f-score").value = basAllocView.score || "";
+    if ($("#bas-alloc-f-status")) $("#bas-alloc-f-status").value = basAllocView.salesStatus || "";
+    if ($("#bas-alloc-f-source")) $("#bas-alloc-f-source").value = basAllocView.source || "";
+
+    const allRows = buildBasAllocatedVehicles();
+    const rows = filteredBasAllocatedRows(allRows);
+
+    const delivered = allRows.filter((r) => r.salesStatus === "Delivered").length;
+    const proforma = allRows.filter((r) => r.salesStatus === "Proforma").length;
+    const planMatched = allRows.filter((r) => r.planMatch).length;
+    const rtlCount = allRows.filter((r) => r.source === "RTL").length;
+    const esalesCount = allRows.filter((r) => r.source === "E-Sales").length;
+    const hi = allRows.filter((r) => (r.matchScore || 0) >= 80).length;
+
+    const periodSub = live && live.rangeLabel
+      ? live.rangeLabel
+      : (live && live.reportMonthLabel) || "selected period";
+
+    const headHint = section.querySelector(".bas-section-head .hint");
+    if (headHint) {
+      headHint.textContent = `Paired colors · RTL then E-Sales · ${periodSub}`;
+    }
+    const periodEl = $("#bas-alloc-period");
+    if (periodEl) periodEl.textContent = periodSub;
+
+    const mid = allRows.filter((r) => {
+      const n = Number(r.matchScore) || 0;
+      return n >= 60 && n < 80;
+    }).length;
+    const low = allRows.filter((r) => (Number(r.matchScore) || 0) < 60).length;
+
+    // Score tabs drive the same score filter as the select, so both always agree.
+    const tabCounts = { "": allRows.length, high: hi, mid, low };
+    document.querySelectorAll("#bas-alloc-tabs [data-mv-score]").forEach((btn) => {
+      const key = btn.getAttribute("data-mv-score") || "";
+      const count = btn.querySelector(".mv-tab-count");
+      if (count) count.textContent = formatNumber(tabCounts[key] || 0);
+      btn.classList.toggle("is-on", key === (basAllocView.score || ""));
+    });
+
+    const kpiEl = $("#bas-alloc-kpis");
+    if (kpiEl) {
+      kpiEl.innerHTML = [
+        { label: "Matched Vehicles", val: formatNumber(allRows.length), sub: "Product + suffix + color pair", cls: "ok" },
+        { label: "RTL / E-Sales Matches", val: `${formatNumber(rtlCount)} / ${formatNumber(esalesCount)}`, sub: "RTL preferred · E-Sales fallback" },
+        { label: "Strong Matches", val: formatNumber(hi), sub: "Score 80% or higher", cls: hi ? "ok" : "" },
+        { label: "Partial Matches", val: formatNumber(mid), sub: "Score 60–79%", cls: mid ? "warn" : "" },
+        { label: "Unmatched", val: formatNumber(low), sub: "Score under 60%", cls: low ? "bad" : "" },
+        { label: "Total Shown", val: formatNumber(rows.length), sub: `${formatNumber(delivered)} delivered · ${formatNumber(proforma)} proforma · ${formatNumber(planMatched)} on plan` },
+      ].map((k) => `
+        <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+          <div class="lbl">${k.label}</div>
+          <div class="val">${k.val}</div>
+          <div class="sub">${escapeHtml(k.sub)}</div>
+        </article>
+      `).join("");
+    }
+
+    const tableEl = $("#bas-alloc-table");
+    const footEl = $("#bas-alloc-foot");
+    if (!tableEl) return;
+
+    if (!rows.length) {
+      basAllocShown = [];
+      basAllocView.selected = "";
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL / E-Sales yet · check RTL status (Sales order created / Vehicle allocation completed), product, suffix, and paired exterior/interior colors."}</p>`;
+      if (footEl) footEl.textContent = "0 rows";
+      paintBasAllocDetail(null);
+      const pagerEl = $("#bas-alloc-pager");
+      if (pagerEl) pagerEl.innerHTML = "";
+      return;
+    }
+
+    const sorted = [...rows].sort((a, b) => {
+      const byScore = (Number(b.matchScore) || 0) - (Number(a.matchScore) || 0);
+      if (byScore) return byScore;
+      const order = { Delivered: 0, Proforma: 1, "Outside period": 2, NA: 3 };
+      const byStatus = (order[a.salesStatus] ?? 4) - (order[b.salesStatus] ?? 4);
+      if (byStatus) return byStatus;
+      return String(a.boNumber || "").localeCompare(String(b.boNumber || ""), undefined, { numeric: true });
+    });
+
+    // Every matched row stays in `sorted`; only the current page is painted so a large result set stays fast.
+    const pageSize = basAllocPageSize();
+    const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+    const page = Math.min(Math.max(0, Number(basAllocView.page) || 0), pageCount - 1);
+    basAllocView.page = page;
+    const pageStart = page * pageSize;
+    const show = sorted.slice(pageStart, pageStart + pageSize);
+    basAllocShown = show;
+    const selectedRow = rows.find((row) => allocRowKey(row) === basAllocView.selected) || null;
+    if (!selectedRow) basAllocView.selected = "";
+
+    const heads = BAS_ALLOC_HEADS;
+    paintBasAllocColumnMenu();
+
+    tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
+      <thead><tr>${heads.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
+      <tbody>${show.map((r, idx) => {
+        const n = Number(r.matchScore) || 0;
+        const band = allocMatchBand(n);
+        const scoreBadge = `<span class="badge ${band.cls}">${n}%</span>`;
+        const badgeCls = r.salesStatusCls === "ok" ? "ok" : r.salesStatusCls === "warn" ? "warn" : "na";
+        const aging = r.ageing != null && r.ageing !== "" ? `${r.ageing}d` : "—";
+        const secondary = r.secondaryStatus && r.secondaryStatus !== "—" ? r.secondaryStatus : "—";
+        const primary = r.status && r.status !== "—" ? r.status : "—";
+        const colors = [r.stockExt, r.stockInt].filter((item) => item && item !== "—").join(" / ") || "—";
+        const vin = r.vin || "—";
+        const cells = [
+          `<span class="mv-pick" aria-hidden="true"></span>`,
+          `<span class="bas-vin">${escapeHtml(vin)}</span><button type="button" class="mv-copy" data-mv-copy="${escapeHtml(vin)}" title="Copy VIN">Copy</button>`,
+          escapeHtml(r.product || "—"),
+          escapeHtml(r.sfx || r.boSuffix || "—"),
+          escapeHtml(r.year || "—"),
+          escapeHtml(r.seg || "—"),
+          escapeHtml(colors),
+          escapeHtml(r.source || "—"),
+          escapeHtml(r.planMatch ? "On plan" : "Off plan"),
+          escapeHtml(r.boNumber || "—"),
+          escapeHtml(r.salesman || "—"),
+          scoreBadge,
+          `<span class="badge ${band.cls}">${escapeHtml(band.label)}</span>`,
+          `<span class="badge ${badgeCls}">${escapeHtml(r.salesStatus || "—")}</span>`,
+          escapeHtml(r.orderDate || "—"),
+          escapeHtml(r.deliveryDate || "—"),
+          escapeHtml(aging),
+          escapeHtml(r.stockExt || "—"),
+          escapeHtml(r.stockInt || "—"),
+          escapeHtml(r.matchPair != null ? `Pair ${r.matchPair}` : "—"),
+          escapeHtml(r.boExt || "—"),
+          escapeHtml(r.boInt || "—"),
+          escapeHtml(secondary),
+          escapeHtml(primary),
+          escapeHtml(r.usage || "—"),
+          escapeHtml(r.location || "—"),
+          escapeHtml(r.vehicleSearchArea || "—"),
+          escapeHtml(r.sharingLevel || "—"),
+        ];
+        const rowCls = n >= 80 ? "bas-row-above" : n >= 60 ? "bas-row-warn" : "bas-row-below";
+        const selected = selectedRow && allocRowKey(r) === allocRowKey(selectedRow) ? " is-selected" : "";
+        return `<tr class="${rowCls}${selected}" data-idx="${idx}">${cells.map((html) => `<td>${html}</td>`).join("")}</tr>`;
+      }).join("")}</tbody>
+    </table>`;
+    paintBasAllocDetail(selectedRow);
+
+    if (footEl) {
+      const hasSales = hasSalesRaw();
+      footEl.textContent = (show.length < sorted.length
+        ? `Showing ${formatNumber(pageStart + 1)}–${formatNumber(pageStart + show.length)} of ${formatNumber(sorted.length)}`
+        : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
+        ` matched vehicles (RTL/E-Sales Col K usage · RTL age J · loc Q · E-Sales age L · paired colors)` +
+        (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
+    }
+    paintBasAllocPager(page, pageCount, sorted.length);
+  }
+
+  /** Column labels of the matched-vehicle table. The column menu and the table share this list. */
+  const BAS_ALLOC_HEADS = [
+    "", "VIN", "Product", "Suffix", "Model year", "Segment", "Colors", "Source", "E-Sales",
+    "BO Number", "Salesman", "Score", "Match", "Sales status", "Order Date", "Delivery",
+    "Aging", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
+    "Secondary status", "Primary status", "Usage", "Allocated location",
+    "Vehicle search area", "Sharing level",
+  ];
+  const BAS_ALLOC_COLS_KEY = "bas-alloc-hidden-cols";
+  const BAS_ALLOC_PAGE_SIZES = [50, 100, 250, 500];
+
+  function basAllocPageSize() {
+    const n = Number(basAllocView.pageSize);
+    return BAS_ALLOC_PAGE_SIZES.includes(n) ? n : 100;
+  }
+
+  function paintBasAllocPager(page, pageCount, total) {
+    const el = $("#bas-alloc-pager");
+    if (!el) return;
+    const size = basAllocPageSize();
+    el.innerHTML = `
+      <button type="button" class="btn" data-mv-page="first"${page <= 0 ? " disabled" : ""} aria-label="First page">«</button>
+      <button type="button" class="btn" data-mv-page="prev"${page <= 0 ? " disabled" : ""}>Prev</button>
+      <span class="mv-page-label">Page ${formatNumber(page + 1)} of ${formatNumber(pageCount)} · ${formatNumber(total)} rows</span>
+      <button type="button" class="btn" data-mv-page="next"${page >= pageCount - 1 ? " disabled" : ""}>Next</button>
+      <button type="button" class="btn" data-mv-page="last"${page >= pageCount - 1 ? " disabled" : ""} aria-label="Last page">»</button>
+      <label class="mv-page-size">Rows
+        <select id="bas-alloc-page-size">${BAS_ALLOC_PAGE_SIZES.map((n) => `<option value="${n}"${n === size ? " selected" : ""}>${n}</option>`).join("")}</select>
+      </label>`;
+  }
+
+  function basAllocHiddenCols() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(BAS_ALLOC_COLS_KEY) || "[]");
+      return new Set((Array.isArray(raw) ? raw : []).map(Number).filter((n) => Number.isInteger(n) && n > 0 && n < BAS_ALLOC_HEADS.length));
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  /** Hide columns with one style rule, so the table markup and row data stay untouched. */
+  function applyBasAllocHiddenCols(hidden) {
+    let style = document.getElementById("bas-alloc-col-style");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "bas-alloc-col-style";
+      document.head.appendChild(style);
+    }
+    style.textContent = [...hidden].map((i) => `#bas-alloc-table th:nth-child(${i + 1}),#bas-alloc-table td:nth-child(${i + 1}){display:none !important}`).join("\n");
+  }
+
+  function paintBasAllocColumnMenu() {
+    const host = $("#bas-alloc-cols-list");
+    if (!host) return;
+    const hidden = basAllocHiddenCols();
+    applyBasAllocHiddenCols(hidden);
+    if (host.dataset.ready === "1") return;
+    host.dataset.ready = "1";
+    host.innerHTML = BAS_ALLOC_HEADS.map((h, i) => (i === 0 ? "" : `<label><input type="checkbox" data-mv-col="${i}"${hidden.has(i) ? "" : " checked"}${i === 1 ? " disabled" : ""} /> ${escapeHtml(h)}</label>`)).join("");
+  }
+
+  function uniqueMatchedField(rows, field) {
+    const set = new Set();
+    rows.forEach((r) => {
+      const v = cellToString(r[field]).trim();
+      if (v && v !== "—") set.add(v);
+    });
+    return set;
+  }
+
+  function filteredMatchedAllocRows(allMatched) {
+    const f = stockBoView;
+    return (allMatched || []).filter((r) => {
+      if (f.product && upperTrim(r.Product) !== upperTrim(f.product)) return false;
+      if (f.suffix && upperTrim(r["Alj Suffix"]) !== upperTrim(f.suffix)) return false;
+      if (f.year && String(r["Model Year"]) !== String(f.year)) return false;
+      if (f.salesman && cellToString(r["Salesman Name"]) !== f.salesman) return false;
+      if (f.source && r.Source !== f.source) return false;
+      return true;
+    });
+  }
+
+  function renderStockAllocTable(allMatched, filtered) {
+    const el = $("#stock-alloc-table");
+    const foot = $("#stock-alloc-foot");
+    if (!el) return;
+
+    if (!filtered.length) {
+      el.innerHTML = `<p class="stock-empty-msg">No matched cars with stock VIN.</p>
+        <p class="foot" style="margin:12px 0 0;text-align:center">
+          Loaded <b>${formatNumber(rawBoRows().length)}</b> BO cars ·
+          <b>${formatNumber((allMatched || []).length)}</b> matched ·
+          RTL <b>${formatNumber((slots.rtl.rows || []).length)}</b> ·
+          Central <b>${formatNumber((slots.central.rows || []).length)}</b>.
+          Matching: Product + Suffix + Year + Colors (FIFO by order date).
+        </p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    const limit = Math.min(filtered.length, MAX_ROWS);
+    el.innerHTML = `<table class="bo-table stock-alloc-table">
+      <thead><tr>${MATCHED_CAR_COLS.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
+      <tbody>${filtered.slice(0, limit).map((r) => `
+        <tr>${MATCHED_CAR_COLS.map((h) => {
+          const t = cellToString(r[h]);
+          return `<td title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
+        }).join("")}</tr>`
+      ).join("")}</tbody>
+    </table>`;
+    if (foot) {
+      foot.textContent = filtered.length > limit
+        ? `Showing ${limit.toLocaleString()} of ${filtered.length.toLocaleString()} matched cars · ${(allMatched || []).length.toLocaleString()} total matched`
+        : `${filtered.length.toLocaleString()} matched car${filtered.length === 1 ? "" : "s"} · order # + VIN + details`;
+    }
+  }
+
+  function fillStockSelect(sel, values, current, allLabel) {
+    fillBoSelect(sel, values, current, allLabel);
+  }
+
+  function hasStockFiles() {
+    return slotHasRows("rtl") || slotHasRows("central");
+  }
+
+  function renderStockDashboard() {
+    const empty = $("#stock-empty");
+    const dash = $("#stock-dash");
+    const hasBo = hasBackOrder();
+    const hasStock = hasStockFiles();
+    if (!hasBo && !hasStock) {
+      if (empty) empty.hidden = false;
+      if (dash) dash.hidden = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (dash) dash.hidden = false;
+
+    const allInv = allStockInv();
+    const allocSection = $("#stock-alloc-section");
+    const boFilters = $("#stock-bo-filters");
+    const emptyInv = { total: 0, vins: 0, avgAging: 0, suffixes: 0, products: 0, rtl: 0, central: 0 };
+
+    if (hasStock) {
+      fillBoSelect("#stock-f-product", new Set(allInv.map((s) => s.product).filter((p) => p && p !== "—")), stockInvView.product, "All products");
+      fillBoSelect("#stock-f-suffix", new Set(allInv.map((s) => s.suffix).filter((x) => x && x !== "—")), stockInvView.suffix, "All SFX / suffix");
+      fillBoSelect("#stock-f-year", new Set(allInv.map((s) => s.year).filter(Boolean)), stockInvView.year, "All model years");
+      fillBoSelect("#stock-f-usage", new Set(allInv.map((s) => s.usage).filter((x) => x && x !== "—")), stockInvView.usage, "All usage");
+      fillBoSelect("#stock-f-location", new Set(allInv.map((s) => s.location).filter((x) => x && x !== "—")), stockInvView.location, "All locations");
+      if ($("#stock-f-source")) $("#stock-f-source").value = stockInvView.source || "";
+      if ($("#stock-search")) $("#stock-search").value = stockInvView.search || "";
+
+      const list = filteredStockInv();
+      const m = stockInvMetrics(list);
+      const aggs = stockProductAgg(list);
+      renderStockInvKpis(m);
+      renderStockInsights(list, m);
+      renderStockProductTable(aggs, m);
+      renderStockCarDetail(allInv, list);
+      renderStockInvCharts(list, aggs);
+    } else {
+      renderStockInvKpis(emptyInv);
+      renderStockInsights([], emptyInv);
+      renderStockProductTable([]);
+      renderStockCarDetail([], []);
+      renderStockInvCharts([], []);
+    }
+
+    if (!hasBo) {
+      if (boFilters) boFilters.hidden = true;
+      if (allocSection) allocSection.hidden = true;
+      return;
+    }
+
+    if (boFilters) boFilters.hidden = false;
+    if (allocSection) allocSection.hidden = false;
+
+    const allMatched = buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || []);
+    fillStockSelect("#stock-alloc-product", uniqueMatchedField(allMatched, "Product"), stockBoView.product, "All products");
+    fillStockSelect("#stock-alloc-suffix", uniqueMatchedField(allMatched, "Alj Suffix"), stockBoView.suffix, "All suffixes");
+    fillStockSelect("#stock-alloc-year", uniqueMatchedField(allMatched, "Model Year"), stockBoView.year, "All model years");
+    fillStockSelect("#stock-alloc-salesman", uniqueMatchedField(allMatched, "Salesman Name"), stockBoView.salesman, "All salesmen");
+    if ($("#stock-alloc-source")) $("#stock-alloc-source").value = stockBoView.source || "";
+
+    const allocList = filteredMatchedAllocRows(allMatched);
+    renderStockAllocTable(allMatched, allocList);
+  }
+
+  function refreshStockFromFilters() {
+    renderStockDashboard();
+  }
+
+  /* ——— Summary · Inventory Command Center ——— */
+  let iccCache = null;
+  let iccCacheKey = "";
+  let iccView = {
+    mode: "coverage",
+    drillLevel: 0,
+    search: "",
+    product: "",
+    suffix: "",
+    year: "",
+    ext: "",
+    int: "",
+    inventoryStatus: "",
+    demandStatus: "",
+    quadrant: "",
+    ageingMin: "",
+    ageingMax: "",
+    coverageMin: "",
+    coverageMax: "",
+    sort: "demandPressure:desc",
+    page: 0,
+    selectedId: "",
+    kpiFilter: "",
+    rankLimit: "10",
+    cols: { vinCount: true, rtl: true, central: true, esales: true },
+  };
+
+  function iccPeriodDays() {
+    const live = window._globalLivePeriod || ensureGlobalLivePeriod();
+    if (live && live.rangeFrom && live.rangeTo) {
+      const a = live.rangeFrom.getTime ? live.rangeFrom.getTime() : new Date(live.rangeFrom).getTime();
+      const b = live.rangeTo.getTime ? live.rangeTo.getTime() : new Date(live.rangeTo).getTime();
+      if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+        return Math.max(1, Math.round((b - a) / 86400000) + 1);
+      }
+    }
+    if (live && live.preset === "today") return 1;
+    if (live && live.preset === "this_month" && live.now) {
+      return Math.max(1, live.now.getDate());
+    }
+    return 0;
+  }
+
+  function iccSalesRowsForEngine() {
+    return (slots.sales.rows || []).map((r) => {
+      const get = buildFieldGetter(r);
+      return {
+        product: cellToString(r.product || r.Product || get(r, "product") || ""),
+        year: cellToString(r["Model Year"] || r.year || get(r, "year") || ""),
+        qty: toNumber(r.qty != null ? r.qty : get(r, "qty")) || 1,
+        proformaDate: r.proformaDate,
+        deliveryDate: r.deliveryDate,
+        vin: r.vin,
+      };
+    });
+  }
+
+  function iccAllocationLeaves() {
+    return ALLOCATION_ROWS.filter((r) => r.kind === "leaf").map((r) => ({
+      kind: "leaf",
+      product: r.product,
+      sfx: r.sfx,
+      allocation: Number(allocationValues[r.id]) || 0,
+    }));
+  }
+
+  function getInventoryCommandDataset() {
+    const ICC = window.InventoryCommandCenter;
+    if (!ICC) return null;
+    const key = [
+      (slots.backorder.rows || []).length,
+      (slots.rtl.rows || []).length,
+      (slots.central.rows || []).length,
+      (slots.sales.rows || []).length,
+      iccView.drillLevel,
+      iccPeriodDays(),
+      Object.values(allocationValues).reduce((s, v) => s + (Number(v) || 0), 0),
+    ].join("|");
+    if (iccCache && iccCacheKey === key) return iccCache;
+
+    const bos = mapBo(slots.backorder.rows || []).map((b) => {
+      const raw = (slots.backorder.rows || [])[b.id];
+      const qty = raw ? boQtyValue(raw) : 1;
+      return { ...b, qty: qty > 0 ? qty : 1 };
+    });
+    const rtl = mapStockInv(slots.rtl.rows || [], "RTL");
+    const central = mapStockInv(slots.central.rows || [], "Central");
+
+    iccCache = ICC.build({
+      boRows: bos,
+      rtlRows: rtl,
+      centralRows: central,
+      salesRows: iccSalesRowsForEngine(),
+      accessoryRows: slots.accessories.rows || [],
+      allocationLeaves: iccAllocationLeaves(),
+      periodDays: iccPeriodDays(),
+      drillLevel: Number(iccView.drillLevel) || 0,
+      helpers: {
+        extractVin: extractVinValue,
+        boQty: (r) => (r.qty > 0 ? r.qty : 1),
+      },
+    });
+    iccCacheKey = key;
+    return iccCache;
+  }
+
+  function invalidateIccCache() {
+    iccCache = null;
+    iccCacheKey = "";
+    actTowerCache = null;
+  }
+
+  function iccFiltersFromView() {
+    return {
+      search: iccView.search,
+      product: iccView.product,
+      suffix: iccView.suffix,
+      year: iccView.year,
+      ext: iccView.ext,
+      int: iccView.int,
+      inventoryStatus: iccView.inventoryStatus,
+      demandStatus: iccView.demandStatus,
+      quadrant: iccView.quadrant,
+      ageingMin: iccView.ageingMin,
+      ageingMax: iccView.ageingMax,
+      coverageMin: iccView.coverageMin,
+      coverageMax: iccView.coverageMax,
+    };
+  }
+
+  function iccApplyKpiFilter(rows) {
+    if (!iccView.kpiFilter) return rows;
+    if (iccView.kpiFilter === "critical" || iccView.kpiFilter === "needFocus") {
+      return rows.filter((r) => r.inventoryStatus === "Critical" || r.inventoryStatus === "Need Focus");
+    }
+    if (iccView.kpiFilter === "atRisk") {
+      return rows.filter((r) => r.inventoryStatus === "At Risk");
+    }
+    if (iccView.kpiFilter === "healthy") {
+      return rows.filter((r) => r.inventoryStatus === "Healthy");
+    }
+    if (iccView.kpiFilter === "slow") {
+      return rows.filter((r) => r.inventoryStatus === "Slow Moving" || r.quadrant === "OVERSTOCK");
+    }
+    if (iccView.kpiFilter === "overstock") {
+      return rows.filter((r) => r.quadrant === "OVERSTOCK");
+    }
+    return rows;
+  }
+
+  function iccSortRows(rows) {
+    const [field, dir] = String(iccView.sort || "demandPressure:desc").split(":");
+    const mul = dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      let av = a[field];
+      let bv = b[field];
+      if (field === "stockCoverage") {
+        av = av == null ? Number.POSITIVE_INFINITY : av;
+        bv = bv == null ? Number.POSITIVE_INFINITY : bv;
+      }
+      if (typeof av === "string" || typeof bv === "string") {
+        return mul * String(av || "").localeCompare(String(bv || ""), undefined, { numeric: true });
+      }
+      av = Number(av);
+      bv = Number(bv);
+      if (!Number.isFinite(av)) av = dir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+      if (!Number.isFinite(bv)) bv = dir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+      return mul * (av - bv);
+    });
+  }
+
+  function fillIccSelect(sel, values, current, allLabel) {
+    const el = $(sel);
+    if (!el) return;
+    const list = [...values].filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+    el.innerHTML = `<option value="">${escapeHtml(allLabel || "All")}</option>` +
+      list.map((v) => `<option value="${escapeHtml(v)}"${v === current ? " selected" : ""}>${escapeHtml(v)}</option>`).join("");
+    if (current && !list.includes(current)) el.value = "";
+  }
+
+  function renderIccDetail(row) {
+    const empty = $("#icc-detail-empty");
+    const body = $("#icc-detail-body");
+    if (!body) return;
+    if (!row) {
+      if (empty) empty.hidden = false;
+      body.hidden = true;
+      body.innerHTML = "";
+      return;
+    }
+    if (empty) empty.hidden = true;
+    body.hidden = false;
+    const statusCls =
+      row.inventoryStatus === "Critical" || row.inventoryStatus === "Need Focus"
+        ? "bad"
+        : row.inventoryStatus === "At Risk" || row.inventoryStatus === "Slow Moving"
+          ? "warn"
+          : "ok";
+    const vinBlock = (row.vins && row.vins.length)
+      ? `<div class="icc-vin-list"><span class="lab">VIN list (${formatNumber(row.vinCount)})</span><div class="icc-vin-chips">${row.vins.map((v) => `<code>${escapeHtml(v)}</code>`).join("")}${(row.vinCount > row.vins.length) ? `<span class="foot">+${row.vinCount - row.vins.length} more</span>` : ""}</div></div>`
+      : `<div><span class="lab">VIN count</span><strong>${formatNumber(row.vinCount || 0)}</strong><p class="foot">Drill to Interior for VIN list</p></div>`;
+    body.innerHTML = `
+      <div class="icc-detail-status"><span class="badge ${statusCls}">${escapeHtml(row.inventoryStatus)}</span>
+        <span class="foot">${escapeHtml(row.quadrantLabel || row.quadrant || "")}</span></div>
+      <div class="icc-detail-grid">
+        <div><span class="lab">Vehicle</span><strong>${escapeHtml(row.product)}</strong></div>
+        <div><span class="lab">Model Year</span><strong>${escapeHtml(row.year)}</strong></div>
+        <div><span class="lab">Suffix</span><strong>${escapeHtml(row.suffix)}</strong></div>
+        <div><span class="lab">Exterior</span><strong>${escapeHtml(row.ext)}</strong></div>
+        <div><span class="lab">Interior</span><strong>${escapeHtml(row.int)}</strong></div>
+        <div><span class="lab">Back Orders</span><strong>${formatNumber(row.backOrders)}</strong><p class="foot">Back Orders file</p></div>
+        <div><span class="lab">Available Stock</span><strong>${formatNumber(row.availableStock)}</strong><p class="foot">RTL ${formatNumber(row.rtlStock || 0)} · File ${formatNumber(row.centralStock || 0)}</p></div>
+        <div><span class="lab">E-Sales Stock</span><strong>${row.eSalesStock != null ? formatNumber(row.eSalesStock) : "N/A"}</strong><p class="foot">Allocation plan</p></div>
+        <div><span class="lab">Sales</span><strong>${formatNumber(row.sales)}</strong><p class="foot">Sales Raw</p></div>
+        <div><span class="lab">Sales Velocity</span><strong>${Number(row.salesVelocity).toFixed(2)}/d</strong></div>
+        <div><span class="lab">Stock Coverage</span><strong>${escapeHtml(String(row.stockCoverageDisplay))}</strong></div>
+        <div><span class="lab">Allocation Ageing</span><strong>${row.allocationAgeing == null ? "N/A" : Math.round(row.allocationAgeing) + "d"}</strong></div>
+      </div>
+      ${vinBlock}
+      <p class="icc-action"><b>Recommended action:</b> ${escapeHtml(row.recommendedAction)}</p>`;
+  }
+
+  const CAR_IMAGE_FILES = {
+    camry: "camry.png",
+    corolla: "corolla.png",
+    "corolla cross": "corolla cross.png",
+    crown: "crown.png",
+    fortuner: "fortuner.png",
+    gr86: "gr86.png",
+    "hiace bus": "hiace bus.png",
+    "hiace van": "hiace van.png",
+    highlander: "highlander.png",
+    hilux: "hilux double cab.png",
+    "hilux dc": "hilux double cab.png",
+    "hilux double": "hilux double cab.png",
+    "hilux double cab": "hilux double cab.png",
+    "hilux sc": "Hilux single cab.png",
+    "hilux single": "Hilux single cab.png",
+    "hilux single cab": "Hilux single cab.png",
+    innova: "innova.png",
+    "land cruiser": "land cruiser.png",
+    "land cruiser hard top": "land cruiser hard top.png",
+    "land cruiser hardtop": "land cruiser hard top.png",
+    "land cruiser pickup": "land cruiser pickup.png",
+    lc300: "lc300 hev max.png",
+    "lc300 hev": "lc300 hev max.png",
+    "lc300 hev max": "lc300 hev max.png",
+    lc70: "land cruiser hard top.png",
+    "lite ace": "lite ace.png",
+    prado: "prado.png",
+    raize: "raize.png",
+    rav4: "rav4.png",
+    "rav 4": "rav4.png",
+    supra: "supra.png",
+    "urban cruiser": "urban cruiser.png",
+    veloz: "veloz.png",
+    yaris: "yaris.png",
+    coaster: "coaster.png",
+  };
+
+  const carImageCache = new Map(); // productKey -> HTMLImageElement | null
+  let iccBubbleRenderCtx = null;
+
+  function carImageBases() {
+    // report-sheet pages may be served from /report-sheet/ or repo root
+    return ["../images/cars/", "/images/cars/", "images/cars/"];
+  }
+
+  function resolveCarImageFile(product) {
+    const raw = String(product || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!raw) return "";
+    if (CAR_IMAGE_FILES[raw]) return CAR_IMAGE_FILES[raw];
+    const compact = raw.replace(/[^a-z0-9]+/g, " ").trim();
+    if (CAR_IMAGE_FILES[compact]) return CAR_IMAGE_FILES[compact];
+
+    // Prefer longer alias keys that appear in the product name
+    const keys = Object.keys(CAR_IMAGE_FILES).sort((a, b) => b.length - a.length);
+    for (const key of keys) {
+      if (raw.includes(key) || compact.includes(key)) return CAR_IMAGE_FILES[key];
+    }
+    // LC / Land Cruiser shorthand
+    if (/\blc\s*300\b/.test(raw) || /\blc300\b/.test(raw)) return CAR_IMAGE_FILES.lc300;
+    if (/\blc\s*70\b/.test(raw) || /\blc70\b/.test(raw)) return CAR_IMAGE_FILES.lc70;
+    if (/\bhilux\b/.test(raw) && /\bsingle|sc\b/.test(raw)) return CAR_IMAGE_FILES["hilux single cab"];
+    if (/\bhilux\b/.test(raw)) return CAR_IMAGE_FILES["hilux double cab"];
+    return "";
+  }
+
+  function loadCarImageElement(fileName) {
+    return new Promise((resolve) => {
+      if (!fileName) {
+        resolve(null);
+        return;
+      }
+      const bases = carImageBases();
+      let i = 0;
+      const tryNext = () => {
+        if (i >= bases.length) {
+          resolve(null);
+          return;
+        }
+        const img = new Image();
+        img.decoding = "async";
+        const url = bases[i] + encodeURI(fileName);
+        i += 1;
+        img.onload = () => resolve(img);
+        img.onerror = () => tryNext();
+        img.src = url;
+      };
+      tryNext();
+    });
+  }
+
+  async function getCarImageForProduct(product) {
+    const file = resolveCarImageFile(product);
+    const key = file || `__none__:${String(product || "").toLowerCase()}`;
+    if (carImageCache.has(key)) return carImageCache.get(key);
+    const img = await loadCarImageElement(file);
+    carImageCache.set(key, img);
+    return img;
+  }
+
+  async function preloadCarImagesForPoints(points) {
+    const products = [...new Set((points || []).map((p) => (p.meta && p.meta.product) || "").filter(Boolean))];
+    await Promise.all(products.map((p) => getCarImageForProduct(p)));
+  }
+
+  /** One bubble per product — matches the Toyota car-picture wide chart. */
+  function aggregateIccPointsByProduct(points, mode, dataset) {
+    const map = new Map();
+    (points || []).forEach((p) => {
+      const product = String((p.meta && p.meta.product) || "").trim() || "—";
+      const key = product.toUpperCase();
+      let g = map.get(key);
+      if (!g) {
+        g = {
+          product,
+          backOrders: 0,
+          availableStock: 0,
+          eSalesStock: 0,
+          sales: 0,
+          salesVelocity: 0,
+          coverageSum: 0,
+          coverageN: 0,
+          ageingSum: 0,
+          ageingN: 0,
+          demandPressure: 0,
+          quadrantVotes: Object.create(null),
+          sample: p.meta,
+          rowId: p.rowId,
+        };
+        map.set(key, g);
+      }
+      const m = p.meta || {};
+      g.backOrders += Number(m.backOrders) || 0;
+      g.availableStock += Number(m.availableStock) || 0;
+      g.eSalesStock += Number(m.eSalesStock) || 0;
+      g.sales += Number(m.sales) || 0;
+      g.salesVelocity += Number(m.salesVelocity) || 0;
+      g.demandPressure = Math.max(g.demandPressure, Number(m.demandPressure) || 0);
+      if (Number.isFinite(Number(m.stockCoverage))) {
+        g.coverageSum += Number(m.stockCoverage);
+        g.coverageN += 1;
+      }
+      if (m.allocationAgeing != null && Number.isFinite(Number(m.allocationAgeing))) {
+        g.ageingSum += Number(m.allocationAgeing);
+        g.ageingN += 1;
+      }
+      const q = m.quadrant || "WATCH";
+      g.quadrantVotes[q] = (g.quadrantVotes[q] || 0) + 1;
+      if ((Number(m.demandPressure) || 0) >= g.demandPressure) {
+        g.sample = m;
+        g.rowId = p.rowId;
+      }
+    });
+
+    const groups = [...map.values()];
+    const maxStock = Math.max(1, ...groups.map((g) => g.availableStock));
+    const covSplit = (dataset && dataset.kpis && dataset.kpis.coverageSplit) || 1;
+    const velSplit = (dataset && dataset.kpis && dataset.kpis.velocitySplit) || 20;
+
+    return groups.map((g) => {
+      const coverage = g.backOrders > 0
+        ? g.availableStock / g.backOrders
+        : (g.coverageN ? g.coverageSum / g.coverageN : (g.availableStock > 0 ? 3 : 0));
+      const velocity = g.salesVelocity;
+      const ageing = g.ageingN ? g.ageingSum / g.ageingN : 0;
+      let quadrant = "WATCH";
+      let best = -1;
+      Object.keys(g.quadrantVotes).forEach((q) => {
+        if (g.quadrantVotes[q] > best) {
+          best = g.quadrantVotes[q];
+          quadrant = q;
+        }
+      });
+      if (mode === "coverage") {
+        const highVel = velocity >= velSplit;
+        const highCov = coverage >= covSplit;
+        if (highVel && !highCov) quadrant = "CRITICAL";
+        else if (highVel && highCov) quadrant = "FAST_MOVING";
+        else if (!highVel && highCov) quadrant = "OVERSTOCK";
+        else quadrant = "WATCH";
+      }
+      const x = mode === "ageing" ? ageing : Math.min(3.5, Math.max(0, coverage));
+      const y = Math.max(0, velocity);
+      const r = Math.max(22, Math.min(40, 16 + Math.sqrt(Math.max(1, g.availableStock) / maxStock) * 28));
+      const meta = {
+        ...(g.sample || {}),
+        product: g.product,
+        suffix: "ALL",
+        year: "—",
+        ext: "—",
+        int: "—",
+        backOrders: g.backOrders,
+        availableStock: g.availableStock,
+        eSalesStock: g.eSalesStock,
+        sales: g.sales,
+        salesVelocity: velocity,
+        stockCoverage: coverage,
+        stockCoverageDisplay: Number.isFinite(coverage) ? coverage.toFixed(2) : "—",
+        allocationAgeing: g.ageingN ? ageing : null,
+        demandPressure: g.demandPressure,
+        quadrant,
+        inventoryStatus: quadrant === "CRITICAL"
+          ? "Critical"
+          : quadrant === "OVERSTOCK"
+            ? "Slow Moving"
+            : quadrant === "FAST_MOVING"
+              ? "Healthy"
+              : "Balanced",
+        recommendedAction: quadrant === "CRITICAL"
+          ? "PRIORITIZE ALLOCATION"
+          : quadrant === "FAST_MOVING"
+            ? "HEALTHY COVERAGE"
+            : quadrant === "OVERSTOCK"
+              ? "SLOW MOVING / REVIEW"
+              : "MONITOR / REVIEW",
+      };
+      return { x, y, r, rowId: g.rowId, meta };
+    }).sort((a, b) => (b.meta.demandPressure || 0) - (a.meta.demandPressure || 0));
+  }
+
+  function carMarkerPluginFor(canvasId, points, useCarImages) {
+    return {
+      id: "iccCarMarkers_" + canvasId,
+      afterDatasetsDraw(chart) {
+        if (!useCarImages) return;
+        const { ctx, chartArea } = chart;
+        const meta = chart.getDatasetMeta(0);
+        if (!meta || !meta.data) return;
+        ctx.save();
+        meta.data.forEach((el, i) => {
+          const pt = points[i];
+          if (!pt || !pt.meta) return;
+          const { x, y } = el.getProps(["x", "y"], true);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          if (chartArea && (x < chartArea.left - 40 || x > chartArea.right + 40)) return;
+          const file = resolveCarImageFile(pt.meta.product);
+          const key = file || `__none__:${String(pt.meta.product || "").toLowerCase()}`;
+          const img = carImageCache.get(key);
+          const size = Math.max(36, Math.min(72, (Number(pt.r) || 24) * 2.1));
+          if (img && img.complete && img.naturalWidth) {
+            ctx.drawImage(img, x - size / 2, y - size / 2 - 4, size, size);
+          } else {
+            const q = pt.meta.quadrant || "WATCH";
+            const fill = q === "CRITICAL" ? "#eb0a1e" : q === "FAST_MOVING" ? "#0f766e" : q === "OVERSTOCK" ? "#b45309" : "#64748b";
+            ctx.beginPath();
+            ctx.fillStyle = fill;
+            ctx.arc(x, y, size * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          const label = String(pt.meta.product || "").trim();
+          const short = label.length > 18 ? label.slice(0, 16) + "…" : label;
+          const coords = modeLabelCoords(pt);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.font = "700 11px Manrope, Segoe UI, sans-serif";
+          ctx.fillStyle = "#111111";
+          ctx.fillText(short, x, y + size / 2 + 2);
+          ctx.font = "600 10px 'Space Grotesk', Manrope, sans-serif";
+          ctx.fillStyle = "#6b7280";
+          ctx.fillText(coords, x, y + size / 2 + 16);
+        });
+        ctx.restore();
+      },
+    };
+  }
+
+  function modeLabelCoords(pt) {
+    const m = pt.meta || {};
+    const cov = m.stockCoverageDisplay != null
+      ? String(m.stockCoverageDisplay)
+      : (Number.isFinite(Number(pt.x)) ? Number(pt.x).toFixed(2) : "—");
+    const vel = Number.isFinite(Number(m.salesVelocity))
+      ? Number(m.salesVelocity).toFixed(1)
+      : (Number.isFinite(Number(pt.y)) ? Number(pt.y).toFixed(1) : "—");
+    return `${cov} cov · ${vel}/d`;
+  }
+
+  async function openWideIccBubbleChart() {
+    const dataset = getInventoryCommandDataset();
+    if (!dataset || !window.InventoryCommandCenter) {
+      setStatus("No Summary chart to expand", "err");
+      return;
+    }
+    const ICC = window.InventoryCommandCenter;
+    let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
+    filtered = iccApplyKpiFilter(filtered);
+
+    const titleEl = $("#icc-chart-title");
+    $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Demand vs Stock Coverage";
+    const backdrop = $("#pbi-wide-backdrop");
+    backdrop.hidden = false;
+    backdrop.classList.add("show");
+
+    const totals = $("#pbi-wide-totals");
+    if (totals) {
+      totals.hidden = true;
+      totals.innerHTML = "";
+    }
+    const nums = $("#pbi-wide-numbers");
+    if (nums) nums.hidden = true;
+    const body = $("#pbi-wide-body");
+    if (body) body.classList.add("pbi-wide-body--chart-only");
+
+    const box = $("#pbi-wide-box");
+    const scroll = $("#pbi-wide-scroll");
+    if (box) {
+      box.classList.add("icc-wide-cars");
+      box.style.height = "min(78vh, 720px)";
+    }
+    if (scroll) scroll.style.maxHeight = "min(82vh, 780px)";
+    const hint = $("#pbi-wide-hint");
+    if (hint) hint.textContent = "Wide view · car pictures by model · click a car to inspect · Close or Esc";
+
+    await renderIccBubbleChart(dataset, filtered, {
+      canvasId: "pbi-wide-canvas",
+      useCarImages: true,
+    });
+  }
+
+  async function renderIccBubbleChart(dataset, filtered, opts) {
+    const options = opts || {};
+    const canvasId = options.canvasId || "chart-icc-bubble";
+    const useCarImages = options.useCarImages !== false && (canvasId === "chart-icc-bubble" || options.useCarImages === true);
+    const canvas = document.getElementById(canvasId) || $(`#${canvasId}`);
+    if (!canvas || !window.Chart || !window.InventoryCommandCenter) return;
+    const ICC = window.InventoryCommandCenter;
+    const mode = options.mode || (iccView.mode === "ageing" ? "ageing" : "coverage");
+    let points = ICC.toChartPoints(filtered, mode, dataset.config);
+
+    if (useCarImages) {
+      points = aggregateIccPointsByProduct(points, mode, dataset);
+      if (points.length > 36) {
+        points = points.slice(0, 36);
+      }
+      await preloadCarImagesForPoints(points);
+    } else if (points.length > 120) {
+      points = points.slice(0, 120);
+    }
+
+    if (canvasId === "chart-icc-bubble") {
+      iccBubbleRenderCtx = { dataset, filtered };
+    }
+
+    const colors = {
+      CRITICAL: "rgba(235, 10, 30, 0.72)",
+      FAST_MOVING: "rgba(13, 148, 136, 0.72)",
+      OVERSTOCK: "rgba(37, 99, 235, 0.55)",
+      WATCH: "rgba(100, 116, 139, 0.65)",
+    };
+
+    if (charts[canvasId]) {
+      charts[canvasId].destroy();
+      delete charts[canvasId];
+    }
+
+    const quadrantPlugin = {
+      id: "iccQuadrants_" + canvasId,
+      beforeDraw(chart) {
+        if (mode !== "coverage") return;
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea || !scales.x || !scales.y) return;
+        const xSplit = scales.x.getPixelForValue(Math.min(dataset.kpis.coverageSplit, scales.x.max));
+        const ySplit = scales.y.getPixelForValue(dataset.kpis.velocitySplit);
+        const { left, right, top, bottom } = chartArea;
+        const bands = [
+          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(235, 10, 30, 0.07)" },
+          { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.07)" },
+          { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(180, 83, 9, 0.06)" },
+          { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(100, 116, 139, 0.05)" },
+        ];
+        ctx.save();
+        bands.forEach((b) => {
+          ctx.fillStyle = b.c;
+          ctx.fillRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
+        });
+        ctx.strokeStyle = "rgba(17, 17, 17, 0.35)";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xSplit, top);
+        ctx.lineTo(xSplit, bottom);
+        ctx.moveTo(left, ySplit);
+        ctx.lineTo(right, ySplit);
+        ctx.stroke();
+        if (useCarImages || true) {
+          ctx.setLineDash([]);
+          ctx.font = "700 10px Manrope, Segoe UI, sans-serif";
+          ctx.fillStyle = "rgba(235, 10, 30, 0.55)";
+          ctx.textAlign = "left";
+          ctx.fillText("HIGH DEMAND · LOW STOCK", left + 8, top + 14);
+          ctx.fillStyle = "rgba(13, 148, 136, 0.55)";
+          ctx.fillText("HIGH DEMAND · HIGH STOCK", xSplit + 8, top + 14);
+          ctx.fillStyle = "rgba(100, 116, 139, 0.55)";
+          ctx.fillText("LOW DEMAND · LOW STOCK", left + 8, ySplit + 16);
+          ctx.fillStyle = "rgba(37, 99, 235, 0.55)";
+          ctx.fillText("LOW DEMAND · HIGH STOCK", xSplit + 8, ySplit + 16);
+        }
+        ctx.restore();
+      },
+    };
+
+    const carPlugin = carMarkerPluginFor(canvasId, points, useCarImages);
+
+    charts[canvasId] = new Chart(canvas, {
+      type: "bubble",
+      data: {
+        datasets: [{
+          label: "Vehicles",
+          data: points,
+          backgroundColor: useCarImages
+            ? "rgba(0,0,0,0)"
+            : points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
+          borderColor: useCarImages
+            ? "rgba(0,0,0,0)"
+            : points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
+          borderWidth: useCarImages ? 0 : 1.25,
+          hoverBorderWidth: useCarImages ? 0 : 2.5,
+          pointStyle: "circle",
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        layout: { padding: { top: 18, right: 16, bottom: useCarImages ? 28 : 6, left: 6 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title(items) {
+                const m = items[0] && items[0].raw && items[0].raw.meta;
+                return m ? `${m.product}${m.suffix && m.suffix !== "ALL" ? " · " + m.suffix : ""}` : "";
+              },
+              label(ctx) {
+                const m = ctx.raw && ctx.raw.meta;
+                if (!m) return "";
+                return [
+                  `BO ${m.backOrders} · Stock ${m.availableStock} · E-Sales ${m.eSalesStock}`,
+                  `Sales ${m.sales} · Velocity ${Number(m.salesVelocity || 0).toFixed(1)}/d`,
+                  `Coverage ${m.stockCoverageDisplay} · Ageing ${m.allocationAgeing == null ? "—" : Math.round(m.allocationAgeing) + "d"}`,
+                  `Pressure ${m.demandPressure} · ${m.inventoryStatus}`,
+                  m.recommendedAction,
+                ];
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: mode === "ageing" ? "Allocation Ageing (days)" : "Stock Coverage (Available / BO)",
+              color: "#111111",
+              font: { weight: "700", family: "'Manrope', sans-serif" },
+            },
+            grid: { color: "rgba(148, 163, 184, 0.18)" },
+            beginAtZero: true,
+            suggestedMax: mode === "coverage" ? 3.5 : undefined,
+          },
+          y: {
+            title: {
+              display: true,
+              text: "Sales Velocity (units / day)",
+              color: "#111111",
+              font: { weight: "700", family: "'Manrope', sans-serif" },
+            },
+            grid: { color: "rgba(148, 163, 184, 0.18)" },
+            beginAtZero: true,
+          },
+        },
+        onClick(evt, elements) {
+          if (!elements.length) return;
+          const el = elements[0];
+          const pt = points[el.index];
+          if (!pt) return;
+          iccView.selectedId = pt.rowId;
+          const row = filtered.find((r) => r.id === pt.rowId) || pt.meta;
+          renderIccDetail(row);
+          if (canvasId === "chart-icc-bubble") renderIccTable(dataset, filtered);
+        },
+      },
+      plugins: [quadrantPlugin, carPlugin],
+    });
+  }
+
+  function renderIccTable(dataset, filtered) {
+    const el = $("#icc-table");
+    const foot = $("#icc-table-foot");
+    const meta = $("#icc-table-meta");
+    const pager = $("#icc-pager");
+    if (!el) return;
+    const sorted = iccSortRows(filtered);
+    const pageSize = (dataset.config && dataset.config.pageSize) || 50;
+    const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
+    if (iccView.page >= pages) iccView.page = 0;
+    const start = iccView.page * pageSize;
+    const pageRows = sorted.slice(start, start + pageSize);
+    const cols = iccView.cols || {};
+
+    if (!sorted.length) {
+      el.innerHTML = `<p class="foot" style="padding:16px">No configurations match the current filters. Push Back Order / RTL / Stock E-Sales / Sales from Admin.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      if (meta) meta.textContent = "";
+      if (pager) pager.innerHTML = "";
+      return;
+    }
+
+    const statusCls = (s) => {
+      if (s === "Critical" || s === "Need Focus") return "icc-st-critical";
+      if (s === "At Risk") return "icc-st-risk";
+      if (s === "Slow Moving") return "icc-st-slow";
+      if (s === "Balanced") return "icc-st-balanced";
+      if (s === "Healthy") return "icc-st-ok";
+      return "";
+    };
+    const badgeCls = (s) => {
+      if (s === "Critical" || s === "Need Focus") return "bad";
+      if (s === "At Risk" || s === "Slow Moving") return "warn";
+      return "ok";
+    };
+
+    el.innerHTML = `<table class="bas-table icc-table">
+      <thead><tr>
+        <th>Product</th><th>Suffix</th><th>Year</th><th>Exterior</th><th>Interior</th>
+        ${cols.vinCount !== false ? "<th class=\"num\">VIN Count</th>" : ""}
+        <th class="num">BO</th><th class="num">Stock</th>
+        ${cols.rtl !== false ? "<th class=\"num\">RTL</th>" : ""}
+        ${cols.central !== false ? "<th class=\"num\">Central file</th>" : ""}
+        ${cols.esales !== false ? "<th class=\"num\">E-Sales plan</th>" : ""}
+        <th class="num">Sales</th>
+        <th class="num">Velocity</th><th class="num">Coverage</th><th class="num">Ageing</th>
+        <th>Status</th><th>Action</th>
+      </tr></thead>
+      <tbody>${pageRows.map((r) => `
+        <tr class="${r.id === iccView.selectedId ? "icc-row-active" : ""} ${statusCls(r.inventoryStatus)}" data-icc-id="${escapeHtml(r.id)}">
+          <td>${escapeHtml(r.product)}</td>
+          <td>${escapeHtml(r.suffix)}</td>
+          <td>${escapeHtml(r.year)}</td>
+          <td>${escapeHtml(r.ext)}</td>
+          <td>${escapeHtml(r.int)}</td>
+          ${cols.vinCount !== false ? `<td class="num">${formatNumber(r.vinCount || 0)}</td>` : ""}
+          <td class="num">${formatNumber(r.backOrders)}</td>
+          <td class="num">${formatNumber(r.availableStock)}</td>
+          ${cols.rtl !== false ? `<td class="num">${formatNumber(r.rtlStock || 0)}</td>` : ""}
+          ${cols.central !== false ? `<td class="num">${formatNumber(r.centralStock || 0)}</td>` : ""}
+          ${cols.esales !== false ? `<td class="num">${formatNumber(r.eSalesStock || 0)}</td>` : ""}
+          <td class="num">${formatNumber(r.sales)}</td>
+          <td class="num">${Number(r.salesVelocity).toFixed(2)}</td>
+          <td class="num">${escapeHtml(String(r.stockCoverageDisplay))}</td>
+          <td class="num">${r.allocationAgeing == null ? "N/A" : Math.round(r.allocationAgeing)}</td>
+          <td><span class="badge ${badgeCls(r.inventoryStatus)}">${escapeHtml(r.inventoryStatus)}</span></td>
+          <td class="icc-action-cell">${escapeHtml(r.recommendedAction)}</td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+
+    if (meta) meta.textContent = `${formatNumber(sorted.length)} configs · page ${iccView.page + 1}/${pages}`;
+    if (foot) foot.textContent = `Showing ${formatNumber(pageRows.length)} of ${formatNumber(sorted.length)} · drill ${dataset.drillLevel} · figures from pushed Excel`;
+    if (pager) {
+      pager.innerHTML = `
+        <button type="button" class="btn" id="icc-page-prev" ${iccView.page <= 0 ? "disabled" : ""}>Prev</button>
+        <button type="button" class="btn" id="icc-page-next" ${iccView.page >= pages - 1 ? "disabled" : ""}>Next</button>`;
+      const prev = $("#icc-page-prev");
+      const next = $("#icc-page-next");
+      if (prev) prev.onclick = () => { iccView.page -= 1; renderSummaryDashboard(); };
+      if (next) next.onclick = () => { iccView.page += 1; renderSummaryDashboard(); };
+    }
+
+    el.querySelectorAll("tr[data-icc-id]").forEach((tr) => {
+      tr.addEventListener("click", () => {
+        iccView.selectedId = tr.getAttribute("data-icc-id");
+        const row = sorted.find((r) => r.id === iccView.selectedId);
+        renderIccDetail(row);
+        el.querySelectorAll("tr").forEach((x) => x.classList.remove("icc-row-active"));
+        tr.classList.add("icc-row-active");
+      });
+    });
+  }
+
+  function destroyChartIf(id) {
+    if (charts[id]) {
+      charts[id].destroy();
+      delete charts[id];
+    }
+  }
+
+  function renderIccSecondaryCharts(dataset, filtered) {
+    if (!window.Chart || !window.InventoryCommandCenter) return;
+    const ICC = window.InventoryCommandCenter;
+    const pointsAge = ICC.toChartPoints(filtered, "ageing", dataset.config).slice(0, 100);
+    const pointsBo = ICC.toChartPoints(filtered, "boStock", dataset.config).slice(0, 100);
+
+    const bubbleOpts = (labelX, labelY) => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const m = (ctx.raw && ctx.raw.meta) || {};
+              return `${m.product || ""} · BO ${m.backOrders} · Stock ${m.availableStock} · Vel ${Number(m.salesVelocity || 0).toFixed(2)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: labelX }, beginAtZero: true },
+        y: { title: { display: true, text: labelY }, beginAtZero: true },
+      },
+      onClick(evt, els, chart) {
+        if (!els.length) return;
+        const pt = chart.data.datasets[0].data[els[0].index];
+        if (!pt) return;
+        iccView.selectedId = pt.rowId;
+        renderIccDetail(filtered.find((r) => r.id === pt.rowId) || pt.meta);
+      },
+    });
+
+    const mapPts = (pts) => pts.map((p) => ({
+      x: p.x,
+      y: p.y,
+      r: Math.max(4, Math.min(18, p.r * 0.45)),
+      rowId: p.rowId,
+      meta: p.meta,
+      backgroundColor: p.meta && p.meta.quadrant === "CRITICAL"
+        ? "rgba(235,10,30,.55)"
+        : p.meta && p.meta.quadrant === "OVERSTOCK"
+          ? "rgba(37,99,235,.45)"
+          : "rgba(100,116,139,.45)",
+    }));
+
+    const ageCanvas = document.getElementById("chart-icc-ageing");
+    if (ageCanvas) {
+      destroyChartIf("chart-icc-ageing");
+      charts["chart-icc-ageing"] = new Chart(ageCanvas, {
+        type: "bubble",
+        data: { datasets: [{ data: mapPts(pointsAge) }] },
+        options: bubbleOpts("Allocation Ageing (days)", "Sales Velocity (units/day)"),
+      });
+    }
+
+    const boCanvas = document.getElementById("chart-icc-bo-stock");
+    if (boCanvas) {
+      destroyChartIf("chart-icc-bo-stock");
+      const maxAxis = Math.max(
+        1,
+        ...pointsBo.map((p) => p.x),
+        ...pointsBo.map((p) => p.y)
+      );
+      const diagPlugin = {
+        id: "iccBoDiag",
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea || !scales.x || !scales.y) return;
+          const x0 = scales.x.getPixelForValue(0);
+          const y0 = scales.y.getPixelForValue(0);
+          const x1 = scales.x.getPixelForValue(maxAxis);
+          const y1 = scales.y.getPixelForValue(maxAxis);
+          ctx.save();
+          ctx.strokeStyle = "rgba(235,10,30,.55)";
+          ctx.setLineDash([6, 4]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.stroke();
+          ctx.restore();
+        },
+      };
+      charts["chart-icc-bo-stock"] = new Chart(boCanvas, {
+        type: "bubble",
+        data: { datasets: [{ data: mapPts(pointsBo) }] },
+        options: bubbleOpts("Back Orders", "Available Stock"),
+        plugins: [diagPlugin],
+      });
+    }
+
+    const limit = iccView.rankLimit === "all" ? filtered.length : Number(iccView.rankLimit) || 10;
+    const topBo = ICC.topNBy(filtered, "backOrders", limit);
+    const topStock = ICC.topNBy(filtered, "availableStock", limit);
+
+    const barChart = (id, rows, field, color) => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      destroyChartIf(id);
+      const labels = rows.map((r) => {
+        const s = r.suffix && r.suffix !== "—" ? ` ${r.suffix}` : "";
+        const name = `${r.product}${s}`;
+        return name.length > 22 ? name.slice(0, 20) + "…" : name;
+      });
+      charts[id] = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            data: rows.map((r) => r[field]),
+            backgroundColor: color,
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, ticks: { precision: 0 } },
+            y: { ticks: { font: { size: 11 } } },
+          },
+          onClick(evt, els) {
+            if (!els.length) return;
+            const row = rows[els[0].index];
+            if (!row) return;
+            iccView.selectedId = row.id;
+            renderIccDetail(row);
+          },
+        },
+      });
+    };
+    barChart("chart-icc-top-bo", topBo, "backOrders", "rgba(235, 10, 30, 0.75)");
+    barChart("chart-icc-top-stock", topStock, "availableStock", "rgba(15, 118, 110, 0.75)");
+  }
+
+  function iccLastRefreshLabel() {
+    try {
+      const raw = localStorage.getItem("toyota_admin_workbook_push_v1");
+      if (!raw) return "Not pushed yet";
+      const meta = JSON.parse(raw);
+      const at = meta && (meta.at || meta.pushedAt || meta.time);
+      if (!at) return "Push recorded (no timestamp)";
+      const d = new Date(at);
+      if (Number.isNaN(d.getTime())) return String(at);
+      return d.toLocaleString();
+    } catch {
+      return "Unavailable";
+    }
+  }
+
+  function guestExpEmployeeKeys() {
+    const keys = new Set();
+    (employeeTargets || []).forEach((e) => {
+      if (!e || !e.guestExpCenter) return;
+      const key = nameKey(e.name);
+      if (key) keys.add(key);
+    });
+    return keys;
+  }
+
+  /** Accessories follow the advisor: Experience Center → Automall, every other advisor → Telesales. */
+  function accessoriesChannelSplit(live) {
+    const empty = () => ({ count: 0, amount: 0, remaining: 0, quota: 0, sold: 0, inProgress: 0 });
+    const out = { lexus: empty(), telesales: empty(), b2c: empty(), guest: empty() };
+    const period = live || window._globalLivePeriod || null;
+    const prevMonthKey = period && (period.prevMonthKey || (period.prevRangeFrom ? toYyyymm(period.prevRangeFrom) : "")) || "";
+    const acc = buildAccessoriesMetrics(period, prevMonthKey);
+    const guestKeys = guestExpEmployeeKeys();
+    acc.byKey.forEach((row, key) => {
+      const dest = guestKeys.has(key) ? out.guest : out.telesales;
+      const sold = Number(row.sold) || 0;
+      const progress = Number(row.inProgress) || 0;
+      dest.sold += sold;
+      dest.inProgress += progress;
+      dest.amount += sold + progress;
+      dest.quota += Number(row.quota) || 0;
+      dest.count += (Number(row.soldCount) || 0) + (Number(row.progressCount) || 0);
+    });
+    ["guest", "telesales"].forEach((id) => {
+      const row = out[id];
+      row.remaining = Math.max(0, row.quota - row.sold - row.inProgress);
+    });
+    return out;
+  }
+
+  /** Lexus Sales channel — only these Sales Raw product codes (exact / code+digits). */
+  const LEXUS_PRODUCT_CODES = new Set([
+    "ESH", "ES", "IS", "LC", "LSH", "LX", "LXH", "NX", "NXH", "RX", "RXH",
+  ]);
+  /** Toyota codes that must never count as Lexus LC. */
+  const TOYOTA_LC_BODY = new Set(["70", "200", "300"]);
+
+  function salesRowProductBlob(r) {
+    if (!r) return "";
+    const bits = [
+      r.product, r._productRaw, r.Product, r.model, r.Model, r["Vehicle Model"], r["vehicle model"],
+      r.Description, r.description, r.Material, r.material,
+    ];
+    Object.keys(r).forEach((k) => {
+      if (/^__/.test(k) || k === "plant" || k === "Plant" || k === "secondaryStatus") return;
+      const n = normHeader(k);
+      if (/\byear\b/.test(n)) return;
+      if (n.includes("product") || n === "model" || n.includes("vehicle model") || n.includes("brand") || n.includes("material") || n === "series" || n === "prod") {
+        bits.push(r[k]);
+      }
+    });
+    if (Array.isArray(r.__cells)) {
+      ["B", "C", "D", "E", "F", "G", "I", "J"].forEach((L) => {
+        const idx = colLetterToIndex(L);
+        if (idx >= 0 && r.__cells[idx] != null) bits.push(r.__cells[idx]);
+      });
+    }
+    return bits.map((x) => cellToString(x)).filter(Boolean).join(" ");
+  }
+
+  function compactProductCode(raw) {
+    return String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  /** Pure text → boolean; memoized because Sales Raw repeats the same product / cell values thousands of times. */
+  const LEXUS_CODE_CACHE = new Map();
+  function isLexusProductCode(raw) {
+    const text = cellToString(raw).trim();
+    if (!text) return false;
+    const hit = LEXUS_CODE_CACHE.get(text);
+    if (hit !== undefined) return hit;
+    const out = isLexusProductText(text);
+    if (LEXUS_CODE_CACHE.size >= 50000) LEXUS_CODE_CACHE.clear();
+    LEXUS_CODE_CACHE.set(text, out);
+    return out;
+  }
+
+  function isLexusProductText(text) {
+    if (/\blexus\b/i.test(text)) return true;
+    const compact = compactProductCode(text);
+    if (!compact) return false;
+    if (LEXUS_PRODUCT_CODES.has(compact)) return true;
+
+    // RX350 / NX200T / LC500 / ES300H — code + body, but never Toyota LC70/200/300
+    const m = compact.match(/^(ESH|ES|IS|LSH|LXH|LX|NXH|NX|RXH|RX|LC)([0-9]{2,4}[A-Z]?)$/);
+    if (m) {
+      if (m[1] === "LC") {
+        const body = m[2].replace(/[A-Z]+$/i, "");
+        if (TOYOTA_LC_BODY.has(body)) return false;
+      }
+      return true;
+    }
+
+    // Embedded code inside longer labels: "Product: RXH", "RX · Luxury"
+    const embedded = text.toUpperCase().match(/\b(ESH|ES|IS|LSH|LXH|LX|NXH|NX|RXH|RX|LC)([0-9]{2,4}[A-Z]?)?\b/);
+    if (embedded) {
+      const code = embedded[1];
+      const body = (embedded[2] || "").replace(/[A-Z]+$/i, "");
+      if (code === "LC" && TOYOTA_LC_BODY.has(body)) return false;
+      if (!embedded[2]) return LEXUS_PRODUCT_CODES.has(code);
+      return true;
+    }
+
+    // First token only (e.g. "RX · …") — never prefix-match LC300 as LC
+    const first = text.split(/[\s|/\\,_·−-]+/).find(Boolean) || "";
+    const firstCompact = compactProductCode(first);
+    if (LEXUS_PRODUCT_CODES.has(firstCompact)) return true;
+    const m2 = firstCompact.match(/^(ESH|ES|IS|LSH|LXH|LX|NXH|NX|RXH|RX|LC)([0-9]{2,4}[A-Z]?)$/);
+    if (m2) {
+      if (m2[1] === "LC") {
+        const body = m2[2].replace(/[A-Z]+$/i, "");
+        if (TOYOTA_LC_BODY.has(body)) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function isLexusSaleRow(r) {
+    if (!r) return false;
+    const fields = [
+      r.product, r._productRaw, r.Product, r.model, r.Model,
+      r["Vehicle Model"], r["vehicle model"],
+      r.Material, r.material, r.Brand, r.brand, r.Series, r.series,
+    ];
+    if (fields.some((f) => isLexusProductCode(f))) return true;
+    // Plant / channel / brand — Lexus Sales team rows even when product is a full grade name
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const meta = employeeMeta(salesmanName);
+    const plantBits = [
+      r.plant, r.Plant, r.salesChannel, r.channel, r["Sales Channel"], r.salesType,
+      r.Brand, r.brand, meta && meta.plant,
+    ].map((x) => cellToString(x)).join(" ");
+    if (/\blexus\b/i.test(plantBits) || /لكزس/.test(plantBits)) return true;
+    if (Array.isArray(r.__cells)) {
+      for (let i = 0; i < Math.min(r.__cells.length, 40); i += 1) {
+        const v = cellToString(r.__cells[i]).trim();
+        if (!v || /^\d{4}$/.test(v)) continue;
+        if (isLexusProductCode(v)) return true;
+      }
+    }
+    const blob = salesRowProductBlob(r);
+    if (!blob) return false;
+    if (/\blexus\b/i.test(blob) || /لكزس/.test(blob)) return true;
+    return blob.split(/[\s|/\\,_·−-]+/).some((tok) => isLexusProductCode(tok));
+  }
+
+  function isTelesalesSaleRow(r) {
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const key = nameKey(salesmanName);
+    if (!key) return false;
+    const meta = Object.prototype.hasOwnProperty.call(EMPLOYEE_META, key) ? EMPLOYEE_META[key] : null;
+    const plant = `${cellToString(r.plant || "").trim()} ${(meta && meta.plant) || ""}`;
+    return /telesales/i.test(plant);
+  }
+
+  function isEcommercePlantText(raw) {
+    const plant = cellToString(raw).trim().toLowerCase().replace(/[–—]/g, "-");
+    if (!plant) return false;
+    return /e\s*-?\s*commerce|ecommerce|\beb2c\b|\bb2c\b|online\s*sales|digital\s*sales|e\s*-?\s*sales/.test(plant);
+  }
+
+  /** Summary channel boxes are by Col A consultant, not product. */
+  const DVP_LEXUS_CONSULTANT_DEFAULTS = ["Hamid Saeed", "Hamed Saeed", "Hamid Saeed Mohamed Saeed", "حامد سعيد"];
+  const DVP_B2C_CONSULTANT_DEFAULTS = ["Mohammed Alfadul", "Mohannad Alyoubi"];
+  const DVP_B2C_CONSULTANT_ALIASES = ["Muhannad Hamid Al Youbi", "Mohannad Al Youbi", "Muhannad Al Youbi", "Muhannad Alyoubi"];
+  let DVP_CONTROLLER_USERS = {
+    toyotaB2c: DVP_B2C_CONSULTANT_DEFAULTS.slice(),
+    lexusB2c: ["Hamid Saeed"],
+  };
+
+  function dvpNameList(list, fallback) {
+    const names = (Array.isArray(list) ? list : [])
+      .map((u) => String((u && u.name) || u || "").trim())
+      .filter(Boolean);
+    return names.length ? names : (fallback || []).slice();
+  }
+
+  function dvpLexusConsultantNames() {
+    const fromApi = dvpNameList(DVP_CONTROLLER_USERS.lexusB2c, []);
+    const seen = new Set();
+    const out = [];
+    DVP_LEXUS_CONSULTANT_DEFAULTS.concat(fromApi).forEach((name) => {
+      const key = normalizeNameLoose(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(name);
+    });
+    return out;
+  }
+
+  function dvpB2cConsultantNames() {
+    return dvpNameList(DVP_CONTROLLER_USERS.toyotaB2c, DVP_B2C_CONSULTANT_DEFAULTS);
+  }
+
+  function dvpB2cMatchNames() {
+    const seen = new Set();
+    const out = [];
+    dvpB2cConsultantNames().concat(DVP_B2C_CONSULTANT_ALIASES).forEach((name) => {
+      const key = normalizeNameLoose(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(name);
+    });
+    return out;
+  }
+
+  function dvpControllerSig() {
+    return `${dvpLexusConsultantNames().join("|")}/${dvpB2cConsultantNames().join("|")}`;
+  }
+
+  function dvpConsultantIdentity(r) {
+    const raw = String((r && (r._salesmanRaw || r.salesman)) || "").trim();
+    if (!raw) return null;
+    const roster = rosterSalesmanName(raw) || raw;
+    const keys = new Set();
+    const tokens = new Set();
+    [raw, roster].forEach((n) => {
+      const loose = normalizeNameLoose(n);
+      if (loose) {
+        keys.add(loose);
+        loose.split(" ").filter(Boolean).forEach((t) => tokens.add(t));
+      }
+      const nk = nameKey(n);
+      if (nk) {
+        keys.add(nk);
+        nk.split(" ").filter(Boolean).forEach((t) => tokens.add(t));
+      }
+    });
+    return { keys, tokens };
+  }
+
+  function dvpConsultantHits(identity, targetName) {
+    if (!identity) return false;
+    const target = String(targetName || "").trim();
+    if (!target) return false;
+    const loose = normalizeNameLoose(target);
+    const keyed = nameKey(target) || loose;
+    if (!loose) return false;
+    if (identity.keys.has(loose) || (keyed && identity.keys.has(keyed))) return true;
+    const tParts = loose.split(" ").filter(Boolean);
+    if (tParts.length < 2) return false;
+    for (const k of identity.keys) {
+      const kParts = k.split(" ").filter(Boolean);
+      if (kParts.length < 2) continue;
+      if (k.includes(loose) || loose.includes(k)) return true;
+    }
+    const first = tParts[0];
+    const last = tParts[tParts.length - 1];
+    return identity.tokens.has(first) && identity.tokens.has(last);
+  }
+
+  function dvpConsultantInList(r, names) {
+    const identity = dvpConsultantIdentity(r);
+    if (!identity) return false;
+    return (names || []).some((name) => dvpConsultantHits(identity, name));
+  }
+
+  function isLexusConsultantSaleRow(r) {
+    return dvpConsultantInList(r, dvpLexusConsultantNames());
+  }
+
+  function isNotAssignedSaleRow(r) {
+    const raw = String((r && (r._salesmanRaw || r.salesman)) || "").trim();
+    if (!raw) return false;
+    const loose = normalizeNameLoose(rosterSalesmanName(raw) || raw);
+    if (!loose) return false;
+    if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c" || loose === "e b2c") return true;
+    if (/^api[\s\-_]*(batch|patch)$/.test(loose) || /^e[\s\-]?commerce$/.test(loose)) return true;
+    return nameKey(raw) === nameKey("Not assigned");
+  }
+
+  /** B2C channel: Toyota B2C controller users in Col A, plus Not Assigned / EB2C rows. */
+  function isB2cSaleRow(r) {
+    return isNotAssignedSaleRow(r) || dvpConsultantInList(r, dvpB2cMatchNames());
+  }
+
+  function dvpBucketForSaleRow(r, guestKeys) {
+    // 1) Lexus = Hamid Saeed (Col A) + Lexus controller users
+    // 2) B2C = Toyota B2C controller users (Col A) + Not Assigned / EB2C
+    // 3) Guest Exp = Admin Push selected employees
+    // 4) Telesales = everyone else
+    if (isLexusConsultantSaleRow(r)) return "lexus";
+    if (isB2cSaleRow(r)) return "b2c";
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const key = nameKey(salesmanName);
+    if (key && guestKeys.has(key)) return "guest";
+    return "telesales";
+  }
+
+  function applyDvpChannelSubs() {
+    if (!window.SalesControl || typeof window.SalesControl.setChannelSubs !== "function") return;
+    window.SalesControl.setChannelSubs({
+      lexus: dvpLexusConsultantNames()[0] || "Hamid Saeed",
+      b2c: (dvpB2cConsultantNames().concat(["Not Assigned"]).join(" · ")) || "Not Assigned",
+    });
+  }
+
+  function refreshDvpControllerUsers() {
+    applyDvpChannelSubs();
+    return fetch("/api/report-sheet/controller-users", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const pub = data && data.public;
+        if (pub) {
+          DVP_CONTROLLER_USERS = {
+            toyotaB2c: dvpNameList(pub.toyotaB2c, DVP_B2C_CONSULTANT_DEFAULTS),
+            lexusB2c: dvpNameList(pub.lexusB2c, ["Hamid Saeed"]),
+          };
+        }
+        applyDvpChannelSubs();
+        salesControlSrc = null;
+        if (typeof renderSummaryDashboard === "function") renderSummaryDashboard();
+        else if (hasSalesRaw() && window.SalesControl) window.SalesControl.prepare(salesControlSource());
+      })
+      .catch(() => {});
+  }
+
+  function dvpVinRecord(r) {
+    const vin = extractVinValue(r && r.vin) || extractVinValue(
+      Object.values(r || {}).find((v) => extractVinValue(v))
+    ) || "";
+    return {
+      vin: vin || "—",
+      salesman: rosterSalesmanName(r._salesmanRaw || r.salesman) || cellToString(r.salesman).trim() || "—",
+      plant: dvpSaleShowroom(r),
+      product: dvpSaleModel(r),
+      proformaDate: r.proformaDate || "",
+      deliveryDate: r.deliveryDate || "",
+    };
+  }
+
+  function collectDvpBuckets(rows, live, prevMonthKey, period, guestKeys) {
+    const empty = () => ({ delivered: [], proforma: [] });
+    const lists = {
+      lexus: empty(),
+      telesales: empty(),
+      b2c: empty(),
+      guest: empty(),
+    };
+    (rows || []).forEach((r) => {
+      const bucket = dvpBucketForSaleRow(r, guestKeys);
+      if (!lists[bucket]) return;
+      const rec = dvpVinRecord(r);
+      if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) lists[bucket].delivered.push(rec);
+      if (salesIsProformaInPeriod(r, live, period, prevMonthKey)) lists[bucket].proforma.push(rec);
+    });
+    const counts = {};
+    Object.keys(lists).forEach((id) => {
+      counts[id] = {
+        delivered: lists[id].delivered.length,
+        proforma: lists[id].proforma.length,
+      };
+    });
+    return { counts, lists };
+  }
+
+  function dvpTrendPct(cur, prev) {
+    if (!Number.isFinite(prev) || prev === 0) return cur > 0 ? 100 : null;
+    return ((cur - prev) / Math.abs(prev)) * 100;
+  }
+
+  function dvpStatusFor(delivered, proforma, id) {
+    const tips = {
+      lexus: { icon: "⏱", title: "Building pipeline", tip: "Increase conversion from pro-forma to deliveries." },
+      telesales: { icon: "↗", title: "Strong demand", tip: "Maintain momentum and close more pro-forma." },
+      b2c: { icon: "◎", title: "Growing opportunities", tip: "Improve delivery rate and customer follow-up." },
+      guest: { icon: "★", title: "High engagement", tip: "Convert guest interest into confirmed orders." },
+    };
+    if (delivered <= 0 && proforma <= 0) {
+      const emptyTip = id === "lexus"
+        ? "No Col A Hamid Saeed rows in this period."
+        : id === "b2c"
+          ? "No Col A Toyota B2C / Not Assigned rows in this period."
+          : id === "guest"
+            ? "No deliveries/proforma for Admin Guest Exp advisors in this period."
+            : "No delivered or proforma activity in this period.";
+      return { icon: "○", title: "No activity", tip: emptyTip };
+    }
+    if (tips[id]) {
+      if (delivered >= proforma && delivered > 0 && id !== "b2c") {
+        return { icon: "★", title: "Strong delivery conversion", tip: tips[id].tip };
+      }
+      if (proforma > delivered * 1.5) {
+        return { icon: "◎", title: "Proforma pipeline building", tip: tips[id].tip };
+      }
+      return tips[id];
+    }
+    if (delivered >= proforma && delivered > 0) return { icon: "★", title: "Strong delivery conversion", tip: "Keep closing the gap." };
+    if (proforma > delivered * 1.5) return { icon: "◎", title: "Proforma pipeline building", tip: "Focus on conversion." };
+    return { icon: "◆", title: "Good momentum", tip: "Stay the course." };
+  }
+
+  let dvpView = { showroom: "", model: "" };
+
+  function dvpSaleShowroom(r) {
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const meta = employeeMeta(salesmanName);
+    const plant = cellToString(r.plant || r.Plant || (meta && meta.plant) || "").trim();
+    return plant || "—";
+  }
+
+  function dvpSaleModel(r) {
+    const raw = cellToString(
+      r.product || r.Product || r.model || r.Model || r["Vehicle Model"] || r["vehicle model"] || ""
+    ).trim();
+    if (raw) return raw;
+    const blob = salesRowProductBlob(r);
+    return blob ? blob.split(/\s+/).slice(0, 4).join(" ") : "—";
+  }
+
+  function filterDvpSalesRows(rows) {
+    let list = rows || [];
+    if (dvpView.showroom) {
+      list = list.filter((r) => dvpSaleShowroom(r) === dvpView.showroom);
+    }
+    if (dvpView.model) {
+      list = list.filter((r) => dvpSaleModel(r) === dvpView.model);
+    }
+    return list;
+  }
+
+  function populateDvpFilters(rows) {
+    const showSel = $("#dvp-f-showroom");
+    const modelSel = $("#dvp-f-model");
+    const showrooms = [...new Set((rows || []).map(dvpSaleShowroom).filter((x) => x && x !== "—"))].sort((a, b) => a.localeCompare(b));
+    const models = [...new Set((rows || []).map(dvpSaleModel).filter((x) => x && x !== "—"))].sort((a, b) => a.localeCompare(b));
+    if (showSel) {
+      const cur = dvpView.showroom || "";
+      showSel.innerHTML = `<option value="">All Showrooms</option>` + showrooms.map((s) =>
+        `<option value="${escapeHtml(s)}"${s === cur ? " selected" : ""}>${escapeHtml(s)}</option>`
+      ).join("");
+      if (cur && !showrooms.includes(cur)) dvpView.showroom = "";
+    }
+    if (modelSel) {
+      const cur = dvpView.model || "";
+      const capped = models.slice(0, 120);
+      modelSel.innerHTML = `<option value="">All Models</option>` + capped.map((m) =>
+        `<option value="${escapeHtml(m)}"${m === cur ? " selected" : ""}>${escapeHtml(m)}</option>`
+      ).join("");
+      if (cur && !models.includes(cur)) dvpView.model = "";
+    }
+  }
+
+  function dvpActivityPeriod(live) {
+    if (!live) return "month";
+    const preset = live.preset || "";
+    // Summary channel board is month-to-date for Today / This month (rangeFrom→rangeTo).
+    // Only a custom single calendar day uses day-scoped counts.
+    if (preset === "today" || preset === "this_month" || preset === "last_month" || preset === "all") {
+      return "month";
+    }
+    if (preset === "custom") {
+      if (live.rangeFrom && live.rangeTo && !live.dayUsesRange
+        && sameCalendarDay(live.rangeFrom, live.rangeTo)) {
+        return "day";
+      }
+      return "month";
+    }
+    return "month";
+  }
+
+  function dvpPeriodLabel(live, period) {
+    const fmt = (d) => {
+      try {
+        return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      } catch {
+        return "";
+      }
+    };
+    if (!live) return "—";
+    if (period === "day") {
+      return (live.rangeTo && fmt(live.rangeTo))
+        || live.rangeLabel
+        || live.label
+        || "—";
+    }
+    // MTD / range: prefer explicit from–to so "Today" still shows Sep 1 – today
+    if (live.rangeFrom && live.rangeTo && !sameCalendarDay(live.rangeFrom, live.rangeTo)) {
+      const span = `${fmt(live.rangeFrom)} – ${fmt(live.rangeTo)}`;
+      if (live.preset === "today" || live.preset === "this_month") return `MTD · ${span}`;
+      return span;
+    }
+    return live.rangeLabel || live.reportMonthLabel || live.label || cellToString(live.now) || "—";
+  }
+
+  function buildDeliveredVsProformaSummary() {
+    const live = window._globalLivePeriod || ensureGlobalLivePeriod();
+    const prevMonthKey = live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : "");
+    const guestKeys = guestExpEmployeeKeys();
+    const allRows = slots.sales.rows || [];
+    populateDvpFilters(allRows);
+    const rows = filterDvpSalesRows(allRows);
+    // Channel board: Today / This month → MTD (rangeFrom→rangeTo); custom one day → that day
+    const period = dvpActivityPeriod(live);
+    const packed = collectDvpBuckets(rows, live, prevMonthKey, period, guestKeys);
+    const prevPacked = collectDvpBuckets(rows, live, prevMonthKey, "prev", guestKeys);
+    const cur = packed.counts;
+    const prev = prevPacked.counts;
+
+    const cards = [
+      {
+        id: "lexus",
+        title: "Lexus Sales",
+        subtitle: dvpLexusConsultantNames()[0] || "Hamid Saeed",
+        brand: "LEXUS",
+        theme: "lexus",
+        image: "../images/cars/lexus.jpg",
+        delivered: cur.lexus.delivered,
+        proforma: cur.lexus.proforma,
+        prevDelivered: prev.lexus.delivered,
+        prevProforma: prev.lexus.proforma,
+      },
+      {
+        id: "telesales",
+        title: "Telesales",
+        subtitle: "All other advisors (excludes B2C + Guest Exp)",
+        brand: "TOYOTA",
+        theme: "telesales",
+        image: "../images/cars/camry.png",
+        delivered: cur.telesales.delivered,
+        proforma: cur.telesales.proforma,
+        prevDelivered: prev.telesales.delivered,
+        prevProforma: prev.telesales.proforma,
+      },
+      {
+        id: "b2c",
+        title: "B2C Sales",
+        subtitle: dvpB2cConsultantNames().join(" · ") || "Controller users",
+        brand: "TOYOTA",
+        theme: "b2c",
+        image: "../images/cars/fortuner.png",
+        delivered: cur.b2c.delivered,
+        proforma: cur.b2c.proforma,
+        prevDelivered: prev.b2c.delivered,
+        prevProforma: prev.b2c.proforma,
+      },
+      {
+        id: "guest",
+        title: "Experience Automall",
+        subtitle: "Guest Experience Center",
+        brand: "TOYOTA",
+        theme: "guest",
+        image: "../images/cars/alj-register.png",
+        delivered: cur.guest.delivered,
+        proforma: cur.guest.proforma,
+        prevDelivered: prev.guest.delivered,
+        prevProforma: prev.guest.proforma,
+        guestCount: guestKeys.size,
+      },
+    ];
+
+    const totalDel = cards.reduce((s, c) => s + c.delivered, 0);
+    const totalPro = cards.reduce((s, c) => s + c.proforma, 0);
+    const prevDel = cards.reduce((s, c) => s + c.prevDelivered, 0);
+    const prevPro = cards.reduce((s, c) => s + c.prevProforma, 0);
+    // Delivered / (Delivered + Proforma)
+    const sum = totalDel + totalPro;
+    const ratio = sum > 0 ? (totalDel / sum) * 100 : null;
+    const prevSum = prevDel + prevPro;
+    const prevRatio = prevSum > 0 ? (prevDel / prevSum) * 100 : null;
+
+    return {
+      live,
+      cards,
+      lists: packed.lists,
+      totals: {
+        delivered: totalDel,
+        proforma: totalPro,
+        ratio,
+        delTrend: dvpTrendPct(totalDel, prevDel),
+        proTrend: dvpTrendPct(totalPro, prevPro),
+        ratioTrend: (ratio != null && prevRatio != null) ? (ratio - prevRatio) : null,
+      },
+    };
+  }
+
+  /** Previous page's calculation for a showroom/model filter (parity check in the Sales Control Center). */
+  function dvpReferenceSummary(showroom, model) {
+    const saved = dvpView;
+    dvpView = { showroom: showroom || "", model: model || "" };
+    try {
+      return buildDeliveredVsProformaSummary();
+    } finally {
+      dvpView = saved;
+    }
+  }
+
+  let salesControlSrc = null;
+  let salesControlTargetsRef = null;
+  let salesControlTargetsVer = 0;
+
+  /** Sales Raw rows + the existing channel / showroom / model / period rules, handed to SalesControl. */
+  function salesControlSource() {
+    const rows = hasSalesRaw() ? (slots.sales.rows || []) : [];
+    if (employeeTargets !== salesControlTargetsRef) {
+      salesControlTargetsRef = employeeTargets;
+      salesControlTargetsVer += 1;
+    }
+    const guestKeys = guestExpEmployeeKeys();
+    const guestSig = `${salesControlTargetsVer}:${[...guestKeys].sort().join("|")}:${dvpControllerSig()}`;
+    if (salesControlSrc && salesControlSrc.rows === rows && salesControlSrc.guestSig === guestSig) return salesControlSrc;
+    salesControlSrc = {
+      rows,
+      guestSig,
+      guestCount: guestKeys.size,
+      classify: (r) => ({ bucket: dvpBucketForSaleRow(r, guestKeys), showroom: dvpSaleShowroom(r), model: dvpSaleModel(r) }),
+      isDelivery: salesIsDeliveryInPeriod,
+      isProforma: salesIsProformaInPeriod,
+      vinRecord: dvpVinRecord,
+    };
+    return salesControlSrc;
+  }
+
+  function renderSummaryDashboard() {
+    if (activePanel !== "summary") return;
+    const host = $("#sales-host");
+    if (!host || !window.SalesControl) return;
+    if (host.parentNode !== document.body) document.body.appendChild(host);
+    window.SalesControl.render(host, salesControlSource(), {
+      live: window._globalLivePeriod || ensureGlobalLivePeriod(),
+      dateFilter: { ...globalDateFilter },
+      setDateFilter: (f) => {
+        const custom = f.preset === "custom";
+        globalDateFilter = { preset: f.preset || "today", from: custom ? f.from : "", to: custom ? f.to : "" };
+        saveGlobalDateFilter();
+        globalDateStale = true;
+        return ensureGlobalLivePeriod();
+      },
+      periodOf: dvpActivityPeriod,
+      periodLabel: dvpPeriodLabel,
+      prevMonthKeyOf: (live) => live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : ""),
+      trendPct: dvpTrendPct,
+      statusFor: dvpStatusFor,
+      inferSalesType,
+      salesTypeGroups: (live, prevMonthKey) => collectSalesReportDeliveries(live, prevMonthKey),
+      salesTypeRecord: (r) => {
+        const rec = dvpVinRecord(r);
+        const bucket = dvpBucketForSaleRow(r, guestExpEmployeeKeys());
+        rec.channel = { lexus: "Lexus", telesales: "Telesales", b2c: "B2C", guest: "Automall" }[bucket] || "—";
+        return rec;
+      },
+      formatDate: formatRvDate,
+      dateBounds: () => {
+        const b = salesDateBounds(slots.sales.rows || []);
+        return { min: toIsoDateInput(b.min), max: toIsoDateInput(b.max) };
+      },
+      channelTargets,
+      accessoriesFor: (period) => accessoriesChannelSplit(period),
+      lastUpdated: Number(Store.readDataPushStamp().at) || 0,
+      onRefresh: () => refreshFromAdmin("Sales refreshed", { force: true }),
+      onExit: () => {
+        const others = visiblePanels().filter((p) => p.id !== "summary").map((p) => p.id);
+        switchPanel(others.includes(panelBeforeSummary) ? panelBeforeSummary : (others[0] || "dashboard"));
+      },
+      reference: dvpReferenceSummary,
+    });
+  }
+
+  refreshDvpControllerUsers();
+
+  function exportIccExcel() {
+    const dataset = getInventoryCommandDataset();
+    if (!dataset || !window.InventoryCommandCenter) {
+      setStatus("No Summary data to export", "err");
+      return;
+    }
+    const ICC = window.InventoryCommandCenter;
+    let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
+    filtered = iccApplyKpiFilter(filtered);
+    const sorted = iccSortRows(filtered);
+    const k = dataset.kpis || {};
+
+    const wb = XLSX.utils.book_new();
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total Back Orders", val: k.totalBackOrders, sub: "open BO demand · BO file" },
+      { label: "Available Stock", val: k.availableStock, sub: "RTL + E-Sales file VINs" },
+      { label: "Stock Coverage %", val: k.stockCoveragePct != null ? `${Math.round(k.stockCoveragePct)}%` : "N/A", sub: "Available ÷ BO" },
+      { label: "Total Sales", val: k.totalSales, sub: "Sales Raw period" },
+      { label: "Sales Velocity", val: k.salesVelocity != null ? Number(k.salesVelocity).toFixed(2) : "N/A", sub: "units / day" },
+      { label: "Critical Vehicles", val: k.criticalVehicles, sub: "low coverage + high demand" },
+      { label: "Healthy", val: k.healthyVehicles, sub: "healthy coverage + velocity" },
+      { label: "Slow Moving", val: k.slowMovingVehicles, sub: "high ageing + low velocity" },
+      { label: "Overstock quadrant", val: k.overstockVehicles, sub: "low demand · high stock" },
+    ].filter((x) => x.val !== undefined && x.val !== null));
+
+    appendObjectSheet(wb, "Inventory Command Center", ICC.rowsToExcel(sorted));
+
+    const insightRows = [];
+    (dataset.insights || []).forEach((block) => {
+      (block.items || []).forEach((item) => {
+        insightRows.push({ Section: block.title || "Insight", Detail: item });
+      });
+      if (!(block.items || []).length) {
+        insightRows.push({ Section: block.title || "Insight", Detail: "No signal" });
+      }
+    });
+    appendObjectSheet(wb, "Inventory Insights", insightRows);
+
+    const mode = iccView.mode === "ageing" ? "ageing" : "coverage";
+    const points = ICC.toChartPoints(sorted, mode, dataset.config);
+    appendObjectSheet(wb, mode === "ageing" ? "Ageing vs Velocity Chart" : "Demand vs Coverage Chart", points.map((p) => ({
+      Product: (p.meta && p.meta.product) || "",
+      Suffix: (p.meta && p.meta.suffix) || "",
+      Year: (p.meta && p.meta.year) || "",
+      X: p.x,
+      Y: p.y,
+      Bubble: p.r,
+      Quadrant: (p.meta && p.meta.quadrant) || "",
+      "Back Orders": (p.meta && p.meta.backOrders) || "",
+      Stock: (p.meta && p.meta.availableStock) || "",
+      Velocity: (p.meta && p.meta.salesVelocity) || "",
+      Coverage: (p.meta && p.meta.stockCoverageDisplay) || "",
+    })));
+
+    appendObjectSheet(wb, "Data Quality", (() => {
+      const dq = dataset.dataQuality || {};
+      const src = dq.sourceRows || {};
+      return [
+        ...Object.entries(src).map(([k, v]) => ({ Metric: `Source · ${k}`, Value: v })),
+        { Metric: "Duplicate VINs", Value: dq.duplicateVins },
+        { Metric: "Missing product", Value: dq.missingProduct },
+        { Metric: "Missing suffix", Value: dq.missingSuffix },
+        { Metric: "Matched configs", Value: dq.matchedConfigs },
+      ];
+    })());
+    downloadWorkbook(wb, `Summary-Dashboard-${excelFileStamp()}`);
+    setStatus(`Summary Excel exported · ${formatNumber(filtered.length)} configs · section sheets`, "ok");
+  }
+
+  function formatRvDate(value) {
+    const d = parseDate(value);
+    if (!d) return cellToString(value).trim() || "—";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function buildEsalesStockVinLookup() {
+    const byVin = new Map();
+    extractEsalesColorStock(slots.central.rows || []).forEach((s) => {
+      const vin = extractVinValue(s.vin) || upperTrim(s.vin);
+      if (!vin) return;
+      if (!byVin.has(vin)) byVin.set(vin, s);
+    });
+    return byVin;
+  }
+
+  /** RTL slot VINs for reserved tracker — all rows with a VIN (no color-match status filter). */
+  function buildRtlStockVinLookup() {
+    const byVin = new Map();
+    (slots.rtl.rows || []).forEach((r, idx) => {
+      const vin = extractVinValue(cellByLetter(r, "E"))
+        || extractVinValue(r.vin)
+        || extractVinValue(stockFieldByAlias(r, "vin", []))
+        || upperTrim(cellToString(r.vin));
+      if (!vin) return;
+      if (byVin.has(vin)) return;
+      const secondaryStatus = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r) || "";
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || cellToString(cellByLetter(r, "M")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", [])
+        || "";
+      const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "D")).trim() || "";
+      const product = cellToString(cellByLetter(r, "B")).trim()
+        || stockFieldByAlias(r, "product", [])
+        || "";
+      const suffix = normalizeProductSuffix(
+        product,
+        cellToString(cellByLetter(r, "G")).trim() || stockFieldByAlias(r, "suffix", []) || ""
+      );
+      const searchArea = cellToString(cellByLetter(r, "P")).trim()
+        || stockFieldByAlias(r, "searchAreaDesc", [])
+        || stockFieldByAlias(r, "vehicleSearchArea", [])
+        || "";
+      const ageingRaw = cellByLetter(r, "J")
+        || cellByLetter(r, "AF")
+        || cellByLetter(r, "O")
+        || stockFieldByAlias(r, "ageing", []);
+      const ageingNum = toNumber(ageingRaw);
+      const usage = cellToString(cellByLetter(r, "K")).trim() || stockFieldByAlias(r, "usage", []) || "";
+      byVin.set(vin, {
+        idx: `RTL-${idx}`,
+        source: "RTL",
+        vin,
+        product,
+        suffix,
+        secondaryStatus: secondaryStatus || "—",
+        location: location || "—",
+        status: status || "—",
+        searchArea: searchArea || "—",
+        ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
+        usage: usage || "—",
+        _raw: r,
+      });
+    });
+    return byVin;
+  }
+
+  function findRtlVinHit(rtlLookup, vin) {
+    if (!rtlLookup) return null;
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) return null;
+    if (rtlLookup.has(key)) return rtlLookup.get(key);
+    const tail = key.length >= 8 ? key.slice(-8) : key;
+    for (const [rv, row] of rtlLookup.entries()) {
+      if (rv === key) return row;
+      if (key.endsWith(rv) || rv.endsWith(key)) return row;
+      if (tail && rv.length >= 8 && rv.slice(-8) === tail) return row;
+    }
+    return null;
+  }
+
+  function rtlMissingDetail(rtl, car) {
+    if (!rtl && !car) return { inRtl: false, status: "Missing", statusDetail: "Not found in RTL file" };
+    const location = (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
+      || cellToString(car && car.location || "").trim()
+      || "";
+    const status = (rtl && rtl.status && rtl.status !== "—" ? rtl.status : "")
+      || (rtl && rtl.secondaryStatus && rtl.secondaryStatus !== "—" ? rtl.secondaryStatus : "")
+      || "In RTL";
+    const secondary = rtl && rtl.secondaryStatus && rtl.secondaryStatus !== "—" ? rtl.secondaryStatus : "";
+    const searchArea = (rtl && rtl.searchArea && rtl.searchArea !== "—" ? rtl.searchArea : "")
+      || (car && car.searchAreaDesc) || "";
+    const age = car && car.age != null ? car.age
+      : (car && car.ageing != null ? car.ageing
+        : (rtl && rtl.ageing != null ? rtl.ageing : null));
+    const bits = [
+      "RTL file",
+      status,
+      secondary && secondary !== status ? secondary : "",
+      searchArea,
+      location,
+      age != null ? `Age ${age}d` : "",
+      rtl && rtl.usage && rtl.usage !== "—" ? `Usage ${rtl.usage}` : "",
+    ].filter(Boolean);
+    return {
+      inRtl: true,
+      status: "Missing · RTL",
+      statusDetail: bits.join(" · "),
+      rtlStatus: status,
+      rtlSecondary: secondary,
+      rtlLocation: location,
+      rtlSearchArea: searchArea,
+      rtlUsage: rtl && rtl.usage && rtl.usage !== "—" ? rtl.usage : "",
+      age,
+    };
+  }
+
+  function reservedStockStatusDetail(stock, fallback) {
+    const secondary = cellToString(stock.secondaryStatus).trim();
+    const location = cellToString(stock.location).trim();
+    const primary = cellToString(stock.status).trim();
+    if (secondary && secondary !== "—") return secondary;
+    if (location && location !== "—") return location;
+    if (primary && primary !== "—") return primary;
+    return fallback;
+  }
+
+  function resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) {
+      return { kind: "empty", label: "No VIN", detail: "—", cls: "na", hasProforma: false };
+    }
+    let sales = salesLookup.get(key) || null;
+    if (!sales && salesLookup && salesLookup.size) {
+      const tail = key.length >= 8 ? key.slice(-8) : key;
+      for (const [sv, row] of salesLookup.entries()) {
+        if (sv === key || key.endsWith(sv) || sv.endsWith(key) || (tail && sv.slice(-8) === tail)) {
+          sales = row;
+          break;
+        }
+      }
+    }
+    if (sales) {
+      const hasProforma = !!(sales.proformaDate && parseDate(sales.proformaDate));
+      const hasDelivery = !!(sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate)) || sales.invoiced);
+      if (hasDelivery) {
+        return {
+          kind: "sales",
+          label: "Delivered",
+          detail: `Invoice/Delivery ${formatRvDate(sales.invoiceDate || sales.deliveryDate)}${hasProforma ? ` · Proforma ${formatRvDate(sales.proformaDate)}` : ""}`,
+          cls: "ok",
+          hasProforma,
+          proformaDate: sales.proformaDate,
+          deliveryDate: sales.deliveryDate || sales.invoiceDate,
+          salesman: sales.salesman || "",
+        };
+      }
+      if (hasProforma) {
+        return {
+          kind: "sales",
+          label: "Proforma",
+          detail: `Proforma ${formatRvDate(sales.proformaDate)}${sales.salesman ? ` · ${sales.salesman}` : ""}`,
+          cls: "warn",
+          hasProforma: true,
+          proformaDate: sales.proformaDate,
+          deliveryDate: sales.deliveryDate,
+          salesman: sales.salesman || "",
+        };
+      }
+      return {
+        kind: "sales",
+        label: "No Proforma",
+        detail: "In Sales Raw · no proforma / delivery date",
+        cls: "bad",
+        hasProforma: false,
+        salesman: sales.salesman || "",
+      };
+    }
+    const rtl = rtlLookup.get(key) || findRtlVinHit(rtlLookup, key);
+    if (rtl) {
+      return {
+        kind: "rtl",
+        label: "RTL Stock",
+        detail: reservedStockStatusDetail(rtl, "In RTL stock · no Sales Raw"),
+        cls: "info",
+        hasProforma: false,
+        secondaryStatus: cellToString(rtl.secondaryStatus).trim(),
+        location: cellToString(rtl.location).trim(),
+      };
+    }
+    const stock = stockLookup.get(key);
+    if (stock) {
+      return {
+        kind: "stock",
+        label: "E-Sales stock",
+        detail: reservedStockStatusDetail(stock, "In available stock · no Sales Raw"),
+        cls: "info",
+        hasProforma: false,
+        secondaryStatus: cellToString(stock.secondaryStatus).trim(),
+        location: cellToString(stock.location).trim(),
+      };
+    }
+    return {
+      kind: "missing",
+      label: "Not found",
+      detail: "Not in Sales Raw, RTL Stock, or All Retail available stock",
+      cls: "na",
+      hasProforma: false,
+    };
+  }
+
+  function getBoOrderLookupEngine() {
+    const Bo = window.BoOrderLookup;
+    if (!Bo) return null;
+    const rows = rawBoRows();
+    if (!rows.length) return null;
+    const headers = Array.isArray(rows[0].__headers) && rows[0].__headers.length
+      ? rows[0].__headers.slice()
+      : Object.keys(rows[0]).filter((k) => !String(k).startsWith("__"));
+    return new Bo(rows, headers);
+  }
+
+  function mapRvNextOrder(n, fallbackPos) {
+    if (!n) return null;
+    return {
+      orderNumber: n.orderNumber || "",
+      reservationDate: n.reservationDate || "",
+      product: n.product || "",
+      suffix: n.suffix || "",
+      salesman: n.salesman || findBoSalesmanForOrder(n.orderNumber) || "",
+      queuePosition: n.queuePosition != null ? n.queuePosition : fallbackPos,
+      pairs: Array.isArray(n.pairs) ? n.pairs : [],
+      fromPair: n.fromPair || "",
+    };
+  }
+
+  function findBoSalesmanForOrder(orderNumber) {
+    const needle = String(orderNumber || "").trim().toLowerCase();
+    if (!needle) return "";
+    const rows = rawBoRows();
+    if (!rows.length) return "";
+    const sample = rows[0];
+    const headers = Array.isArray(sample.__headers) ? sample.__headers : [];
+    const orderLetter = findHeaderLetter(sample, [
+      (n) => n.includes("back order") && n.includes("number"),
+      (n) => n === "back order number" || n === "bo number" || n === "order number",
+    ]) || "F";
+    const salesLetter = findHeaderLetter(sample, [
+      (n) => n === "salesman name" || n === "salesman" || n === "sales employee",
+      (n) => n.includes("salesman") || n.includes("sales employee") || n === "advisor",
+    ]);
+    for (let i = 0; i < rows.length; i += 1) {
+      const r = rows[i];
+      const on = cellToString(cellByLetter(r, orderLetter)).trim().toLowerCase().replace(/\.0+$/, "");
+      if (on !== needle && on.replace(/^0+/, "") !== needle.replace(/^0+/, "")) continue;
+      let name = "";
+      if (salesLetter) name = cellToString(cellByLetter(r, salesLetter)).trim();
+      if (!name) name = cellToString(r.salesman || "").trim();
+      return resolveSalesmanName(name) || name || "";
+    }
+    return "";
+  }
+
+  /** First 3 BO orders matching product + suffix + colors (lookup-tool combo queue). */
+  function resolveReservedFirstThreeMatching(queue) {
+    if (!queue) return [];
+    const preview = Array.isArray(queue.queuePreview) ? queue.queuePreview : [];
+    if (preview.length) {
+      return preview.slice(0, 3).map((n, i) => mapRvNextOrder({
+        ...n,
+        queuePosition: i + 1,
+        salesman: n.salesman || findBoSalesmanForOrder(n.orderNumber) || "",
+      }, i + 1));
+    }
+    // Spec match path already puts first 3 peers in nextInQueue when order is not in BO
+    if (queue.specMatched && Array.isArray(queue.nextInQueue) && queue.nextInQueue.length) {
+      return queue.nextInQueue.slice(0, 3).map((n, i) => mapRvNextOrder(n, i + 1));
+    }
+    return resolveReservedNextInQueue(queue);
+  }
+
+  /** Prefer main BO queue next-3; fill gaps from largest color-pair queues. */
+  function resolveReservedNextInQueue(queue) {
+    if (!queue) return [];
+    const next = [];
+    const seen = new Set();
+    const pushAll = (list, fromPair) => {
+      (Array.isArray(list) ? list : []).forEach((n) => {
+        if (next.length >= 3) return;
+        const key = String(n.orderNumber || "").trim().toLowerCase();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        next.push(mapRvNextOrder({ ...n, fromPair: fromPair || n.fromPair || "" }, next.length + 1));
+      });
+    };
+    pushAll(queue.nextInQueue, "");
+    if (next.length < 3 && Array.isArray(queue.pairQueues)) {
+      const pairs = queue.pairQueues.slice().sort((a, b) => (b.totalQueueSize || 0) - (a.totalQueueSize || 0));
+      pairs.forEach((pq) => {
+        if (next.length >= 3) return;
+        const label = [pq.exterior, pq.interior].filter(Boolean).join("/") || "";
+        pushAll(pq.nextInQueue, label);
+      });
+    }
+    return next.slice(0, 3);
+  }
+
+  function findSalesRawDetailForVin(vin) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) return null;
+    const rows = slots.sales.rows || [];
+    let best = null;
+    for (let i = 0; i < rows.length; i += 1) {
+      const r = rows[i];
+      const rv = extractVinValue(r.vin) || upperTrim(cellToString(r.vin));
+      if (!rv) continue;
+      const match = rv === key || key.endsWith(rv) || rv.endsWith(key)
+        || (key.length >= 8 && rv.length >= 8 && key.slice(-8) === rv.slice(-8));
+      if (!match) continue;
+      const entry = {
+        vin: rv,
+        salesman: resolveSalesmanName(r._salesmanRaw || r.salesman),
+        product: cellToString(r.product || r.Product || "").trim(),
+        salesType: cellToString(r.salesType || "").trim(),
+        proformaDate: r.proformaDate,
+        deliveryDate: r.deliveryDate,
+        invoiceDate: r.invoiceDate || r.deliveryDate,
+        delivered: hasDeliveryDate(r),
+        invoiced: hasInvoiceDate(r),
+        location: cellToString(r.location).trim()
+          || cellToString(r["Allocated Location"]).trim()
+          || stockFieldByAlias(r, "location", [])
+          || "",
+        secondaryStatus: cellToString(r.secondaryStatus).trim(),
+        plant: cellToString(r.plant || "").trim(),
+      };
+      if (!best) best = entry;
+      if (entry.delivered && !best.delivered) best = entry;
+      if (!best.proformaDate && entry.proformaDate) best = { ...best, proformaDate: entry.proformaDate };
+      if (!best.salesman && entry.salesman) best = { ...best, salesman: entry.salesman };
+    }
+    return best;
+  }
+
+  function buildReservedVehicleRows() {
+    const reserved = slots.central.reservedRows || [];
+    const salesLookup = buildSalesVinLookup();
+    const rtlLookup = buildRtlStockVinLookup();
+    const stockLookup = buildEsalesStockVinLookup();
+    const engine = getBoOrderLookupEngine();
+    const queueCache = new Map();
+
+    return reserved.map((rec) => {
+      const orderNumber = String(rec.orderNumber || "").trim();
+      const vin = reservedVinFromCell(rec.vin);
+      const product = cellToString(rec.product).trim();
+      const suffix = normalizeProductSuffix(product, rec.suffix);
+      const ext = cellToString(rec.ext).trim();
+      const intc = cellToString(rec.int).trim();
+      const status = resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup);
+      const salesDetail = findSalesRawDetailForVin(vin);
+      const rtlDetail = findRtlVinHit(rtlLookup, vin);
+
+      let queue = null;
+      let queueError = "";
+      let orderDetails = null;
+      let matchMethod = "";
+      if (!orderNumber && !vin && !(product && suffix && ext && intc)) {
+        queueError = "Missing order / VIN / product-suffix-colors";
+      } else if (!engine) {
+        queueError = hasBackOrder() ? "BO lookup unavailable" : "Push Back Order for queue";
+      } else {
+        const cacheKey = [
+          orderNumber.toLowerCase(),
+          (vin || "").toLowerCase(),
+          upperTrim(product),
+          upperTrim(suffix),
+          upperTrim(ext),
+          upperTrim(intc),
+        ].join("|");
+        if (queueCache.has(cacheKey)) {
+          const cached = queueCache.get(cacheKey);
+          queue = cached && cached.queue ? cached.queue : null;
+          orderDetails = cached || null;
+          matchMethod = cached && cached.matchMethod ? cached.matchMethod : "";
+        } else {
+          try {
+            const found = typeof engine.lookupReservedVehicle === "function"
+              ? engine.lookupReservedVehicle({
+                orderNumber,
+                product,
+                suffix,
+                exteriorColor: ext,
+                interiorColor: intc,
+                vin,
+              })
+              : (orderNumber ? engine.lookupOrder(orderNumber) : null);
+            orderDetails = found || null;
+            queue = found && found.queue ? found.queue : null;
+            matchMethod = found && found.matchMethod ? found.matchMethod : (found ? "order" : "");
+          } catch (err) {
+            queue = null;
+            orderDetails = null;
+            matchMethod = "";
+          }
+          queueCache.set(cacheKey, orderDetails);
+        }
+        if (!queue) {
+          queueError = "No BO match for order / VIN / product+suffix+colors";
+        } else if (queue.specMatched && !queue.inBoFile && (queue.queueResult && queue.queueResult.position == null)) {
+          queueError = ""; // spec queue still shown (peer orders)
+        }
+      }
+
+      const qr = queue && queue.queueResult ? queue.queueResult : null;
+      let comboQueue = null;
+      if (engine && product && suffix && ext && intc && typeof engine.buildQueueFromVehicleSpec === "function") {
+        try {
+          comboQueue = engine.buildQueueFromVehicleSpec({
+            product,
+            suffix,
+            exteriorColor: ext,
+            interiorColor: intc,
+            orderNumber,
+          });
+        } catch {
+          comboQueue = null;
+        }
+      }
+      // First 3 BO orders with same product + suffix + colors (lookup tool logic)
+      const nextInQueue = resolveReservedFirstThreeMatching(comboQueue || queue);
+      const pairQueues = (comboQueue && Array.isArray(comboQueue.pairQueues) ? comboQueue.pairQueues : null)
+        || (queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : []);
+      const values = (comboQueue && comboQueue.values)
+        || (queue && queue.values ? queue.values : null);
+      const inBoQueue = qr && qr.position != null;
+      const comboTotal = comboQueue && comboQueue.queueResult
+        ? comboQueue.queueResult.totalQueueSize
+        : (qr && qr.totalQueueSize != null ? qr.totalQueueSize : null);
+
+      return {
+        orderNumber,
+        vin,
+        salesman: findBoSalesmanForOrder(orderNumber)
+          || (salesDetail && (salesDetail.salesman || salesDetail._salesmanRaw))
+          || "",
+        status,
+        queue,
+        comboQueue,
+        orderDetails,
+        queueError,
+        matchMethod,
+        position: qr && qr.position != null ? qr.position : (comboQueue && comboQueue.queueResult && comboQueue.queueResult.position != null ? comboQueue.queueResult.position : null),
+        ordersAhead: qr && qr.ordersAhead != null ? qr.ordersAhead : (comboQueue && comboQueue.queueResult ? comboQueue.queueResult.ordersAhead : null),
+        totalQueue: comboTotal != null ? comboTotal : (qr && qr.totalQueueSize != null ? qr.totalQueueSize : null),
+        product: product || (qr ? qr.product : "") || (values ? values.product : "") || "",
+        suffix: suffix || (qr ? qr.suffix : "") || (values ? values.suffix : "") || "",
+        ext: ext || (values ? values.extColor1 : "") || "",
+        int: intc || (values ? values.intColor1 : "") || "",
+        location: rec.location || "",
+        searchArea: rec.searchArea || "",
+        sheet: rec.sheet || slots.central.reservedSheet || "",
+        nextInQueue,
+        pairQueues,
+        salesDetail,
+        rtlDetail,
+        reservationDate: qr ? qr.reservationDate : (values ? values.reservationDate : ""),
+        inBoQueue: !!inBoQueue,
+        specQueueOnly: !!(queue && queue.specMatched && !inBoQueue) || !!(comboQueue && !inBoQueue),
+        _raw: rec._raw || null,
+        rawIdx: rec.idx,
+      };
+    });
+  }
+
+  let rvView = { search: "", status: "" };
+
+  function filteredReservedVehicleRows() {
+    const q = String(rvView.search || "").trim().toLowerCase();
+    const st = String(rvView.status || "").trim();
+    const rows = buildReservedVehicleRows();
+    const filtered = rows.filter((r) => {
+      if (st === "proforma" && !(r.status && r.status.hasProforma && r.status.label === "Proforma")) return false;
+      if (st === "noproforma" && !(r.status && r.status.label === "No Proforma")) return false;
+      if (st === "delivered" && !(r.status && r.status.label === "Delivered")) return false;
+      if (st === "rtl" && !(r.status && r.status.kind === "rtl")) return false;
+      if (st === "missing" && !(r.status && (r.status.kind === "missing" || r.status.kind === "empty"))) return false;
+      if (st === "queue" && r.position == null) return false;
+      if (st === "noqueue" && r.position != null) return false;
+      if (!q) return true;
+      const hay = [
+        r.orderNumber, r.vin, r.product, r.suffix, r.ext, r.int,
+        r.status && r.status.label, r.status && r.status.detail,
+      ].map((x) => String(x || "").toLowerCase()).join(" ");
+      return hay.includes(q);
+    });
+    // In-queue BO matches first (by rank), then remaining reserved rows
+    return filtered.slice().sort((a, b) => {
+      const aQ = a.position != null ? 0 : 1;
+      const bQ = b.position != null ? 0 : 1;
+      if (aQ !== bQ) return aQ - bQ;
+      if (a.position != null && b.position != null && a.position !== b.position) {
+        return a.position - b.position;
+      }
+      return String(a.orderNumber || "").localeCompare(String(b.orderNumber || ""), undefined, { numeric: true });
+    });
+  }
+
+  let rvBoardOrders = {};
+  let rvHistoryPage = 1;
+  let rvSheetMode = "live";
+
+  function rvPad(n) { return String(n).padStart(2, "0"); }
+  function rvRemain(deadline) {
+    const end = new Date(deadline || "").getTime();
+    if (!Number.isFinite(end)) return "";
+    const ms = end - Date.now();
+    if (ms <= 0) return "EXPIRED";
+    const total = Math.floor(ms / 1000);
+    return `${rvPad(Math.floor(total / 3600))}:${rvPad(Math.floor((total % 3600) / 60))}:${rvPad(total % 60)}`;
+  }
+  function rvTimerText(dateText, deadline) {
+    if (!dateText) return "—";
+    const remain = rvRemain(deadline);
+    return remain ? `${dateText} ( ${remain} )` : dateText;
+  }
+  function rvQueueOrderAt(order, tier) {
+    const list = Array.isArray(order.queueOrders) && order.queueOrders.length
+      ? order.queueOrders
+      : (Array.isArray(order.ahead) ? order.ahead : []);
+    return list[tier - 1] || null;
+  }
+  function rvQueueOrderHtml(order, tier) {
+    const item = rvQueueOrderAt(order, tier);
+    const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : "";
+    if (!orderNo || orderNo === "NO ORDER") {
+      return `<span class="rv-q-box is-empty" title="No matching back order #${tier}">—</span>`;
+    }
+    const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : "";
+    const title = `Queue #${tier} · order ${orderNo}` + (who ? ` · ${who}` : "");
+    return `<span class="rv-q-box" title="${escapeHtml(title)}">${escapeHtml(orderNo)}</span>`;
+  }
+  function rvUpdatedBy(order) {
+    return order.statusNoteBy || order.statusChangedBy || order.leaderNoteBy || "";
+  }
+  function rvChannelOk(order) {
+    const area = String(order.area || "").toLowerCase();
+    const share = String(order.share || "").toLowerCase();
+    return area === "rtlesal" || share.includes("retail electronic sales");
+  }
+  function rvColumnVStatus(vin) {
+    if (!vin || typeof findSalesRawDetailForVin !== "function") return { label: "Unknown", cls: "na" };
+    const sales = findSalesRawDetailForVin(vin);
+    if (!sales) return { label: "Not Found", cls: "bad" };
+    const raw = sales.deliveryDate || sales.delivered || "";
+    if (String(raw).trim() && String(raw).trim() !== "—" && String(raw).trim() !== "NA") return { label: "Delivered", cls: "ok" };
+    return { label: "Proforma", cls: "warn" };
+  }
+  function rvCsv(rows) {
+    const header = ["Salesman", "Model year", "Customer", "Status", "Note", "Leader note", "Updated by", "Order", "Product", "Suffix", "Exterior", "Interior", "VIN", "Expiry", "Usage", "Age", "Area", "Share", "Queue 1", "Queue 2", "Queue 3"];
+    const lines = [header.join(",")].concat(rows.map((row) => header.map((key) => `"${String(row[key] == null ? "" : row[key]).replace(/"/g, '""')}"`).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "reserved-live-sheet.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+  function rvFindMarketing(id, orderNumber) {
+    const token = String(orderNumber || "").replace(/\s+/g, "").toLowerCase();
+    return ((rvBoardOrders && rvBoardOrders.requests) || []).find((item) => {
+      if (id && item.id === id) return true;
+      return !id && token && String(item.orderNumber || "").replace(/\s+/g, "").toLowerCase() === token;
+    }) || null;
+  }
+  function closeRvMarketingWide() {
+    const box = $("#rv-mkt-wide");
+    if (box) box.hidden = true;
+  }
+  function openRvMarketingWide(id, orderNumber) {
+    const item = rvFindMarketing(id, orderNumber);
+    const box = $("#rv-mkt-wide");
+    const title = $("#rv-mkt-wide-title");
+    const sub = $("#rv-mkt-wide-sub");
+    const body = $("#rv-mkt-wide-body");
+    const foot = $("#rv-mkt-wide-foot");
+    if (!item || !box || !body || !foot) return;
+    if (title) title.textContent = `Order ${item.orderNumber || ""}`;
+    if (sub) {
+      const stamp = item.cancelled
+        ? `Cancelled${item.cancelledDisplay ? " · " + item.cancelledDisplay : ""}`
+        : item.done
+          ? `Done${item.doneBy ? " · " + item.doneBy : ""}${item.doneDisplay ? " · " + item.doneDisplay : ""}`
+          : `Sent ${item.display || (item.at ? new Date(item.at).toLocaleString() : "—")}`;
+      sub.textContent = `${item.advisorName || "Advisor"}${item.product ? " · " + item.product : ""} · ${stamp}`;
+    }
+    const facts = [
+      ["Order number", item.orderNumber || "—"],
+      ["Advisor", item.advisorName || "—"],
+      ["Employee #", item.employeeNumber || "—"],
+      ["Product", item.product || "—"],
+      ["Sent", item.display || (item.at ? new Date(item.at).toLocaleString() : "—")],
+    ].concat((item.fields || []).map((field) => [field.label, field.value]));
+    body.innerHTML = facts.map(([label, value]) => `<div class="fact"><span>${escapeHtml(label)}</span><b dir="auto">${escapeHtml(value || "—")}</b></div>`).join("");
+    if (item.cancelled) {
+      foot.innerHTML = `<span class="rv-mkt-stamp" style="border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.12);color:#64748b">Cancelled</span>`;
+    } else if (item.done) {
+      foot.innerHTML = `<span class="rv-mkt-stamp" title="${escapeHtml(item.doneDisplay || item.doneAt || "")}">Done · ${escapeHtml(item.doneBy || "Leader")}</span>`;
+    } else {
+      foot.innerHTML = `<button type="button" class="rv-mkt-done-btn" data-rv-mkt-done="${escapeHtml(item.id || "")}" data-rv-mkt-order="${escapeHtml(item.orderNumber || "")}">Done</button>`;
+    }
+    box.hidden = false;
+  }
+  async function markRvMarketingDone(id, orderNumber, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "…";
+    }
+    try {
+      const res = await fetch("/api/reserved-orders/marketing/done", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: id || "", orderNumber: orderNumber || "", doneBy: "Leader" }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Could not stamp Done.");
+      closeRvMarketingWide();
+      await loadRvBoard(true);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Done";
+      }
+      alert(err.message || "Could not stamp Done.");
+    }
+  }
+
+  function paintRvLiveSheet(needle) {
+    const meta = $("#rv-live-meta");
+    const table = $("#rv-live-table");
+    const mkt = $("#rv-mkt-rows");
+    const mktCount = $("#rv-mkt-count");
+    const history = $("#rv-history");
+    if (!mkt || !history) return;
+    const data = rvBoardOrders || {};
+    const dash = $("#rv-dash");
+    if (dash) dash.classList.remove("is-snapshot");
+    const updated = $("#rv-updated");
+    if (updated) updated.textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No push yet";
+    if (meta) meta.textContent = `${data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No live push yet"} · ${data.esalesName || "Stock E-Sales"} · ${data.boName || "Back Order"} · same columns as reserved-orders admin`;
+    const q = String(needle || ($("#rv-search") || {}).value || "").trim().toLowerCase();
+    const orders = data.orders || [];
+    document.querySelectorAll("[data-rv-sheet]").forEach((btn) => {
+      btn.classList.toggle("is-on", btn.getAttribute("data-rv-sheet") === rvSheetMode);
+    });
+    const liveOrders = orders.filter((order) => !order.removed);
+    const removedOrders = orders.filter((order) => order.removed);
+    const kpis = $("#rv-kpis");
+    if (kpis) {
+      const counts = (data.movement && data.movement.counts) || {};
+      const delivered = removedOrders.filter((order) => order.soldKind === "delivered").length;
+      const proforma = removedOrders.filter((order) => order.soldKind === "proforma").length;
+      const cards = [
+        ["Live VINs", new Set(liveOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-live", "On the sheet now", '<path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2A2 2 0 0 1 19 7.5L21 13v5h-2.5M3 13v5h2.5M3 13h18"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>'],
+        ["Sold VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed", "Left the sheet", '<path d="M5 12.5l4.5 4.5L19 7.5"/>'],
+        ["Delivered", delivered, "rv-tone-live", "Invoiced · Sales Raw col V", '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.7"/><circle cx="17" cy="17.5" r="1.7"/>'],
+        ["Proforma", proforma, "rv-tone-mkt", "Sold, not invoiced yet", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'],
+        ["Marketing", (data.requests || []).filter((item) => !item.cancelled && !item.done).length, "rv-tone-amber", "Open orders", '<path d="M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6"/>'],
+        ["Reassigned", counts.reassigned || 0, "rv-tone-move", "Moved to another advisor", '<path d="M7 7h11l-3-3M17 17H6l3 3"/>'],
+      ];
+      kpis.innerHTML = cards.map(([label, value, tone, sub, ico]) => `<div class="bo-kpi ${tone}"><span class="rv-kico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ico}</svg></span><span class="lab">${escapeHtml(label)}</span><strong class="val">${escapeHtml(String(value))}</strong><span class="rv-ksub">${escapeHtml(sub)}</span></div>`).join("");
+    }
+    if (table) {
+      const pool = rvSheetMode === "removed" ? removedOrders : liveOrders;
+      const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.statusNote, order.leaderNote, order.suffix, order.soldLabel, order.soldKind, rvUpdatedBy(order)].join(" ").toLowerCase().includes(q));
+      const head = rvSheetMode === "removed"
+        ? ["Sold as", "Salesman name", "Customer name", "Order number", "Product", "VIN number", "Last status", "Invoice (V)", "Where"]
+        : ["Salesman name", "Model year", "Customer name", "Status", "Note", "Leader note", "Updated by", "Order number", "Product", "ALJ suffix", "Exterior color", "Interior color", "VIN", "Expiry date", "Usage", "Allocation age", "Area", "Share level", "Queue 1", "Queue 2", "Queue 3"];
+      table.innerHTML = shown.length
+        ? `<table><thead><tr>${head.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${shown.slice(0, 300).map((order) => {
+            if (rvSheetMode === "removed") {
+              return `<tr class="rv-row-removed" data-rv-sold="${escapeHtml(order.vin || "")}" style="cursor:pointer" title="Open RTL / Sales Raw row">
+                <td><strong>${escapeHtml(order.soldLabel || order.soldKind || "Sold")}</strong></td>
+                <td>${escapeHtml(order.salesAdvisor || "—")}</td>
+                <td>${escapeHtml(order.customerName || "—")}</td>
+                <td>${escapeHtml(order.orderNumber || "—")}</td>
+                <td>${escapeHtml(order.product || order.vehicle || "—")}</td>
+                <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+                <td>${escapeHtml(order.status || "—")}</td>
+                <td>${escapeHtml(order.invoiceDate || "—")}</td>
+                <td>${order.rtlFound ? "RTL" : "—"}${order.salesFound ? (order.rtlFound ? " + Sales Raw" : "Sales Raw") : ""}</td>
+              </tr>`;
+            }
+            const cancel = order.status === "الغاء";
+            const productCls = rvChannelOk(order) ? "" : " rv-cell-off";
+            const rowCls = [cancel ? "rv-row-cancel" : ""].filter(Boolean).join(" ");
+            const initialsOf = (name) => { const p = String(name || "").trim().split(/\s+/).filter(Boolean); return p.length ? ((p[0][0] || "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() : "?"; };
+            const hueOf = (name) => { let h = 0; String(name || "").split("").forEach((ch) => { h = (h * 31 + ch.charCodeAt(0)) % 360; }); return h; };
+            const expiryText = order.expiryDisplay || order.assignDate || "";
+            return `<tr class="${rowCls}">
+              <td><span class="rv-who"><span class="rv-av" style="--h:${hueOf(order.salesAdvisor)}">${escapeHtml(initialsOf(order.salesAdvisor))}</span><span>${escapeHtml(order.salesAdvisor || "—")}</span></span></td>
+              <td>${escapeHtml(order.modelYear || "—")}</td>
+              <td dir="auto">${escapeHtml(order.customerName || "—")}</td>
+              <td><span class="rv-st${cancel ? " is-cancel" : ""}">${escapeHtml(order.status || "—")}</span></td>
+              <td dir="auto" title="${escapeHtml(order.statusNote || "")}">${escapeHtml(order.statusNote || "—")}</td>
+              <td dir="auto" title="${escapeHtml(order.leaderNote || "")}">${escapeHtml(order.leaderNote || "—")}</td>
+              <td>${escapeHtml(rvUpdatedBy(order) || "—")}</td>
+              <td class="rv-ord">${escapeHtml(order.orderNumber || "—")}</td>
+              <td class="${productCls.trim()}">${escapeHtml(order.product || order.vehicle || "—")}</td>
+              <td>${escapeHtml(order.suffix || "—")}</td>
+              <td>${escapeHtml(order.exterior || "—")}</td>
+              <td>${escapeHtml(order.interior || "—")}</td>
+              <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+              <td class="rv-timer" data-date="${escapeHtml(expiryText)}" data-deadline="${escapeHtml(order.deadline || "")}">${escapeHtml(rvTimerText(expiryText, order.deadline))}</td>
+              <td>${escapeHtml(order.usage || "—")}</td>
+              <td>${escapeHtml(order.allocationAge || "—")}</td>
+              <td>${escapeHtml(order.area || "—")}</td>
+              <td>${escapeHtml(order.share || "—")}</td>
+              <td>${rvQueueOrderHtml(order, 1)}</td>
+              <td>${rvQueueOrderHtml(order, 2)}</td>
+              <td>${rvQueueOrderHtml(order, 3)}</td>
+            </tr>`;
+          }).join("")}</tbody></table>`
+        : `<p class="foot">${rvSheetMode === "removed" ? "No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw." : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
+    }
+    const mktQuery = String(($("#rv-mkt-search") || {}).value || "").trim().toLowerCase();
+    const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.display || item.at} ${item.doneBy || ""} ${(item.fields || []).map((f) => `${f.label} ${f.value}`).join(" ")}`.toLowerCase().includes(mktQuery));
+    if (mktCount) mktCount.textContent = requests.length
+      ? `${requests.filter((item) => !item.cancelled && !item.done).length} open · ${requests.filter((item) => item.done).length} done · Wide to check · Done for employee`
+      : "Wide to review · Done stamps the employee side";
+    mkt.innerHTML = requests.length
+      ? `<table><thead><tr><th>Order</th><th>Advisor</th><th>When</th><th>Actions</th></tr></thead><tbody>${requests.slice(0, 80).map((item) => {
+          const done = item.done === true;
+          const cancelled = item.cancelled === true;
+          const wideBtn = `<button type="button" class="rv-mkt-wide-btn" data-rv-mkt-wide="${escapeHtml(item.id || "")}" data-rv-mkt-order="${escapeHtml(item.orderNumber || "")}">Wide</button>`;
+          const status = cancelled
+            ? `<span class="rv-mkt-stamp" style="border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.12);color:#64748b">Cancelled</span>`
+            : done
+              ? `<span class="rv-mkt-stamp" title="${escapeHtml(item.doneDisplay || item.doneAt || "")}">Done · ${escapeHtml(item.doneBy || "Leader")}</span>`
+              : `<button type="button" class="rv-mkt-done-btn" data-rv-mkt-done="${escapeHtml(item.id || "")}" data-rv-mkt-order="${escapeHtml(item.orderNumber || "")}">Done</button>`;
+          return `<tr class="${cancelled ? "is-cancelled" : ""}${done ? " is-done" : ""}">
+          <td>${escapeHtml(item.orderNumber || "—")}</td>
+          <td>${escapeHtml(item.advisorName || "—")}</td>
+          <td>${escapeHtml(item.display || (item.at ? new Date(item.at).toLocaleString() : "—"))}</td>
+          <td><div class="rv-mkt-actions">${wideBtn}${status}</div></td>
+        </tr>`;
+        }).join("")}</tbody></table>`
+      : `<p class="foot">No marketing orders sent yet.</p>`;
+    const historyQuery = String(($("#rv-history-search") || {}).value || "").trim().toLowerCase();
+    const moveByVin = new Map(((data.movement && data.movement.rows) || []).map((row) => [String(row.vin || "").toUpperCase(), row]));
+    const assignments = orders.filter((order) => {
+      const move = moveByVin.get(String(order.vin || "").toUpperCase());
+      const hay = `${order.vin} ${order.salesAdvisor} ${order.orderNumber} ${order.status} ${move ? move.previousEmployee : ""}`;
+      return !historyQuery || hay.toLowerCase().includes(historyQuery);
+    });
+    const historyCount = $("#rv-history-count");
+    if (historyCount) historyCount.textContent = `${liveOrders.length} live · ${removedOrders.length} removed · who has the VIN on reserved orders`;
+    const pageSize = 10;
+    const pages = Math.max(1, Math.ceil(assignments.length / pageSize));
+    if (rvHistoryPage > pages) rvHistoryPage = pages;
+    const slice = assignments.slice((rvHistoryPage - 1) * pageSize, rvHistoryPage * pageSize);
+    history.innerHTML = slice.length
+      ? `<table><thead><tr><th>VIN</th><th>With</th><th>Order</th><th>Last status</th><th></th></tr></thead><tbody>${slice.map((order) => {
+          const move = moveByVin.get(String(order.vin || "").toUpperCase());
+          const was = move && move.previousEmployee && move.previousEmployee !== order.salesAdvisor ? move.previousEmployee : "";
+          return `<tr>
+          <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+          <td>${escapeHtml(order.salesAdvisor || "—")}${was ? `<div class="rv-was">was ${escapeHtml(was)}</div>` : ""}</td>
+          <td>${escapeHtml(order.orderNumber || "—")}</td>
+          <td>${escapeHtml(order.status || "—")}</td>
+          <td><span class="rv-move ${order.removed ? "rv-move-removed" : "rv-move-new"}">${order.removed ? "Removed" : "Live"}</span></td>
+        </tr>`;
+        }).join("")}</tbody></table>
+        <div class="rv-pager"><button type="button" data-rv-hist="-1" ${rvHistoryPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvHistoryPage} / ${pages}</span><button type="button" data-rv-hist="1" ${rvHistoryPage >= pages ? "disabled" : ""}>Next</button></div>`
+      : `<p class="foot">${data._error || "No VIN assignments on this sheet yet."}</p>`;
+  }
+
+  function bindRvBoardControls() {
+    const root = $("#rv-dash");
+    if (!root || root.dataset.rvBound) return;
+    root.dataset.rvBound = "1";
+    if (!root.dataset.rvClock) {
+      root.dataset.rvClock = "1";
+      setInterval(() => {
+        if (typeof activePanel !== "undefined" && activePanel !== "reservedvehicles") return;
+        root.querySelectorAll(".rv-timer").forEach((el) => {
+          el.textContent = rvTimerText(el.getAttribute("data-date") || "", el.getAttribute("data-deadline") || "");
+        });
+      }, 1000);
+    }
+    root.addEventListener("click", (e) => {
+      if (e.target === $("#rv-mkt-wide")) { closeRvMarketingWide(); return; }
+      if (e.target.closest("#rv-mkt-wide-close")) { closeRvMarketingWide(); return; }
+      const soldRow = e.target.closest("[data-rv-sold]");
+      if (soldRow) {
+        const vin = soldRow.getAttribute("data-rv-sold") || "";
+        const order = ((rvBoardOrders && rvBoardOrders.orders) || []).find((item) => String(item.vin || "").toUpperCase() === String(vin).toUpperCase() && item.removed);
+        const box = $("#rv-compare-result");
+        if (order && box) {
+          box.hidden = false;
+          const rtl = order.rtlDescription || (order.rtlFound ? "RTL row captured" : "Not in current RTL Stock");
+          const sales = order.salesDescription || (order.salesFound ? `Sales Raw${order.invoiceDate ? " · invoice " + order.invoiceDate : " · no col V invoice (proforma)"}` : "Not in current Sales Raw");
+          box.innerHTML = `<strong>${escapeHtml(order.soldLabel || "Sold")} · ${escapeHtml(vin)}</strong><br><b>RTL:</b> ${escapeHtml(rtl)}<br><b>Sales Raw:</b> ${escapeHtml(sales)}`;
+        }
+        return;
+      }
+      const sheetTab = e.target.closest("[data-rv-sheet]");
+      if (sheetTab) {
+        rvSheetMode = sheetTab.getAttribute("data-rv-sheet") || "live";
+        paintRvLiveSheet(($("#rv-live-search") || {}).value || "");
+        return;
+      }
+      const hist = e.target.closest("[data-rv-hist]");
+      if (hist) { rvHistoryPage += Number(hist.getAttribute("data-rv-hist")) || 0; paintRvLiveSheet(($("#rv-live-search") || {}).value || ""); return; }
+      const mktWide = e.target.closest("[data-rv-mkt-wide]");
+      if (mktWide) {
+        openRvMarketingWide(mktWide.getAttribute("data-rv-mkt-wide") || "", mktWide.getAttribute("data-rv-mkt-order") || "");
+        return;
+      }
+      const mktDone = e.target.closest("[data-rv-mkt-done]");
+      if (mktDone) {
+        if (mktDone.disabled) return;
+        markRvMarketingDone(mktDone.getAttribute("data-rv-mkt-done") || "", mktDone.getAttribute("data-rv-mkt-order") || "", mktDone);
+      }
+    });
+    const search = $("#rv-live-search");
+    if (search) search.addEventListener("input", () => paintRvLiveSheet(search.value));
+    const topSearch = $("#rv-search");
+    if (topSearch) topSearch.addEventListener("input", () => paintRvLiveSheet(topSearch.value));
+    const mktSearch = $("#rv-mkt-search");
+    if (mktSearch) mktSearch.addEventListener("input", () => paintRvLiveSheet(search ? search.value : ""));
+    const historySearch = $("#rv-history-search");
+    if (historySearch) historySearch.addEventListener("input", () => { rvHistoryPage = 1; paintRvLiveSheet(search ? search.value : ""); });
+    const refresh = $("#rv-refresh");
+    if (refresh) refresh.addEventListener("click", () => { loadRvBoard(true); });
+    const exit = $("#rv-exit");
+    if (exit) exit.addEventListener("click", () => {
+      closeRvMarketingWide();
+      if (typeof window.switchReportPanel === "function") window.switchReportPanel("salesreport");
+      else switchPanel("ytdsales");
+    });
+  }
+
+  async function loadRvBoard(force) {
+    bindRvBoardControls();
+    const search = $("#rv-live-search");
+    if (!force && rvBoardOrders._loaded) {
+      paintRvLiveSheet(search ? search.value : "");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reserved-orders/board");
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "board");
+      rvBoardOrders = payload;
+      rvBoardOrders._loaded = true;
+    } catch (err) {
+      rvBoardOrders = { orders: [], requests: [], pushes: [], movement: { counts: {}, rows: [] }, report: {}, _loaded: false, _error: err.message || "Live sheet is not available from this server yet." };
+      const meta = $("#rv-live-meta");
+      if (meta) meta.textContent = rvBoardOrders._error;
+    }
+    paintRvLiveSheet(search ? search.value : "");
+  }
+
+  function renderReservedVehiclesTracker() {
+    const empty = $("#rv-empty");
+    const dash = $("#rv-dash");
+    const wrap = $("#rv-table-wrap");
+    const foot = $("#rv-table-foot");
+    const kpis = $("#rv-kpis");
+    const hint = $("#rv-live-hint");
+    const sheetsEl = $("#rv-sheets");
+    if (!empty || !dash || !wrap) return;
+    empty.hidden = true;
+    empty.style.display = "none";
+    dash.hidden = false;
+    wrap.innerHTML = "";
+    if (sheetsEl) sheetsEl.innerHTML = "";
+    loadRvBoard(false);
+    return;
+
+    /* legacy local-sheet renderer kept below for reference; live board path returns above */
+    if (!hasReservedVehiclesInputs()) {
+      empty.hidden = false;
+      empty.style.display = "";
+      dash.hidden = true;
+      return;
+    }
+
+    empty.hidden = true;
+    empty.style.display = "none";
+    dash.hidden = false;
+    loadRvBoard(false);
+
+    const sheetName = slots.central.reservedSheet || "E-Sales المحجوز";
+    const sheetNames = Array.isArray(slots.central.sheetNames) ? slots.central.sheetNames : [];
+    const allRows = buildReservedVehicleRows();
+    const rows = filteredReservedVehicleRows();
+    const withQueue = allRows.filter((r) => r.position != null).length;
+    const withProforma = allRows.filter((r) => r.status && r.status.hasProforma && r.status.label === "Proforma").length;
+    const noProforma = allRows.filter((r) => r.status && r.status.label === "No Proforma").length;
+    const delivered = allRows.filter((r) => r.status && r.status.label === "Delivered").length;
+    const withRtl = allRows.filter((r) => r.status && r.status.kind === "rtl").length;
+    const missing = allRows.filter((r) => r.status && (r.status.kind === "missing" || r.status.kind === "empty")).length;
+
+    if (sheetsEl) {
+      if (!sheetNames.length) {
+        sheetsEl.innerHTML = `<span class="rv-sheet-chip is-active">${escapeHtml(sheetName)}</span>`;
+      } else {
+        sheetsEl.innerHTML = `<span class="rv-sheets-lab">Stock E-Sales sheets</span>` + sheetNames.map((n) => {
+          const active = n === sheetName;
+          const isReserved = /المحجوز/i.test(n);
+          const isDisplay = /display\s*central/i.test(n);
+          const isAvail = /المخزون\s*المتاح|all\s*retail/i.test(n);
+          const tag = active ? " · used" : (isReserved ? " · reserved" : (isDisplay ? " · display" : (isAvail ? " · available" : "")));
+          return `<span class="rv-sheet-chip${active ? " is-active" : ""}" title="${escapeHtml(n)}">${escapeHtml(n)}${escapeHtml(tag)}</span>`;
+        }).join("");
+      }
+    }
+
+    if (hint) {
+      hint.textContent = `${sheetName} · Col F/L/I/J/M/N → BO first 3 same product/suffix/colors · click VIN for all sheet columns · ${allRows.length} reserved · ${withQueue} in queue · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "missing"}`;
+    }
+
+    if (kpis) {
+      kpis.innerHTML = [
+        ["Reserved VINs", new Set(allRows.map((r) => String(r.vin || "").trim().toUpperCase()).filter(Boolean)).size, "tone-blue"],
+        ["In Queue", withQueue, "tone-blue"],
+        ["Delivered", allRows.filter((r) => rvColumnVStatus(r.vin).label === "Delivered").length, "tone-green"],
+        ["Proforma", allRows.filter((r) => rvColumnVStatus(r.vin).label === "Proforma").length, "tone-amber"],
+        ["Matched", allRows.filter((r) => { const s = rvColumnVStatus(r.vin).label; return s === "Delivered" || s === "Proforma"; }).length, "tone-violet"],
+        ["Reassigned VINs", (rvBoardOrders.movement && rvBoardOrders.movement.counts && rvBoardOrders.movement.counts.reassigned) || 0, "tone-red"],
+      ].map(([label, value, status]) => `
+        <div class="bo-kpi ${status}">
+          <div class="lab">${escapeHtml(label)}</div>
+          <div class="val">${escapeHtml(String(value))}</div>
+        </div>`).join("");
+    }
+
+    if (!rows.length) {
+      wrap.innerHTML = `<p class="foot" style="padding:16px">No reserved rows match the filters.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    window._rvRowsByVin = Object.fromEntries(
+      allRows.filter((r) => r.vin).map((r) => [r.vin, r])
+    );
+
+    const body = rows.map((r) => {
+      const nextSlots = [0, 1, 2].map((i) => r.nextInQueue[i] || null);
+      const hasNext = r.nextInQueue && r.nextInQueue.length;
+      const nextHtml = !hasNext
+        ? `<span class="rv-muted">${escapeHtml(r.queueError || "No BO orders with same product / suffix / colors")}</span>`
+        : `<ol class="rv-next-list">${nextSlots.map((n, i) => {
+            if (!n) {
+              return `<li class="rv-next-empty">
+                <span class="rv-next-rank">+${i + 1}</span>
+                <span class="rv-muted">No more matching orders</span>
+              </li>`;
+            }
+            const pairs = Array.isArray(n.pairs) && n.pairs.length
+              ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
+              : "";
+            const qPos = n.queuePosition != null ? `Q${n.queuePosition}` : `+${i + 1}`;
+            const salesEmp = n.salesman ? ` · ${n.salesman}` : "";
+            return `<li>
+              <span class="rv-next-rank">${escapeHtml(qPos)}</span>
+              <strong class="mono">${escapeHtml(n.orderNumber || "—")}</strong>${salesEmp ? `<span class="rv-sales-emp">${escapeHtml(salesEmp)}</span>` : ""}
+              <div class="rv-muted">${escapeHtml(n.product || "")}${n.suffix ? " · " + escapeHtml(n.suffix) : ""}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
+              <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}${n.fromPair ? " · pair " + escapeHtml(n.fromPair) : ""}</div>
+            </li>`;
+          }).join("")}</ol>`;
+
+      const pairHtml = r.pairQueues.length
+        ? `<div class="rv-pair-chips">${r.pairQueues.slice(0, 4).map((pq) =>
+            `<span class="rv-pair-chip" title="Tier ${escapeHtml(String(pq.tier ?? ""))}">
+              <b>Q${escapeHtml(String(pq.position ?? "—"))}</b>
+              ${escapeHtml(String(pq.exterior ?? ""))}/${escapeHtml(String(pq.interior ?? ""))}
+              <em>${escapeHtml(String(pq.totalQueueSize ?? "—"))}</em>
+            </span>`
+          ).join("")}</div>`
+        : "";
+
+      const matchNote = r.matchMethod === "vin" ? " · matched by VIN"
+        : r.matchMethod === "spec-order" ? " · matched by product/suffix/color"
+        : r.matchMethod === "spec" ? " · product/suffix/color queue"
+        : "";
+
+      const posLabel = r.position != null
+        ? `<span class="rv-pos">${escapeHtml(String(r.position))}</span>
+           <span class="rv-muted">of ${escapeHtml(String(r.totalQueue ?? "—"))} · ${escapeHtml(String(r.ordersAhead ?? 0))} ahead${escapeHtml(matchNote)}</span>
+           <div class="rv-muted">${escapeHtml(formatRvDate(r.reservationDate))}</div>`
+        : (r.specQueueOnly && (r.totalQueue != null || hasNext)
+          ? `<span class="rv-muted">Not in BO file · ${escapeHtml(String(r.totalQueue ?? 0))} in same product/suffix/color queue${escapeHtml(matchNote)}</span>`
+          : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`);
+
+      const colorLine = [r.ext, r.int].filter(Boolean).join(" / ");
+      const rowCls = [
+        r.status && r.status.label === "No Proforma" ? "rv-row-noprof" : "",
+        r.position != null ? "rv-row-inqueue" : "",
+      ].filter(Boolean).join(" ");
+
+      return `<tr class="${escapeHtml(rowCls)}">
+        <td>
+          <strong class="mono">${escapeHtml(r.orderNumber || "—")}</strong>
+          <div class="rv-muted">${escapeHtml(r.product || "—")}${r.suffix ? " · " + escapeHtml(r.suffix) : ""}</div>
+          ${colorLine ? `<div class="rv-muted">Ext/Int ${escapeHtml(colorLine)}</div>` : ""}
+        </td>
+        <td class="mono">${r.vin
+          ? `<button type="button" class="rv-vin-btn" data-rv-vin="${escapeHtml(r.vin)}" title="View VIN details">${escapeHtml(r.vin)}</button>`
+          : "—"}</td>
+        <td>${posLabel}${pairHtml}</td>
+        <td>${nextHtml}</td>
+        <td>
+          <span class="rv-status rv-status-${escapeHtml(r.status.cls)}">${escapeHtml(r.status.label)}</span>
+          <div class="rv-muted">${escapeHtml(r.status.detail || "")}</div>
+          <div class="rv-sales-raw">Sales Raw <span class="rv-status rv-status-${escapeHtml(rvColumnVStatus(r.vin).cls)}">${escapeHtml(rvColumnVStatus(r.vin).label)}</span></div>
+        </td>
+      </tr>`;
+    }).join("");
+
+    wrap.innerHTML = `<table class="data-table rv-table">
+      <thead>
+        <tr>
+          <th>Order (Col F) · Product I/J · Color M/N</th>
+          <th>VIN (Col L)</th>
+          <th>Current queue · BO lookup</th>
+          <th>First 3 · same product / suffix / colors</th>
+          <th>VIN status · Sales Raw</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>`;
+
+    if (foot) {
+      foot.textContent = `Showing ${rows.length} of ${allRows.length} · sheet «${sheetName}» · ${sheetNames.length} workbook sheet(s)`;
+    }
+  }
+
+  function openRvVinDetail(vin) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    const row = (window._rvRowsByVin && (window._rvRowsByVin[key] || window._rvRowsByVin[vin])) || null;
+    const titleEl = $("#aa-drill-title");
+    const subEl = $("#aa-drill-sub");
+    const bodyEl = $("#aa-drill-body");
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (!bodyEl || !drawer || !backdrop) return;
+
+    if (!row) {
+      if (titleEl) titleEl.textContent = key || "VIN";
+      if (subEl) subEl.textContent = "Reserved Vehicles";
+      bodyEl.innerHTML = `<p class="foot">No details found for this VIN.</p>`;
+      backdrop.classList.add("show");
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      return;
+    }
+
+    const sales = row.salesDetail || findSalesRawDetailForVin(row.vin);
+    const rtl = row.rtlDetail || null;
+    const values = (row.comboQueue && row.comboQueue.values)
+      || (row.queue && row.queue.values ? row.queue.values : null);
+    const nextSlots = [0, 1, 2].map((i) => row.nextInQueue[i] || null);
+    const ownSalesman = (sales && sales.salesman)
+      || findBoSalesmanForOrder(row.orderNumber)
+      || "";
+    const raw = row._raw || null;
+    const sheetHeaders = raw && Array.isArray(raw.__headers)
+      ? raw.__headers
+      : (raw ? Object.keys(raw).filter((k) => !String(k).startsWith("__")) : []);
+    const sheetCells = raw && Array.isArray(raw.__cells)
+      ? raw.__cells
+      : (raw ? sheetHeaders.map((h) => raw[h]) : []);
+
+    if (titleEl) titleEl.textContent = row.vin || "VIN";
+    if (subEl) {
+      subEl.textContent = [
+        row.orderNumber ? `Order ${row.orderNumber}` : "",
+        ownSalesman ? `Sales emp ${ownSalesman}` : "",
+        row.product || "",
+        row.suffix || "",
+        row.ext && row.int ? `${row.ext}/${row.int}` : "",
+        row.status && row.status.label ? row.status.label : "",
+      ].filter(Boolean).join(" · ");
+    }
+
+    const kv = (label, value) => `
+      <div class="rv-detail-row">
+        <span class="dk">${escapeHtml(label)}</span>
+        <span class="dv">${escapeHtml(value == null || value === "" ? "—" : String(value))}</span>
+      </div>`;
+
+    const nextBlock = nextSlots.map((n, i) => {
+      if (!n) {
+        return `<li class="rv-next-empty"><span class="rv-next-rank">+${i + 1}</span> <span class="rv-muted">No more matching orders</span></li>`;
+      }
+      const pairs = Array.isArray(n.pairs) && n.pairs.length
+        ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
+        : "";
+      const emp = n.salesman || findBoSalesmanForOrder(n.orderNumber) || "";
+      return `<li>
+        <span class="rv-next-rank">${escapeHtml(n.queuePosition != null ? "Q" + n.queuePosition : "+" + (i + 1))}</span>
+        <strong class="mono">${escapeHtml(n.orderNumber)}</strong>
+        ${emp ? `<span class="rv-sales-emp"> · ${escapeHtml(emp)}</span>` : ""}
+        <div class="rv-muted">${escapeHtml([n.product, n.suffix].filter(Boolean).join(" · "))}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
+        <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</div>
+      </li>`;
+    }).join("");
+
+    const sheetFieldRows = sheetHeaders.map((h, i) => {
+      const letter = indexToColLetter(i);
+      const value = formatBoeCellDisplay(sheetCells[i] != null ? sheetCells[i] : (raw ? raw[h] : ""));
+      return `<tr class="boe-detail-row">
+        <td class="boe-detail-letter mono">${escapeHtml(letter)}</td>
+        <td class="boe-detail-name">${escapeHtml(cellToString(h).trim() || `Column ${letter}`)}</td>
+        <td class="boe-detail-val">${escapeHtml(value)}</td>
+      </tr>`;
+    }).join("");
+
+    const sheetBlock = raw
+      ? `<h4 class="rv-detail-h">E-Sales sheet · all columns</h4>
+        <p class="aa-drill-note">Full row from «${escapeHtml(row.sheet || "E-Sales")}»</p>
+        <div class="table-wrap aa-drill-table-wrap boe-detail-wrap">
+          <table class="data-table aa-table boe-detail-table">
+            <thead>
+              <tr>
+                <th>Col</th>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>${sheetFieldRows}</tbody>
+          </table>
+        </div>`
+      : `<h4 class="rv-detail-h">E-Sales sheet · all columns</h4>
+        <p class="foot">Raw sheet row not available for this VIN.</p>`;
+
+    bodyEl.innerHTML = `
+      <div class="rv-detail">
+        <div class="rv-detail-status">
+          <span class="rv-status rv-status-${escapeHtml(row.status.cls)}">${escapeHtml(row.status.label)}</span>
+          <span class="rv-muted">${escapeHtml(row.status.detail || "")}</span>
+        </div>
+
+        ${sheetBlock}
+
+        <h4 class="rv-detail-h">E-Sales المحجوز · key fields</h4>
+        <div class="rv-detail-grid">
+          ${kv("Order (Col F)", row.orderNumber)}
+          ${kv("Sales employee", ownSalesman || "—")}
+          ${kv("VIN (Col L)", row.vin)}
+          ${kv("Product (Col I)", row.product)}
+          ${kv("Suffix (Col J)", row.suffix)}
+          ${kv("Ext color (Col M)", row.ext)}
+          ${kv("Int color (Col N)", row.int)}
+          ${kv("Location", row.location)}
+          ${kv("Search area", row.searchArea)}
+          ${kv("Sheet", row.sheet)}
+        </div>
+
+        <h4 class="rv-detail-h">BO lookup · first 3 same product / suffix / colors</h4>
+        <div class="rv-detail-grid">
+          ${kv("Position", row.position != null ? `${row.position} of ${row.totalQueue ?? "—"}` : (row.queueError || "—"))}
+          ${kv("Matching queue size", row.totalQueue != null ? row.totalQueue : "—")}
+          ${kv("Orders ahead", row.ordersAhead != null ? row.ordersAhead : "—")}
+          ${kv("Reservation date", formatRvDate(row.reservationDate))}
+          ${kv("Match product", values && values.product ? values.product : (row.product || "—"))}
+          ${kv("Match suffix", values && values.suffix ? values.suffix : (row.suffix || "—"))}
+          ${kv("Match colors", [row.ext || (values && values.extColor1), row.int || (values && values.intColor1)].filter(Boolean).join(" / ") || "—")}
+        </div>
+        <ol class="rv-next-list rv-detail-next">${nextBlock}</ol>
+
+        <h4 class="rv-detail-h">Sales Raw</h4>
+        <div class="rv-detail-grid">
+          ${kv("Sales employee", sales && sales.salesman ? sales.salesman : (ownSalesman || "—"))}
+          ${kv("Proforma (Col P)", sales && sales.proformaDate ? formatRvDate(sales.proformaDate) : "—")}
+          ${kv("Delivery / Invoice (Col V)", sales && (sales.invoiceDate || sales.deliveryDate) ? formatRvDate(sales.invoiceDate || sales.deliveryDate) : "—")}
+          ${kv("Product", sales && sales.product ? sales.product : "—")}
+          ${kv("Sales type", sales && sales.salesType ? sales.salesType : "—")}
+          ${kv("Location", sales && sales.location ? sales.location : "—")}
+          ${kv("Plant", sales && sales.plant ? sales.plant : "—")}
+          ${kv("In Sales Raw", sales ? "Yes" : "No")}
+        </div>
+
+        <h4 class="rv-detail-h">RTL Stock</h4>
+        <div class="rv-detail-grid">
+          ${kv("In RTL", rtl ? "Yes" : "No")}
+          ${kv("Status", rtl ? reservedStockStatusDetail(rtl, "In RTL") : "—")}
+          ${kv("Location", rtl && rtl.location ? rtl.location : "—")}
+          ${kv("Search area", rtl && rtl.searchArea ? rtl.searchArea : "—")}
+          ${kv("Usage", rtl && rtl.usage && rtl.usage !== "—" ? rtl.usage : "—")}
+        </div>
+      </div>`;
+
+    backdrop.classList.add("show");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+
+  function exportReservedVehiclesExcel() {
+    if (rvBoardOrders && Array.isArray(rvBoardOrders.orders) && rvBoardOrders.orders.length) {
+      const live = rvBoardOrders.orders.filter((order) => !order.removed);
+      rvCsv(live.map((order) => {
+        const q = (tier) => {
+          const item = rvQueueOrderAt(order, tier);
+          const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : "";
+          return !orderNo || orderNo === "NO ORDER" ? "" : orderNo;
+        };
+        return {
+          Salesman: order.salesAdvisor || "",
+          "Model year": order.modelYear || "",
+          Customer: order.customerName || "",
+          Status: order.status || "",
+          Note: order.statusNote || "",
+          "Leader note": order.leaderNote || "",
+          "Updated by": rvUpdatedBy(order) || "",
+          Order: order.orderNumber || "",
+          Product: order.product || order.vehicle || "",
+          Suffix: order.suffix || "",
+          Exterior: order.exterior || "",
+          Interior: order.interior || "",
+          VIN: order.vin || "",
+          Expiry: order.expiryDisplay || order.assignDate || "",
+          Usage: order.usage || "",
+          Age: order.allocationAge || "",
+          Area: order.area || "",
+          Share: order.share || "",
+          "Queue 1": q(1),
+          "Queue 2": q(2),
+          "Queue 3": q(3),
+        };
+      }));
+      setStatus(`Live sheet exported · ${live.length} rows`, "ok");
+      return;
+    }
+    if (!hasReservedVehiclesInputs()) {
+      setStatus("No reserved sheet data to export", "busy");
+      return;
+    }
+
+    function rvAgeValue(r) {
+      const rtl = r.rtlDetail;
+      if (rtl && rtl.ageing != null && Number.isFinite(Number(rtl.ageing))) return Number(rtl.ageing);
+      const raw = (rtl && rtl._raw) || null;
+      if (raw) {
+        const fromJ = toNumber(cellByLetter(raw, "J"));
+        if (Number.isFinite(fromJ) && fromJ >= 0) return Math.floor(fromJ);
+        const fromAf = toNumber(cellByLetter(raw, "AF") || cellByLetter(raw, "O"));
+        if (Number.isFinite(fromAf) && fromAf >= 0) return Math.floor(fromAf);
+      }
+      return "";
+    }
+
+    function rvModelYear(r) {
+      const rtl = r.rtlDetail;
+      if (rtl && rtl._raw) {
+        const y = cellToString(cellByLetter(rtl._raw, "C")).trim()
+          || stockFieldByAlias(rtl._raw, "modelYear", [])
+          || stockFieldByAlias(rtl._raw, "year", []);
+        if (y) return y;
+      }
+      const sales = r.salesDetail;
+      if (sales && sales.year) return sales.year;
+      const esRaw = r._raw;
+      if (esRaw) {
+        const y = cellToString(cellByLetter(esRaw, "K")).trim()
+          || stockFieldByAlias(esRaw, "modelYear", [])
+          || stockFieldByAlias(esRaw, "year", []);
+        if (y) return y;
+      }
+      return "";
+    }
+
+    const rows = buildReservedVehicleRows().map((r) => {
+      const employee = resolveSalesmanName(r.salesman)
+        || findBoSalesmanForOrder(r.orderNumber)
+        || (r.salesDetail && resolveSalesmanName(r.salesDetail.salesman || r.salesDetail._salesmanRaw))
+        || "";
+      const next1 = r.nextInQueue[0] || null;
+      const next2 = r.nextInQueue[1] || null;
+      const next3 = r.nextInQueue[2] || null;
+      const rtl = r.rtlDetail || null;
+      const sales = r.salesDetail || null;
+      const age = rvAgeValue(r);
+
+      const out = {
+        Order: r.orderNumber || "",
+        "Employee Name": employee || "",
+        VIN: r.vin || "",
+        Product: r.product || "",
+        Suffix: r.suffix || "",
+        "Model Year": rvModelYear(r),
+        Exterior: r.ext || "",
+        Interior: r.int || "",
+        Age: age === "" ? "" : age,
+        Location: r.location
+          || (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
+          || (sales && sales.location ? sales.location : "")
+          || "",
+        "Search Area": r.searchArea
+          || (rtl && rtl.searchArea && rtl.searchArea !== "—" ? rtl.searchArea : "")
+          || "",
+        "RTL Status": rtl ? (rtl.status && rtl.status !== "—" ? rtl.status : "") : "",
+        "RTL Secondary": rtl ? (rtl.secondaryStatus && rtl.secondaryStatus !== "—" ? rtl.secondaryStatus : "") : "",
+        Usage: rtl && rtl.usage && rtl.usage !== "—" ? rtl.usage : "",
+        "In RTL": rtl ? "Yes" : "No",
+        Sheet: r.sheet || "",
+        "Queue Position": r.position != null ? r.position : "",
+        "Orders Ahead": r.ordersAhead != null ? r.ordersAhead : "",
+        "Total Queue": r.totalQueue != null ? r.totalQueue : "",
+        "Reservation Date": r.reservationDate ? formatRvDate(r.reservationDate) : "",
+        "Next 1": next1 ? next1.orderNumber : "",
+        "Next 1 Employee": next1
+          ? (resolveSalesmanName(next1.salesman) || findBoSalesmanForOrder(next1.orderNumber) || "")
+          : "",
+        "Next 1 Detail": next1
+          ? `${next1.product || ""} ${next1.suffix || ""}`.trim()
+          : "",
+        "Next 2": next2 ? next2.orderNumber : "",
+        "Next 2 Employee": next2
+          ? (resolveSalesmanName(next2.salesman) || findBoSalesmanForOrder(next2.orderNumber) || "")
+          : "",
+        "Next 3": next3 ? next3.orderNumber : "",
+        "Next 3 Employee": next3
+          ? (resolveSalesmanName(next3.salesman) || findBoSalesmanForOrder(next3.orderNumber) || "")
+          : "",
+        "VIN Status": r.status && r.status.label ? r.status.label : "",
+        "Status Detail": r.status && r.status.detail ? r.status.detail : "",
+        "In Sales Raw": sales ? "Yes" : "No",
+        "Sales Employee": sales && sales.salesman ? sales.salesman : (employee || ""),
+        "Sales Product": sales && sales.product ? sales.product : "",
+        "Sales Type": sales && sales.salesType ? sales.salesType : "",
+        Plant: sales && sales.plant ? sales.plant : "",
+        "Sales Location": sales && sales.location ? sales.location : "",
+        Proforma: r.status && r.status.hasProforma ? "Yes" : "No",
+        "Proforma Date": (r.status && r.status.proformaDate)
+          ? formatRvDate(r.status.proformaDate)
+          : (sales && sales.proformaDate ? formatRvDate(sales.proformaDate) : ""),
+        "Delivery / Invoice Date": sales && (sales.invoiceDate || sales.deliveryDate)
+          ? formatRvDate(sales.invoiceDate || sales.deliveryDate)
+          : "",
+        "Queue Note": r.queueError || "",
+      };
+
+      // Append every E-Sales المحجوز sheet column for full car info
+      const raw = r._raw || null;
+      if (raw) {
+        const headers = Array.isArray(raw.__headers) && raw.__headers.length
+          ? raw.__headers
+          : Object.keys(raw).filter((k) => !String(k).startsWith("__"));
+        const cells = Array.isArray(raw.__cells) ? raw.__cells : headers.map((h) => raw[h]);
+        headers.forEach((h, i) => {
+          const letter = indexToColLetter(i);
+          const name = cellToString(h).trim() || `Column ${letter}`;
+          const key = `E-Sales ${letter} · ${name}`;
+          if (Object.prototype.hasOwnProperty.call(out, key)) return;
+          out[key] = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+        });
+      }
+
+      // Append RTL sheet columns when VIN is found there
+      if (rtl && rtl._raw) {
+        const raw = rtl._raw;
+        const headers = Array.isArray(raw.__headers) && raw.__headers.length
+          ? raw.__headers
+          : Object.keys(raw).filter((k) => !String(k).startsWith("__"));
+        const cells = Array.isArray(raw.__cells) ? raw.__cells : headers.map((h) => raw[h]);
+        headers.forEach((h, i) => {
+          const letter = indexToColLetter(i);
+          const name = cellToString(h).trim() || `Column ${letter}`;
+          const key = `RTL ${letter} · ${name}`;
+          if (Object.prototype.hasOwnProperty.call(out, key)) return;
+          out[key] = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+        });
+      }
+
+      return out;
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Reserved Vehicles");
+    downloadWorkbook(wb, `Reserved-Vehicles-${excelFileStamp()}`);
+    setStatus("Reserved Vehicles Excel exported", "ok");
+  }
+
+  function buildReservedVinSet() {
+    const set = new Set();
+    (slots.central.reservedRows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin) || upperTrim(r.vin);
+      if (vin) set.add(vin);
+    });
+    return set;
+  }
+
+  function buildDisplayVinLookup() {
+    const byVin = new Map();
+    const byTail = new Map();
+    (slots.central.displayRows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin) || upperTrim(r.vin);
+      if (!vin) return;
+      if (!byVin.has(vin)) byVin.set(vin, r);
+      const tail = vin.length >= 8 ? vin.slice(-8) : vin;
+      if (tail && !byTail.has(tail)) byTail.set(tail, r);
+    });
+    return { byVin, byTail };
+  }
+
+  /** Match full VIN or chassis tail against Display Central 1 (available rows only when requireAvailable). */
+  function findDisplayVinHit(lookup, vin, { requireAvailable = true } = {}) {
+    if (!lookup || !lookup.byVin) return null;
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) return null;
+    const ok = (row) => row && (!requireAvailable || row.available);
+    const direct = lookup.byVin.get(key);
+    if (ok(direct)) return direct;
+    const tail = key.length >= 8 ? key.slice(-8) : key;
+    const byTail = lookup.byTail.get(tail);
+    if (ok(byTail)) return byTail;
+    // Reverse: Display row may store a shorter chassis that is a suffix of the RTL VIN
+    for (const [dv, row] of lookup.byVin.entries()) {
+      if (!ok(row)) continue;
+      if (key.endsWith(dv) || dv.endsWith(key)) return row;
+      if (key.length >= 8 && dv.length >= 8 && key.slice(-8) === dv.slice(-8)) return row;
+    }
+    return null;
+  }
+
+  function resolveAaSalesStatus(vin, salesLookup) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    const sales = salesLookup.get(key);
+    if (!sales) {
+      return {
+        kind: "none",
+        label: "Not in Sales Raw",
+        detail: "No proforma / invoice date",
+        cls: "na",
+        salesman: "",
+        proformaDate: null,
+        invoiceDate: null,
+        deliveryDate: null,
+        location: "",
+        secondaryStatus: "",
+      };
+    }
+    const salesman = sales.salesman || "";
+    const location = sales.location || "";
+    const secondaryStatus = sales.secondaryStatus || "";
+    if (sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate)) || sales.invoiced) {
+      return {
+        kind: "delivered",
+        label: "Delivered / Invoiced",
+        detail: `Invoice ${formatRvDate(sales.invoiceDate || sales.deliveryDate)}`,
+        cls: "ok",
+        salesman,
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+        deliveryDate: sales.deliveryDate,
+        location,
+        secondaryStatus,
+      };
+    }
+    if (sales.proformaDate && parseDate(sales.proformaDate)) {
+      return {
+        kind: "proforma",
+        label: "Proforma",
+        detail: `Proforma ${formatRvDate(sales.proformaDate)}`,
+        cls: "warn",
+        salesman,
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate,
+        deliveryDate: sales.deliveryDate,
+        location,
+        secondaryStatus,
+      };
+    }
+    return {
+      kind: "sales",
+      label: secondaryStatus || "In Sales Raw",
+      detail: "No proforma / invoice date",
+      cls: "na",
+      salesman,
+      proformaDate: sales.proformaDate,
+      invoiceDate: sales.invoiceDate,
+      deliveryDate: sales.deliveryDate,
+      location,
+      secondaryStatus,
+    };
+  }
+
+  function rtlAgDateFromRaw(r) {
+    const raw = cellByLetter(r, "AG");
+    if (raw == null || raw === "") return null;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      const fromSerial = excelSerialToDate(raw);
+      if (fromSerial) return fromSerial;
+    }
+    const d = parseDate(raw);
+    if (d) return d;
+    const s = cellToString(raw).trim();
+    if (!s) return null;
+    // 2026-09 / 2026/09 / 09-2026 / Sep-26 / Sept 2026
+    let m = s.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?$/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    m = s.match(/^(\d{1,2})[-/.](\d{4})$/);
+    if (m) return new Date(Number(m[2]), Number(m[1]) - 1, 1);
+    m = s.match(/^([A-Za-z]{3,9})[-/\s]+(\d{2}|\d{4})$/);
+    if (m) {
+      const mon = Date.parse(`${m[1]} 1, ${m[2].length === 2 ? `20${m[2]}` : m[2]}`);
+      if (!Number.isNaN(mon)) {
+        const dt = new Date(mon);
+        return new Date(dt.getFullYear(), dt.getMonth(), 1);
+      }
+    }
+    return null;
+  }
+
+  function dayVehicleField(v, keys) {
+    if (!v) return "";
+    for (let i = 0; i < keys.length; i += 1) {
+      const k = keys[i];
+      if (v[k] != null && String(v[k]).trim() !== "") return cellToString(v[k]).trim();
+    }
+    const details = v.details && typeof v.details === "object" ? v.details : null;
+    if (!details) return "";
+    const want = keys.map((k) => normHeader(k));
+    for (const [hk, hv] of Object.entries(details)) {
+      const nh = normHeader(hk);
+      if (want.some((w) => nh === w || nh.includes(w))) {
+        const s = cellToString(hv).trim();
+        if (s) return s;
+      }
+    }
+    return "";
+  }
+
+  function dayVehicleSearchArea(v) {
+    return dayVehicleField(v, ["vehicleSearchArea", "searchAreaDesc", "search area desc", "vehicle search area desc", "search area"]);
+  }
+
+  function dayVehicleAgDate(v) {
+    if (!v) return null;
+    if (v.allocationDate != null && v.allocationDate !== "") {
+      if (typeof v.allocationDate === "number" && Number.isFinite(v.allocationDate)) {
+        const fromSerial = excelSerialToDate(v.allocationDate);
+        if (fromSerial) return fromSerial;
+      }
+      const direct = parseDate(v.allocationDate);
+      if (direct) return direct;
+    }
+    const details = v.details && typeof v.details === "object" ? v.details : null;
+    if (details) {
+      for (const [hk, hv] of Object.entries(details)) {
+        const nh = normHeader(hk);
+        if (nh.includes("allocation date") || nh === "alloc date" || nh === "ag") {
+          if (typeof hv === "number" && Number.isFinite(hv)) {
+            const fromSerial = excelSerialToDate(hv);
+            if (fromSerial) return fromSerial;
+          }
+          const d = parseDate(hv);
+          if (d) return d;
+        }
+      }
+    }
+    return null;
+  }
+
+  function closeAaVinDrill() {
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (drawer) {
+      drawer.classList.remove("open");
+      drawer.setAttribute("aria-hidden", "true");
+    }
+    if (backdrop) backdrop.classList.remove("show");
+  }
+
+  function paintIdleNav() {
+    if (document.querySelector("#panel-tabs button")) return;
+    const allowed = visiblePanels();
+    if (!Auth.isAdmin(currentUser) && !allowed.length) {
+      paintNoAccessState(allowed);
+      return;
+    }
+    switchPanel(allowed[0] ? allowed[0].id : "boerrors");
+    const titleEl = $("#app-page-title");
+    if (titleEl) titleEl.textContent = "Dashboard";
+    if (!window._data) {
+      const dash = $("#dashboard");
+      if (dash) {
+        dash.classList.remove("show");
+        dash.style.display = "none";
+      }
+      const wait = $("#wait-section");
+      if (wait) wait.style.display = "";
+      document.querySelectorAll("#panel-tabs .side-nav-item.active").forEach((b) => b.classList.remove("active"));
+    }
+  }
+
+  function buildDashboard(opts) {
+    const options = opts && typeof opts === "object" ? opts : {};
+    const progressive = options.progressive !== false;
+    showError("");
+    refreshTargetsFromAdmin();
+    if (LEXUS_VIEW) {
+      switchPanel("lexus");
+      return;
+    }
+    if (!hasAnyPushedFiles()) {
+      setStatus("Waiting for Admin Push");
+      if (GEC_VIEW) switchPanel("gec");
+      else {
+        switchPanel("boerrors");
+        const titleEl = $("#app-page-title");
+        if (titleEl) titleEl.textContent = "Dashboard";
+        const dash = $("#dashboard");
+        if (dash) {
+          dash.classList.remove("show");
+          dash.style.display = "none";
+        }
+        const wait = $("#wait-section");
+        if (wait) wait.style.display = "";
+      }
+      return;
+    }
+    invalidateRtlActiveMonthCache();
+    const d = data();
+    window._data = d;
+    globalDateStale = false;
+    const allowed = visiblePanels();
+    if (!Auth.isAdmin(currentUser) && !allowed.length) {
+      paintNoAccessState(allowed);
+      return;
+    }
+    $("#dashboard").classList.add("show");
+    $("#dashboard").style.display = "";
+    const navDash = $("#nav-dashboard");
+    if (navDash) navDash.disabled = false;
+    switchNav("dashboard");
+    const hasGec = !!(slots.gec && slots.gec.gec && slots.gec.gec.records && slots.gec.gec.records.length);
+    const onlyGec = hasGec && SLOT_DEFS.every((s) => s.id === "gec" || s.id === "gecVisitors" || !(slots[s.id] && slots[s.id].file));
+    if (activePanel === "gec" || onlyGec) activePanel = "gec";
+    else if (activePanel === "delivery") activePanel = "delivery";
+    else if (activePanel === "plantracker") activePanel = "plantracker";
+    else if (activePanel === "zonetracker") activePanel = "zonetracker";
+    else if (activePanel === "summary" && hasSummaryInputs()) activePanel = "summary";
+    else if (hasSalesReportInputs()) activePanel = "salesreport";
+    else if (hasBackOrder()) activePanel = "bodashboard";
+    else activePanel = "bodashboard"; // stock-only (or no preferred inputs) → BO Dashboard
+    if (!allowed.some((p) => p.id === activePanel)) {
+      activePanel = allowed[0] ? allowed[0].id : activePanel;
+    }
+    if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
+    switchPanel(activePanel);
+
+    const paintActive = () => {
+      if (activePanel === "gec") renderGecPanel();
+      else if (activePanel === "summary") renderSummaryDashboard();
+      else if (activePanel === "salesreport" && hasSalesReportInputs()) {
+        window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
+        renderSalesReportKpis(d.salesReport);
+        syncSrDateControls(d.salesReport);
+        refreshSalesSelection();
+      } else if (activePanel === "bodashboard" || activePanel === "boerrors" || activePanel === "boallocstock") {
+        // already rendered by switchPanel(activePanel) above
+      }
+      else if (activePanel === "stockdashboard") {
+        if (stockDashRenderedFor !== d) { stockDashRenderedFor = d; renderStockDashboard(); }
+      }
+      else if (activePanel === "reservedvehicles") {
+        rvBoardOrders = {};
+        renderReservedVehiclesTracker();
+      }
+      else ensureMainDashboard();
+      if (activePanel !== "salesreport") {
+        if (hasSalesReportInputs()) {
+          window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
+          syncSrDateControls(d.salesReport);
+        } else {
+          clearSalesReportUi();
+          window._globalLivePeriod = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
+          syncGlobalDateControls(window._globalLivePeriod);
+        }
+      }
+      setStatus(
+        hasBackOrder() || hasStockFiles() || hasSalesReportInputs()
+          ? "Live dashboard ready"
+          : "Dashboard ready · Push files from Admin",
+        "ok"
+      );
+    };
+
+    // Hidden panels are built by switchPanel when opened.
+    const paintRest = () => {
+      invalidateIccCache();
+      if (activePanel !== "summary" && hasSummaryInputs()) renderSummaryDashboard();
+      if (activePanel !== "salesreport") {
+        if (hasSalesReportInputs()) {
+          window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
+          renderSalesReportKpis(d.salesReport);
+          syncSrDateControls(d.salesReport);
+          refreshSalesSelection();
+        }
+      }
+      if (activePanel !== "summary" && hasSalesRaw() && window.SalesControl) {
+        window.SalesControl.prepare(salesControlSource());
+      }
+    };
+
+    paintActive();
+    if (progressive) {
+      setTimeout(paintRest, 0);
+    } else {
+      paintRest();
+    }
+  }
+
+  function clearAll() {
+    SLOT_DEFS.forEach((d) => {
+      slots[d.id] = { file: null, rows: [], name: "" };
+      if (d.id === "central") {
+        slots[d.id].reservedRows = [];
+        slots[d.id].reservedSheet = "";
+        slots[d.id].displayRows = [];
+        slots[d.id].displaySheet = "";
+        slots[d.id].sheetNames = [];
+        slots[d.id].availableSheet = "";
+      }
+      if (d.id === "accessories") {
+        slots[d.id].vsndRows = [];
+        slots[d.id].vsndSheet = "";
+      }
+    });
+    window._data = null;
+    window._ytdFile = null;
+    document.body.classList.remove("sr-mode");
+    setSrSheet("");
+    $("#dashboard").classList.remove("show");
+    $("#dashboard").style.display = "none";
+    const navDash = $("#nav-dashboard");
+    if (navDash) navDash.disabled = true;
+    showError("");
+    renderSlots();
+    switchNav("dashboard");
+    setStatus("View cleared · Push again from Admin to reload");
+    if (GEC_VIEW) switchPanel("gec");
+    if (LEXUS_VIEW) switchPanel("lexus");
+  }
+
+  let lastPushAt = 0;
+  let lastDataPushAt = 0;
+  let liveSync = null;
+  try {
+    const stamp = JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}");
+    lastPushAt = Number(stamp.at) || 0;
+  } catch { /* ignore */ }
+  try {
+    lastDataPushAt = Number(Store.readDataPushStamp().at) || 0;
+  } catch { /* ignore */ }
+
+  let refreshInFlight = null;
+  async function refreshFromAdmin(reason, opts) {
+    const forceSync = !!(opts && opts.force)
+      || /refresh/i.test(String(reason || ""));
+    if (refreshInFlight) {
+      try { await refreshInFlight; } catch { /* ignore */ }
+    }
+    showError("");
+    setStatus(reason || (forceSync ? "Refreshing from server…" : "Opening…"), "busy");
+    refreshInFlight = (async () => {
+    try {
+      // Fast path: paint from IndexedDB first unless forcing a full re-download.
+      let painted = false;
+      if (!forceSync && !(opts && opts.skipLocal)) {
+        const localPayload = await Store.loadWorkbookFiles();
+        if (localPayload && localPayload.files && Object.keys(localPayload.files).length) {
+          const okLocal = await applyWorkbookPayload(localPayload);
+          if (okLocal) {
+            buildDashboard({ progressive: true });
+            painted = true;
+            setStatus(reason || "Opening cached data…", "ok");
+          }
+        }
+      }
+
+      // Then sync from server; rebuild when files changed or Refresh forced.
+      let sync = null;
+      try {
+        sync = await Store.syncFromServer({ force: forceSync });
+      } catch {
+        sync = null;
+      }
+
+      if (sync && sync.cleared) {
+        clearAll();
+        setStatus(reason || "Waiting for Admin Push");
+        paintIdleNav();
+        return;
+      }
+
+      if (sync && (!sync.cached || forceSync)) {
+        const ok = await hydrateSlotsFromAdmin({ skipSync: true });
+        if (!ok) {
+          if (!painted) {
+            clearAll();
+            setStatus(reason || "Waiting for Admin Push");
+            paintIdleNav();
+          }
+          return;
+        }
+        buildDashboard({ progressive: true });
+        painted = true;
+      } else if (!painted) {
+        const ok = await hydrateSlotsFromAdmin({ skipSync: true });
+        if (!ok) {
+          clearAll();
+          setStatus(reason || "Waiting for Admin Push");
+          paintIdleNav();
+          return;
+        }
+        buildDashboard({ progressive: true });
+        painted = true;
+      }
+
+      if (reason) setStatus(reason, "ok");
+        else setStatus(painted && sync && sync.cached && !forceSync ? "Ready (cached)" : "Synced from server", "ok");
+        const badge = $("#live-badge");
+        if (badge) {
+          badge.textContent = liveSync ? "Live" : "Server";
+          badge.className = "status ok";
+          badge.title = liveSync
+            ? "Every open page on this server shows the same Admin Push"
+            : "Opened from the shared Admin Push on this server";
+        }
+        try {
+          lastDataPushAt = Number(Store.readDataPushStamp().at) || lastDataPushAt;
+          lastPushAt = Number(JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}").at) || lastPushAt;
+          if (liveSync && liveSync.setLastAt) liveSync.setLastAt(lastDataPushAt);
+        } catch { /* ignore */ }
+    } catch (err) {
+      showError(err.message || String(err));
+      }
+    })();
+    try {
+      await refreshInFlight;
+    } finally {
+      refreshInFlight = null;
+      try { window.dispatchEvent(new CustomEvent("admin-push-updated")); } catch (err) { /* ignore */ }
+    }
+  }
+
+  $("#clear-btn").addEventListener("click", clearAll);
+  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed", { force: true }));
+  $("#csv-btn").addEventListener("click", exportCsv);
+  const dashExcelBtn = $("#dash-excel-btn");
+  if (dashExcelBtn) dashExcelBtn.addEventListener("click", exportStockBoDashboardExcel);
+  const boExcelBtn = $("#bo-excel-btn");
+  if (boExcelBtn) boExcelBtn.addEventListener("click", exportBoDashboardExcel);
+  const stockExcelBtn = $("#stock-excel-btn");
+  if (stockExcelBtn) stockExcelBtn.addEventListener("click", exportStockDashboardExcel);
+  const rvExcelBtn = $("#rv-excel-btn");
+  if (rvExcelBtn) rvExcelBtn.addEventListener("click", exportReservedVehiclesExcel);
+  const boeExcelBtn = $("#boe-excel-btn");
+  if (boeExcelBtn) boeExcelBtn.addEventListener("click", exportBoErrorsExcel);
+  const boeExportTop = $("#boe-export-top");
+  if (boeExportTop) boeExportTop.addEventListener("click", exportBoErrorsExcel);
+  const boeTheme = $("#boe-theme");
+  if (boeTheme) boeTheme.addEventListener("click", () => { const t = $("#theme-toggle"); if (t) t.click(); });
+  const boeAppClear = $("#boe-app-clear");
+  if (boeAppClear) boeAppClear.addEventListener("click", () => { const t = $("#clear-btn"); if (t) t.click(); });
+  const boeAppRefresh = $("#boe-app-refresh");
+  if (boeAppRefresh) boeAppRefresh.addEventListener("click", () => { const t = $("#run-btn"); if (t) t.click(); });
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || String(e.key || "").toLowerCase() !== "k") return;
+    if (activePanel !== "boerrors") return;
+    const el = $("#boe-search");
+    if (!el) return;
+    e.preventDefault();
+    el.focus();
+  });
+  const boeSearch = $("#boe-search");
+  if (boeSearch) {
+    boeSearch.addEventListener("input", (e) => {
+      boeView.search = e.target.value;
+      boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeSev = $("#boe-filter-severity");
+  if (boeSev) {
+    boeSev.addEventListener("change", (e) => {
+      boeView.severity = e.target.value;
+      if (e.target.value === "critical") boeView.focus = "critical";
+      else if (e.target.value === "warn") boeView.focus = "warn";
+      else if (boeView.focus === "critical" || boeView.focus === "warn" || boeView.focus === "clean") boeView.focus = "";
+      boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeKpis = $("#boe-kpis");
+  if (boeKpis) {
+    boeKpis.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-boe-kpi]");
+      if (!btn) return;
+      const key = btn.getAttribute("data-boe-kpi") || "";
+      if (boeView.focus === key) {
+        boeView.focus = "";
+        boeView.severity = "";
+      } else {
+        boeView.focus = key;
+        boeView.severity = key === "critical" ? "critical" : key === "warn" ? "warn" : "";
+      }
+      boeView.page = 1;
+      if (boeSev) boeSev.value = boeView.severity;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeType = $("#boe-filter-type");
+  if (boeType) {
+    boeType.addEventListener("change", (e) => {
+      boeView.type = e.target.value;
+      boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmp = $("#boe-filter-employee");
+  if (boeEmp) {
+    boeEmp.addEventListener("change", (e) => {
+      boeView.employee = e.target.value;
+      boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmpFind = $("#boe-employee-find");
+  if (boeEmpFind) {
+    boeEmpFind.addEventListener("input", (e) => {
+      boeView.empQuery = e.target.value;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmpClear = $("#boe-employee-clear");
+  if (boeEmpClear) {
+    boeEmpClear.addEventListener("click", () => {
+      boeView.employee = "";
+      boeView.empQuery = "";
+      boeView.page = 1;
+      if (boeEmpFind) boeEmpFind.value = "";
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmpChips = $("#boe-employee-chips");
+  if (boeEmpChips) {
+    boeEmpChips.addEventListener("click", (e) => {
+      const more = e.target.closest("[data-boe-emp-more]");
+      if (more) {
+        boeView.empMore = !boeView.empMore;
+        if (window._data) renderBoErrorsDashboard(window._data);
+        return;
+      }
+      const btn = e.target.closest("[data-boe-employee]");
+      if (!btn) return;
+      const next = btn.getAttribute("data-boe-employee") || "";
+      boeView.employee = boeView.employee === next ? "" : next;
+      if (boeView.focus === "clean") boeView.focus = "";
+      boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const onBoeTypeClick = (e) => {
+    const btn = e.target.closest("[data-boe-type]");
+    if (!btn) return;
+    const next = btn.getAttribute("data-boe-type") || "";
+    boeView.type = boeView.type === next ? "" : next;
+    if (boeView.focus === "clean") boeView.focus = "";
+    boeView.page = 1;
+    if (window._data) renderBoErrorsDashboard(window._data);
+  };
+  const boeChips = $("#boe-type-chips");
+  if (boeChips) boeChips.addEventListener("click", onBoeTypeClick);
+  const boeBars = $("#boe-type-bars");
+  if (boeBars) boeBars.addEventListener("click", onBoeTypeClick);
+  const boeFoot = $("#boe-table-foot");
+  if (boeFoot) {
+    boeFoot.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-boe-page]");
+      if (!btn || btn.disabled) return;
+      const v = btn.getAttribute("data-boe-page");
+      const cur = Number(boeView.page) || 1;
+      if (v === "prev") boeView.page = Math.max(1, cur - 1);
+      else if (v === "next") boeView.page = cur + 1;
+      else boeView.page = Number(v) || 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeTableWrap = $("#boe-table-wrap");
+  if (boeTableWrap) {
+    boeTableWrap.addEventListener("click", (e) => {
+      const tr = e.target && e.target.closest ? e.target.closest("tr[data-boe-idx]") : null;
+      if (!tr) return;
+      openBoeRowDetail(tr.getAttribute("data-boe-idx"));
+    });
+    boeTableWrap.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const tr = e.target && e.target.closest ? e.target.closest("tr[data-boe-idx]") : null;
+      if (!tr) return;
+      e.preventDefault();
+      openBoeRowDetail(tr.getAttribute("data-boe-idx"));
+    });
+  }
+  const basExcelBtn = $("#bas-excel-btn");
+  if (basExcelBtn) basExcelBtn.addEventListener("click", exportBasDashboardExcel);
+
+  const navBarEl = $("#nav-bar");
+  if (navBarEl) {
+    navBarEl.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-nav]");
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.nav === "dashboard" && !window._data) return;
+    switchNav(btn.dataset.nav);
+  });
+  }
+
+  const globalSearchEl = $("#global-search");
+  if (globalSearchEl) {
+    globalSearchEl.addEventListener("input", (e) => {
+      const q = String(e.target.value || "").trim();
+      // Route search into the active panel's primary search box when present
+      const targets = ["#icc-search", "#bas-search", "#bo-search", "#boe-search", "#stock-search", "#rv-search", "#search", "#bas-alloc-search"];
+      for (const sel of targets) {
+        const el = $(sel);
+        if (!el || el.offsetParent === null) continue;
+        el.value = q;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        break;
+      }
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "k") {
+      const el = $("#global-search");
+      if (!el) return;
+      e.preventDefault();
+      el.focus();
+      el.select();
+    }
+  });
+
+  function maybeApplyPushedTargets(reason) {
+    let at = 0;
+    try {
+      const stamp = JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}");
+      at = Number(stamp.at) || 0;
+    } catch { /* ignore */ }
+    if (at && at !== lastPushAt) {
+      lastPushAt = at;
+      applyLiveTargets(reason || "Targets pushed — live update");
+      return true;
+    }
+    if (reason) return applyLiveTargets(reason);
+    return false;
+  }
+
+  async function onAdminPushMessage(ev) {
+    const msg = ev && ev.data;
+    if (!msg) return;
+    if (msg.type === "admin-cleared") {
+      clearAll();
+      return;
+    }
+    if (msg.type === "admin-pushed" || msg.type === "targets-pushed") {
+      lastPushAt = Number(msg.targetsAt || msg.at) || Date.now();
+      lastDataPushAt = Number(msg.at) || lastDataPushAt;
+      // Auto-load so Push to live opens the dashboard without an extra click
+      if (msg.type === "admin-pushed") {
+        setStatus("Admin Push received · loading…", "busy");
+        const run = $("#run-btn");
+        if (run) run.disabled = false;
+        refreshFromAdmin("Loaded from Admin Push").catch(() => {
+          markUpdateAvailable("New Admin Push available");
+        });
+      } else {
+        markUpdateAvailable("New targets available");
+      }
+    }
+  }
+
+  function markUpdateAvailable(reason) {
+    const badge = $("#live-badge");
+    if (badge) {
+      badge.textContent = "Update available";
+      badge.className = "status busy";
+      badge.title = (reason || "Admin pushed new data") + " · click Refresh";
+    }
+    setStatus((reason || "Update available") + " · click Refresh", "busy");
+    const run = $("#run-btn");
+    if (run) run.disabled = false;
+  }
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY || e.key === Store.CHANNEL_TARGETS_KEY || e.key === ALLOCATION_PLAN_KEY || e.key === ALLOCATION_PLAN_PUSH_KEY) {
+      markUpdateAvailable("Targets updated");
+    }
+    if (e.key === DATA_PUSH_KEY) {
+      const at = Number(Store.readDataPushStamp().at) || 0;
+      if (at && at !== lastDataPushAt) {
+        lastDataPushAt = at;
+        setStatus("Workbook push detected · loading…", "busy");
+        const run = $("#run-btn");
+        if (run) run.disabled = false;
+        refreshFromAdmin("Loaded from Admin Push").catch(() => {
+          markUpdateAvailable("New workbook push");
+        });
+      }
+    }
+  });
+  if ("BroadcastChannel" in window) {
+    const bc = new BroadcastChannel(Store.CHANNEL);
+    bc.onmessage = (ev) => { onAdminPushMessage(ev); };
+  }
+
+  // Live sync starts at boot (WebSocket + poll) so every open page follows Admin Push.
+  $("#panel-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-panel]");
+    if (!btn) return;
+    switchPanel(btn.dataset.panel);
+    document.body.classList.remove("sidebar-open");
+    const backdrop = $("#sidebar-backdrop");
+    if (backdrop) backdrop.hidden = true;
+  });
+
+  (function bindSidebarChrome() {
+    const toggle = $("#sidebar-toggle");
+    const collapse = $("#sidebar-collapse");
+    const backdrop = $("#sidebar-backdrop");
+    if (toggle) {
+      toggle.addEventListener("click", () => {
+        document.body.classList.toggle("sidebar-open");
+        if (backdrop) backdrop.hidden = !document.body.classList.contains("sidebar-open");
+      });
+    }
+    if (collapse) {
+      collapse.addEventListener("click", () => {
+        document.body.classList.toggle("sidebar-collapsed");
+      });
+    }
+    if (backdrop) {
+      backdrop.addEventListener("click", () => {
+        document.body.classList.remove("sidebar-open");
+        backdrop.hidden = true;
+      });
+    }
+  })();
+
+  (function bindThemeToggle() {
+    const KEY = "report_sheet_theme_v1";
+    const btn = $("#theme-toggle");
+    const apply = (mode) => {
+      const dark = mode === "dark";
+      document.body.classList.toggle("theme-dark", dark);
+      if (btn) {
+        btn.textContent = dark ? "Day" : "Dark";
+        btn.setAttribute("aria-pressed", dark ? "true" : "false");
+        btn.title = dark ? "Switch to day mode" : "Switch to dark mode";
+      }
+      try { localStorage.setItem(KEY, dark ? "dark" : "light"); } catch { /* ignore */ }
+    };
+    let initial = "light";
+    try {
+      const saved = localStorage.getItem(KEY);
+      if (saved === "dark" || saved === "light") initial = saved;
+    } catch { /* ignore */ }
+    apply(initial);
+    if (btn) {
+      btn.addEventListener("click", () => {
+        apply(document.body.classList.contains("theme-dark") ? "light" : "dark");
+      });
+    }
+  })();
+
+  function bindIccControls() {
+    const bindChange = (sel, key, rebuild) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener("change", () => {
+        iccView[key] = el.value;
+        if (key === "drillLevel") {
+          iccView.drillLevel = Number(el.value) || 0;
+          invalidateIccCache();
+        }
+        iccView.page = 0;
+        if (rebuild !== false) renderSummaryDashboard();
+      });
+    };
+    const bindInput = (sel, key) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener("input", () => {
+        iccView[key] = el.value;
+        iccView.page = 0;
+        renderSummaryDashboard();
+      });
+    };
+    bindChange("#icc-drill", "drillLevel");
+    bindInput("#icc-search", "search");
+    bindChange("#icc-f-product", "product");
+    bindChange("#icc-f-suffix", "suffix");
+    bindChange("#icc-f-year", "year");
+    bindChange("#icc-f-ext", "ext");
+    bindChange("#icc-f-int", "int");
+    bindChange("#icc-f-status", "inventoryStatus");
+    bindChange("#icc-f-demand", "demandStatus");
+    bindChange("#icc-f-quadrant", "quadrant");
+    bindChange("#icc-sort", "sort");
+    bindChange("#icc-rank-limit", "rankLimit");
+    bindInput("#icc-age-min", "ageingMin");
+    bindInput("#icc-age-max", "ageingMax");
+    bindInput("#icc-cov-min", "coverageMin");
+    bindInput("#icc-cov-max", "coverageMax");
+
+    document.querySelectorAll(".icc-mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        iccView.mode = btn.getAttribute("data-icc-mode") || "coverage";
+        renderSummaryDashboard();
+      });
+    });
+    const summaryPanel = $("#panel-summary");
+    if (summaryPanel) {
+      summaryPanel.addEventListener("click", (e) => {
+        const expand = e.target.closest("[data-expand]");
+        if (!expand) return;
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+      });
+      summaryPanel.addEventListener("dblclick", (e) => {
+        const viz = e.target.closest("[data-chart-id]");
+        if (!viz) return;
+        openWideChart(viz.getAttribute("data-chart-id"));
+      });
+    }
+    const reset = $("#icc-reset");
+    if (reset) {
+      reset.addEventListener("click", () => {
+        iccView = {
+          mode: iccView.mode,
+          drillLevel: iccView.drillLevel,
+          search: "",
+          product: "",
+          suffix: "",
+          year: "",
+          ext: "",
+          int: "",
+          inventoryStatus: "",
+          demandStatus: "",
+          quadrant: "",
+          ageingMin: "",
+          ageingMax: "",
+          coverageMin: "",
+          coverageMax: "",
+          sort: "demandPressure:desc",
+          page: 0,
+          selectedId: "",
+          kpiFilter: "",
+          rankLimit: iccView.rankLimit || "10",
+          cols: iccView.cols || { vinCount: true, rtl: true, central: true, esales: true },
+        };
+        renderSummaryDashboard();
+      });
+    }
+    const exp = $("#icc-export");
+    if (exp) exp.addEventListener("click", exportIccExcel);
+
+    const refreshBtn = $("#icc-refresh-btn");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => {
+        invalidateIccCache();
+        refreshFromAdmin("ICC refreshed from Admin push");
+      });
+    }
+    const themeBtn = $("#icc-theme-toggle");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", () => {
+        const main = $("#theme-toggle");
+        if (main) main.click();
+        else {
+          document.body.classList.toggle("theme-dark");
+        }
+      });
+    }
+    const zoomReset = $("#icc-chart-reset-zoom");
+    if (zoomReset) {
+      zoomReset.addEventListener("click", () => {
+        const ch = charts["chart-icc-bubble"];
+        if (ch && typeof ch.resetZoom === "function") ch.resetZoom();
+        else renderSummaryDashboard();
+      });
+    }
+  }
+  bindIccControls();
+
+  const srSearchEl = $("#sr-search");
+  if (srSearchEl) {
+    srSearchEl.addEventListener("input", (e) => {
+      srView.search = e.target.value;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
+  const srFilterEl = $("#sr-filter");
+  if (srFilterEl) {
+    srFilterEl.addEventListener("change", (e) => {
+      const v = e.target.value || "";
+      if (v === "above" || v === "below") srView.filter = v;
+      else {
+        srView.filter = "";
+        srView.plant = v;
+      }
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
+  const srChartModeEl = $("#sr-chart-mode");
+  if (srChartModeEl) {
+    srChartModeEl.addEventListener("change", (e) => {
+      srView.chartMode = e.target.value || "active";
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
+  function onDatePresetChange(preset) {
+    globalDateFilter.preset = preset;
+    if (preset !== "custom") {
+      applyGlobalDateFilter();
+      return;
+    }
+    const bounds = salesDateBounds(slots.sales.rows || []);
+    if (!globalDateFilter.from && bounds.min) globalDateFilter.from = toIsoDateInput(bounds.min);
+    if (!globalDateFilter.to && bounds.max) globalDateFilter.to = toIsoDateInput(bounds.max);
+    syncGlobalDateControls(window._globalLivePeriod);
+  }
+
+  const srDatePreset = $("#sr-date-preset");
+  if (srDatePreset) {
+    srDatePreset.addEventListener("change", (e) => onDatePresetChange(e.target.value));
+  }
+  const basDatePreset = $("#bas-date-preset");
+  if (basDatePreset) {
+    basDatePreset.addEventListener("change", (e) => onDatePresetChange(e.target.value));
+  }
+  const srDateApply = $("#sr-date-apply");
+  if (srDateApply) srDateApply.addEventListener("click", applySrDateFilter);
+  const srDateReset = $("#sr-date-reset");
+  if (srDateReset) srDateReset.addEventListener("click", resetSrDateFilter);
+  const basDateApply = $("#bas-date-apply");
+  if (basDateApply) basDateApply.addEventListener("click", () => applyGlobalDateFilter());
+  const srClearSel = $("#sr-clear-sel");
+  if (srClearSel) srClearSel.addEventListener("click", clearEmployeeFilter);
+  const srFilterClear = $("#sr-filter-clear");
+  if (srFilterClear) srFilterClear.addEventListener("click", clearEmployeeFilter);
+  const srNameList = $("#sr-name-list");
+  if (srNameList) {
+    srNameList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-emp-key]");
+      if (!btn) return;
+      selectEmployee(btn.getAttribute("data-emp-key"));
+    });
+  }
+  document.querySelectorAll(".sr-range-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const preset = btn.getAttribute("data-sr-range") || "today";
+      const sel = $("#sr-date-preset");
+      if (sel) sel.value = preset;
+      onDatePresetChange(preset);
+    });
+  });
+  let srRangeTimer = null;
+  ["#sr-date-from", "#sr-date-to"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      const apply = $("#sr-date-apply");
+      if (apply) apply.classList.add("is-dirty");
+      clearTimeout(srRangeTimer);
+      srRangeTimer = setTimeout(() => {
+        const from = parseIsoDateInput(($("#sr-date-from") || {}).value || "");
+        const to = parseIsoDateInput(($("#sr-date-to") || {}).value || "");
+        if (!from || !to || from.getFullYear() < 2000 || to.getFullYear() < 2000) return;
+        if (startOfDay(from).getTime() > startOfDay(to).getTime()) {
+          setStatus("From date must be on or before To date", "err");
+          return;
+        }
+        applySrDateFilter();
+      }, 700);
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(srRangeTimer);
+        applySrDateFilter();
+      }
+    });
+  });
+  const srNameSearch = $("#sr-name-search");
+  if (srNameSearch) {
+    let srSearchTimer = null;
+    srNameSearch.addEventListener("input", (e) => {
+      srView.search = e.target.value;
+      const hiddenSearch = $("#sr-search");
+      if (hiddenSearch) hiddenSearch.value = e.target.value;
+      clearTimeout(srSearchTimer);
+      srSearchTimer = setTimeout(() => {
+        if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+      }, 140);
+    });
+  }
+
+  (function bindSrCockpit() {
+    const panel = $("#panel-salesreport");
+    if (!panel) return;
+    panel.addEventListener("click", (e) => {
+      const open = e.target.closest("[data-sr-sheet]");
+      if (open) {
+        setSrSheet(panel.dataset.srSheet === open.dataset.srSheet ? "" : open.dataset.srSheet);
+        return;
+      }
+      if (e.target.closest("[data-sr-sheet-close]")) {
+        e.preventDefault();
+        setSrSheet("");
+        return;
+      }
+      if (panel.dataset.srSheet && e.target.closest(".sr-fold-summary")) e.preventDefault();
+      if (panel.dataset.srSheet && e.target.classList.contains("sr-sheet-backdrop")) setSrSheet("");
+    });
+    const schedCharts = $("#sr-sched-charts");
+    if (schedCharts) schedCharts.addEventListener("click", () => setSrSheet(""));
+    const openYtd = $("#sr-open-ytd");
+    if (openYtd) openYtd.addEventListener("click", () => switchPanel("ytdsales"));
+    const ytdPanel = $("#panel-ytdsales");
+    if (ytdPanel) {
+      ytdPanel.addEventListener("click", (e) => {
+        const go = e.target.closest("[data-ytd-go]");
+        if (go && go.dataset.ytdGo && go.dataset.ytdGo !== "ytdsales") {
+          switchPanel(go.dataset.ytdGo);
+          return;
+        }
+        if (e.target.closest("#ytd-exit")) {
+          switchPanel("salesreport");
+          return;
+        }
+        const setBtn = e.target.closest("[data-ytd-set]");
+        const month = e.target.closest("[data-ytd-month]");
+        if (setBtn || month) {
+          const key = setBtn ? setBtn.dataset.ytdSet : month.dataset.ytdMonth;
+          if (key && key !== ytdOpenMonth) {
+            const prev = ytdOpenMonth;
+            Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
+              if (prev && ok === false) return;
+              ytdOpenMonth = key;
+              ytdInspect = false;
+              if (!ytdDirtyMonths.has(key)) ytdSetSaveNote("Targets are stored on the server for each employee and month.", "");
+              paintYtd();
+            });
+          }
+          return;
+        }
+        if (e.target.closest("[data-ytd-close]")) {
+          const prev = ytdOpenMonth;
+          Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
+            if (ok === false) return;
+            ytdOpenMonth = "";
+            ytdInspect = false;
+            paintYtd();
+          });
+          return;
+        }
+        if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); }
+      });
+      const ytdRefresh = $("#ytd-refresh");
+      if (ytdRefresh) {
+        ytdRefresh.addEventListener("click", () => {
+          const prev = ytdOpenMonth;
+          Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
+            if (ok === false) return;
+            ytdTargetsLoaded = false;
+            ytdMonthsLoaded = false;
+            return Promise.resolve(refreshFromAdmin("YTD refreshed", { force: true })).catch(() => {});
+          }).finally(() => renderYtdSales());
+        });
+      }
+      const ytdClear = $("#ytd-clear");
+      if (ytdClear) {
+        ytdClear.addEventListener("click", () => {
+          const prev = ytdOpenMonth;
+          Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
+            if (ok === false) return;
+            ytdYear = new Date().getFullYear();
+            ytdOpenMonth = "";
+            ytdInspect = false;
+            paintYtd();
+          });
+        });
+      }
+      ytdPanel.addEventListener("change", (e) => {
+        if (e.target.id === "ytd-year") {
+          const nextYear = Number(e.target.value) || new Date().getFullYear();
+          const prev = ytdOpenMonth;
+          Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
+            if (ok === false) { e.target.value = String(ytdYear); return; }
+            ytdYear = nextYear;
+            ytdOpenMonth = "";
+            ytdInspect = false;
+            paintYtd();
+          });
+        }
+      });
+    }
+
+    const refresh = $("#sr-refresh-btn");
+    if (refresh) {
+      refresh.addEventListener("click", () => {
+        refresh.classList.add("is-spinning");
+        Promise.resolve(refreshFromAdmin("Sales refreshed", { force: true }))
+          .catch(() => {})
+          .finally(() => { refresh.classList.remove("is-spinning"); renderSrLastUpdated(); });
+      });
+    }
+
+    const fs = $("#sr-fullscreen-btn");
+    const syncFs = () => {
+      const on = !!document.fullscreenElement;
+      if (fs) { fs.setAttribute("aria-pressed", on ? "true" : "false"); fs.title = on ? "Exit fullscreen" : "Fullscreen"; }
+    };
+    if (fs) {
+      fs.addEventListener("click", () => {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+      });
+      document.addEventListener("fullscreenchange", syncFs);
+    }
+
+    const navBtn = $("#sr-nav-btn");
+    const navMenu = $("#sr-nav-menu");
+    const closeNav = () => {
+      if (!navMenu || navMenu.hidden) return;
+      navMenu.hidden = true;
+      navBtn.setAttribute("aria-expanded", "false");
+    };
+    if (navBtn && navMenu) {
+      navBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!navMenu.hidden) { closeNav(); return; }
+        navMenu.innerHTML = visiblePanels().map((p) =>
+          `<button type="button" role="menuitem" class="sr-nav-item${p.id === activePanel ? " is-active" : ""}" data-nav-panel="${escapeHtml(p.id)}">${escapeHtml(p.label)}</button>`
+        ).join("") + `<div class="sr-nav-sep"></div>
+          <a class="sr-nav-item" role="menuitem" href="admin.html">Admin Push</a>
+          <a class="sr-nav-item" role="menuitem" href="data-uploader.html">Data Uploader</a>`;
+        navMenu.hidden = false;
+        navBtn.setAttribute("aria-expanded", "true");
+      });
+      navMenu.addEventListener("click", (e) => {
+        const item = e.target.closest("[data-nav-panel]");
+        if (!item) return;
+        closeNav();
+        switchPanel(item.dataset.navPanel);
+      });
+      document.addEventListener("click", (e) => { if (!e.target.closest(".sr-nav")) closeNav(); });
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !document.body.classList.contains("sr-mode")) return;
+      if (navMenu && !navMenu.hidden) { closeNav(); return; }
+      if (panel.dataset.srSheet && !document.querySelector(".pbi-wide-backdrop:not([hidden])")) {
+        setSrSheet("");
+        e.stopImmediatePropagation();
+      }
+    });
+  })();
+  function shiftSrWorkingDay(delta) {
+    const base = (window._globalLivePeriod && window._globalLivePeriod.now)
+      ? new Date(window._globalLivePeriod.now)
+      : new Date();
+    base.setDate(base.getDate() + delta);
+    const iso = toIsoDateInput(base);
+    globalDateFilter.preset = "custom";
+    globalDateFilter.from = iso;
+    globalDateFilter.to = iso;
+    const sel = $("#sr-date-preset");
+    if (sel) sel.value = "custom";
+    const from = $("#sr-date-from");
+    const to = $("#sr-date-to");
+    if (from) from.value = iso;
+    if (to) to.value = iso;
+    applyGlobalDateFilter("Working day shifted");
+  }
+  const srDayPrev = $("#sr-day-prev");
+  if (srDayPrev) srDayPrev.addEventListener("click", () => shiftSrWorkingDay(-1));
+  const srDayNext = $("#sr-day-next");
+  if (srDayNext) srDayNext.addEventListener("click", () => shiftSrWorkingDay(1));
+  const srPbiPage = $("#sr-pbi-page");
+  if (srPbiPage) {
+    srPbiPage.addEventListener("click", (e) => {
+      const expand = e.target.closest("[data-expand]");
+      if (expand) {
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+        return;
+      }
+      const accName = e.target.closest(".acc-remain-name,[data-emp-key]");
+      if (accName && accName.closest("#acc-remain-wrap")) {
+        const key = accName.getAttribute("data-emp-key");
+        if (key) selectEmployee(key);
+        return;
+      }
+      const tap = e.target.closest(".sr-tap[data-chart-id]");
+      if (tap && !e.target.closest("button, a, input, select, summary")) {
+        e.preventDefault();
+        openWideChart(tap.getAttribute("data-chart-id"));
+      }
+    });
+    srPbiPage.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const tap = e.target.closest(".sr-tap[data-chart-id]");
+      if (!tap || e.target.closest("button, a, input, select")) return;
+      e.preventDefault();
+      openWideChart(tap.getAttribute("data-chart-id"));
+    });
+    srPbiPage.addEventListener("dblclick", (e) => {
+      const viz = e.target.closest("[data-chart-id]");
+      if (!viz || viz.classList.contains("sr-tap")) return;
+      openWideChart(viz.getAttribute("data-chart-id"));
+    });
+  }
+  const boDashEl = $("#bo-dash");
+  if (boDashEl) {
+    boDashEl.addEventListener("click", (e) => {
+      const expand = e.target.closest("[data-expand]");
+      if (expand && !e.target.closest("canvas")) {
+        e.preventDefault();
+        e.stopPropagation();
+        openWideChart(expand.getAttribute("data-expand"));
+        return;
+      }
+      const prod = e.target.closest("[data-bo-product]");
+      if (prod) {
+        const name = prod.getAttribute("data-bo-product") || "";
+        boView.car = name;
+        boView.product = name;
+        if (window._data) renderBoDashboard(window._data);
+        const detail = $("#bo-car-detail");
+        if (detail) detail.open = true;
+        return;
+      }
+      const channel = e.target.closest("[data-bo-channel]");
+      if (channel) {
+        boView.channel = channel.getAttribute("data-bo-channel") || "";
+        refreshBoFromFilters();
+        return;
+      }
+      const person = e.target.closest("[data-bo-salesman]");
+      if (person) {
+        boView.salesman = person.getAttribute("data-bo-salesman") || "";
+        refreshBoFromFilters();
+        return;
+      }
+      const record = e.target.closest("[data-bo-record]");
+      if (record && window._data) {
+        const row = (window._data.bos || []).find((item) => String(item.id) === record.getAttribute("data-bo-record"));
+        const body = $("#bo-record-body");
+        const modal = $("#bo-record-modal");
+        if (body) body.innerHTML = boRecordHtml(row);
+        if (modal) modal.hidden = false;
+        return;
+      }
+      const chip = e.target.closest("[data-bo-clear]");
+      if (chip) {
+        const key = chip.getAttribute("data-bo-clear");
+        if (key === "datePreset") applyBoDatePreset("");
+        else if (key === "confirm") boView.confirm = "";
+        else boView[key] = "";
+        if (key === "product") boView.car = "";
+        refreshBoFromFilters();
+        return;
+      }
+      const typ = e.target.closest("[data-bo-type]");
+      if (typ) {
+        boView.type = typ.getAttribute("data-bo-type") || "";
+        if (window._data) renderBoDashboard(window._data);
+        return;
+      }
+      const sfx = e.target.closest("[data-bo-sfx]");
+      if (sfx) {
+        boView.sfx = sfx.getAttribute("data-bo-sfx") || "";
+        if (window._data) renderBoDashboard(window._data);
+      }
+    });
+    boDashEl.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const tap = e.target.closest(".bo-tap[data-expand]");
+      if (!tap || e.target.closest("button, a, input, select")) return;
+      e.preventDefault();
+      openWideChart(tap.getAttribute("data-expand"));
+    });
+    boDashEl.addEventListener("dblclick", (e) => {
+      const viz = e.target.closest("[data-chart-id]");
+      if (!viz) return;
+      openWideChart(viz.getAttribute("data-chart-id"));
+    });
+    boDashEl.querySelectorAll("details.bo-drilldown").forEach((d) => {
+      d.addEventListener("toggle", () => {
+        requestAnimationFrame(() => {
+          Object.keys(charts || {}).forEach((id) => {
+            if (!String(id).startsWith("chart-bo")) return;
+            const ch = charts[id];
+            if (ch && typeof ch.resize === "function") ch.resize();
+          });
+        });
+      });
+    });
+  }
+  function refreshBoFromFilters() {
+    if (window._data) renderBoDashboard(window._data);
+  }
+  const boSearchEl = $("#bo-search");
+  if (boSearchEl) {
+    boSearchEl.addEventListener("input", (e) => {
+      boView.search = e.target.value;
+      refreshBoFromFilters();
+    });
+  }
+  [
+    ["#bo-f-product", "product"],
+    ["#bo-f-category", "category"],
+    ["#bo-f-year", "year"],
+    ["#bo-f-scope", "scope"],
+    ["#bo-f-channel", "channel"],
+    ["#bo-f-type", "type"],
+    ["#bo-f-sfx", "sfx"],
+    ["#bo-f-confirm", "confirm"],
+    ["#bo-f-salesman", "salesman"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      boView[key] = e.target.value;
+      refreshBoFromFilters();
+    });
+  });
+  const boClearEl = $("#bo-clear-filters");
+  if (boClearEl) {
+    boClearEl.addEventListener("click", () => {
+      boView = { search: "", product: "", category: "", year: "", scope: "", channel: "", type: "", sfx: "", confirm: "", car: "", salesman: "", aging: "", datePreset: "", dateFrom: null, dateTo: null, page: 1, sortKey: "", sortDir: "asc" };
+      refreshBoFromFilters();
+    });
+  }
+  document.querySelectorAll("[data-bo-date]").forEach((btn) => {
+    btn.addEventListener("click", () => applyBoDatePreset(btn.getAttribute("data-bo-date") || ""));
+  });
+  const boDateFrom = $("#bo-date-from");
+  const boDateTo = $("#bo-date-to");
+  const applyCustomBoDate = () => {
+    const from = boDateFrom && parseIsoDateInput(boDateFrom.value);
+    const to = boDateTo && parseIsoDateInput(boDateTo.value);
+    if (!from || !to) return;
+    boView.datePreset = "custom";
+    boView.dateFrom = startOfDay(from);
+    boView.dateTo = startOfDay(to);
+    boView.page = 1;
+    refreshBoFromFilters();
+  };
+  if (boDateFrom) boDateFrom.addEventListener("change", applyCustomBoDate);
+  if (boDateTo) boDateTo.addEventListener("change", applyCustomBoDate);
+  const boRefresh = $("#bo-refresh-btn");
+  if (boRefresh) boRefresh.addEventListener("click", () => refreshFromAdmin("Back Order refreshed", { force: true }));
+  const boDefs = $("#bo-defs-btn");
+  if (boDefs) boDefs.addEventListener("click", () => {
+    const body = $("#bo-defs-body");
+    const modal = $("#bo-defs-modal");
+    if (body) body.innerHTML = boDefinitionsHtml();
+    if (modal) modal.hidden = false;
+  });
+  const boDefsClose = $("#bo-defs-close");
+  if (boDefsClose) boDefsClose.addEventListener("click", () => { const modal = $("#bo-defs-modal"); if (modal) modal.hidden = true; });
+  const boRecordClose = $("#bo-record-close");
+  if (boRecordClose) boRecordClose.addEventListener("click", () => { const modal = $("#bo-record-modal"); if (modal) modal.hidden = true; });
+  const boAllOpen = $("#bo-view-all-rows");
+  if (boAllOpen) boAllOpen.addEventListener("click", () => {
+    boView.page = 1;
+    const modal = $("#bo-all-modal");
+    if (modal) modal.hidden = false;
+    renderBoAllTable();
+  });
+  const boAllClose = $("#bo-all-close");
+  if (boAllClose) boAllClose.addEventListener("click", () => { const modal = $("#bo-all-modal"); if (modal) modal.hidden = true; });
+  const boPager = $("#bo-all-pager");
+  if (boPager) boPager.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-bo-page]");
+    if (!btn || btn.disabled) return;
+    boView.page = Number(btn.getAttribute("data-bo-page")) || 1;
+    renderBoAllTable();
+  });
+  const boQuality = $("#bo-quality");
+  if (boQuality) boQuality.addEventListener("click", () => {
+    const body = $("#bo-defs-body");
+    const modal = $("#bo-defs-modal");
+    if (body) body.innerHTML = ($("#bo-quality") ? $("#bo-quality").innerHTML : "") + boDefinitionsHtml();
+    if (modal) modal.hidden = false;
+  });
+  const boViewAll = $("#bo-view-all-products");
+  if (boViewAll) {
+    boViewAll.addEventListener("click", () => {
+      boView.page = 1;
+      const modal = $("#bo-all-modal");
+      if (modal) modal.hidden = false;
+      renderBoAllTable();
+    });
+  }
+  const boAllHost = $("#bo-all-table");
+  if (boAllHost) {
+    boAllHost.addEventListener("click", (e) => {
+      const sort = e.target.closest("[data-bo-sort]");
+      if (!sort) return;
+      const key = sort.getAttribute("data-bo-sort");
+      if (boView.sortKey === key) boView.sortDir = boView.sortDir === "asc" ? "desc" : "asc";
+      else { boView.sortKey = key; boView.sortDir = "asc"; }
+      renderBoAllTable();
+    });
+    boAllHost.addEventListener("change", (e) => {
+      const box = e.target.closest("[data-bo-col]");
+      if (!box) return;
+      if (!boView.hiddenCols) boView.hiddenCols = {};
+      boView.hiddenCols[box.getAttribute("data-bo-col")] = !box.checked;
+      renderBoAllTable();
+    });
+  }
+  const boCarSelect = $("#bo-car-select");
+  if (boCarSelect) {
+    boCarSelect.addEventListener("change", (e) => {
+      boView.car = e.target.value || "";
+      if (boView.car) boView.product = boView.car;
+      refreshBoFromFilters();
+    });
+  }
+  const boCarClear = $("#bo-car-clear");
+  if (boCarClear) {
+    boCarClear.addEventListener("click", () => {
+      boView.car = "";
+      boView.product = "";
+      refreshBoFromFilters();
+    });
+  }
+
+  function refreshBasFromFilters() {
+    if (window._data) renderBoAllocStockDashboard(window._data);
+  }
+  /** Run `fn` once after the user pauses typing. The typed value is still stored immediately by the caller. */
+  function debounceInput(fn, wait) {
+    let timer = 0;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait == null ? 220 : wait);
+    };
+  }
+  const basSearchEl = $("#bas-search");
+  if (basSearchEl) {
+    const runBasSearch = debounceInput(refreshBasFromFilters);
+    basSearchEl.addEventListener("input", (e) => {
+      basView.search = e.target.value;
+      basAllocView.page = 0;
+      runBasSearch();
+    });
+  }
+  [
+    ["#bas-f-seg", "seg"],
+    ["#bas-f-product", "product"],
+    ["#bas-f-car", "product"],
+    ["#bas-f-car-conf", "product"],
+    ["#bas-f-sfx", "sfx"],
+    ["#bas-f-sfx-conf", "sfx"],
+    ["#bas-f-sfx-top", "sfx"],
+    ["#bas-f-status", "status"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      basView[key] = e.target.value;
+      if (key === "product") basView.sfx = "";
+      refreshBasFromFilters();
+    });
+  });
+  const basClearEl = $("#bas-clear-filters");
+  if (basClearEl) {
+    basClearEl.addEventListener("click", () => {
+      basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: basView.alertTab || "shortfall", sortGap: basView.sortGap || "gap", barShowAll: false };
+      basAllocView = { search: "", salesStatus: "", source: "", score: "", selected: "", tab: "overview" };
+      refreshBasFromFilters();
+    });
+  }
+  const basTableClear = $("#bas-table-clear");
+  if (basTableClear) {
+    basTableClear.addEventListener("click", () => {
+      basView.product = "";
+      basView.sfx = "";
+      refreshBasFromFilters();
+    });
+  }
+  const actSort = $("#act-sort-gap");
+  if (actSort) {
+    actSort.addEventListener("change", () => {
+      basView.sortGap = actSort.value || "gap";
+      refreshBasFromFilters();
+    });
+  }
+  const actViewAll = $("#act-supply-viewall");
+  if (actViewAll) {
+    actViewAll.addEventListener("click", () => {
+      basView.barShowAll = !basView.barShowAll;
+      const rows = (actTowerCache && actTowerCache.supplyBarRows) || [];
+      if (rows.length) renderActSupplyRest(rows);
+      else refreshBasFromFilters();
+    });
+  }
+  document.querySelectorAll("#act-alert-tabs .act-alert-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      basView.alertTab = btn.getAttribute("data-act-alert") || "shortfall";
+      if (actTowerCache) renderActAlertTable(actTowerCache);
+      else refreshBasFromFilters();
+    });
+  });
+  const actAlertWide = $("#act-alert-wide");
+  if (actAlertWide) {
+    actAlertWide.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openWideActAlerts();
+    });
+  }
+  const wideTableWrap = $("#pbi-wide-table-wrap");
+  if (wideTableWrap) {
+    wideTableWrap.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-act-alert-wide]");
+      if (!tabBtn) return;
+      e.preventDefault();
+      basView.alertTab = tabBtn.getAttribute("data-act-alert-wide") || "shortfall";
+      if (actTowerCache) renderActAlertTable(actTowerCache);
+      else refreshBasFromFilters();
+    });
+  }
+  const actRefresh = $("#act-refresh-btn");
+  if (actRefresh) {
+    actRefresh.addEventListener("click", () => {
+      refreshFromAdmin("Allocation tower refreshed");
+    });
+  }
+  const actDrawerClose = $("#act-drawer-close");
+  if (actDrawerClose) actDrawerClose.addEventListener("click", closeActDrawer);
+  const actDrawerBackdrop = $("#act-drawer-backdrop");
+  if (actDrawerBackdrop) actDrawerBackdrop.addEventListener("click", closeActDrawer);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (document.body.classList.contains("act-section-wide") || document.body.classList.contains("act-match-wide")) {
+      setAllocPanelWide(null);
+      return;
+    }
+    const drawer = $("#act-drawer");
+    if (drawer && !drawer.hidden) closeActDrawer();
+  });
+
+  function refreshBasAllocFromFilters() {
+    if (window._data) renderBasAllocatedVehicles(window._data);
+  }
+  const basAllocSearchEl = $("#bas-alloc-search");
+  if (basAllocSearchEl) {
+    const runAllocSearch = debounceInput(refreshBasAllocFromFilters);
+    basAllocSearchEl.addEventListener("input", (e) => {
+      basAllocView.search = e.target.value || "";
+      basAllocView.page = 0;
+      runAllocSearch();
+    });
+  }
+  // These three filters only change the matched-vehicle list, so only that section is repainted.
+  const basAllocScoreEl = $("#bas-alloc-f-score");
+  if (basAllocScoreEl) {
+    basAllocScoreEl.addEventListener("change", (e) => {
+      basAllocView.score = e.target.value;
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocStatusEl = $("#bas-alloc-f-status");
+  if (basAllocStatusEl) {
+    basAllocStatusEl.addEventListener("change", (e) => {
+      basAllocView.salesStatus = e.target.value;
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocSourceEl = $("#bas-alloc-f-source");
+  if (basAllocSourceEl) {
+    basAllocSourceEl.addEventListener("change", (e) => {
+      basAllocView.source = e.target.value;
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocTabsEl = $("#bas-alloc-tabs");
+  if (basAllocTabsEl) {
+    basAllocTabsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-mv-score]");
+      if (!btn) return;
+      basAllocView.score = btn.getAttribute("data-mv-score") || "";
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocPagerEl = $("#bas-alloc-pager");
+  if (basAllocPagerEl) {
+    basAllocPagerEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-mv-page]");
+      if (!btn || btn.disabled) return;
+      const move = btn.getAttribute("data-mv-page");
+      const page = Number(basAllocView.page) || 0;
+      basAllocView.page = move === "first" ? 0 : move === "prev" ? page - 1 : move === "next" ? page + 1 : Number.MAX_SAFE_INTEGER;
+      refreshBasAllocFromFilters();
+    });
+    basAllocPagerEl.addEventListener("change", (e) => {
+      if (e.target.id !== "bas-alloc-page-size") return;
+      basAllocView.pageSize = Number(e.target.value) || 100;
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocColsEl = $("#bas-alloc-cols-list");
+  if (basAllocColsEl) {
+    basAllocColsEl.addEventListener("change", (e) => {
+      const box = e.target.closest("[data-mv-col]");
+      if (!box) return;
+      const hidden = basAllocHiddenCols();
+      const idx = Number(box.getAttribute("data-mv-col"));
+      if (box.checked) hidden.delete(idx);
+      else hidden.add(idx);
+      try { localStorage.setItem(BAS_ALLOC_COLS_KEY, JSON.stringify([...hidden])); } catch (_) { /* storage may be blocked */ }
+      applyBasAllocHiddenCols(hidden);
+    });
+  }
+  document.querySelectorAll("#panel-boallocstock details.bas-section-card > summary.bas-section-head").forEach((summary) => {
+    summary.addEventListener("click", (e) => {
+      if (e.target.closest("button, a, input, select, label")) return;
+      e.preventDefault();
+      const details = summary.parentElement;
+      setAllocPanelWide(details.classList.contains("is-section-wide") ? null : details);
+    });
+  });
+  const basAllocWide = $("#bas-alloc-wide");
+  if (basAllocWide) {
+    basAllocWide.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMatchWide(!document.body.classList.contains("act-match-wide"));
+    });
+  }
+  const basAllocCollapse = $("#bas-alloc-collapse");
+  if (basAllocCollapse) {
+    basAllocCollapse.addEventListener("click", (e) => {
+      e.preventDefault();
+      setMatchWide(false);
+    });
+  }
+  const basAllocSection = $("#bas-alloc-section");
+  if (basAllocSection) {
+    basAllocSection.addEventListener("click", (e) => {
+      const copy = e.target.closest("[data-mv-copy]");
+      if (copy) {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = copy.getAttribute("data-mv-copy") || "";
+        if (text && text !== "—" && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+        return;
+      }
+      const tab = e.target.closest("[data-mv-tab]");
+      if (tab) {
+        basAllocView.tab = tab.getAttribute("data-mv-tab") || "overview";
+        const detail = $("#bas-alloc-detail");
+        if (!detail) return;
+        detail.querySelectorAll("[data-mv-tab]").forEach((button) => {
+          button.classList.toggle("is-on", button === tab);
+        });
+        detail.querySelectorAll("[data-mv-pane]").forEach((pane) => {
+          pane.hidden = pane.getAttribute("data-mv-pane") !== basAllocView.tab;
+        });
+        return;
+      }
+      const tr = e.target.closest("#bas-alloc-table tbody tr");
+      if (!tr) return;
+      const row = basAllocShown[Number(tr.getAttribute("data-idx"))];
+      if (!row) return;
+      basAllocView.selected = allocRowKey(row);
+      tr.parentElement.querySelectorAll("tr").forEach((item) => item.classList.toggle("is-selected", item === tr));
+      paintBasAllocDetail(row);
+    });
+  }
+
+  const stockDashEl = $("#stock-dash");
+  if (stockDashEl) {
+    stockDashEl.addEventListener("click", (e) => {
+      const expand = e.target.closest("[data-expand]");
+      if (expand) {
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+        return;
+      }
+      const prod = e.target.closest("[data-stock-product]");
+      if (prod) {
+        const name = prod.getAttribute("data-stock-product") || "";
+        stockInvView.car = name;
+        stockInvView.product = name;
+        refreshStockFromFilters();
+        const detail = $("#stock-car-detail");
+        if (detail) detail.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+    stockDashEl.addEventListener("dblclick", (e) => {
+      const viz = e.target.closest("[data-chart-id]");
+      if (!viz) return;
+      openWideChart(viz.getAttribute("data-chart-id"));
+    });
+  }
+  const stockSearchEl = $("#stock-search");
+  if (stockSearchEl) {
+    stockSearchEl.addEventListener("input", (e) => {
+      stockInvView.search = e.target.value;
+      refreshStockFromFilters();
+    });
+  }
+  const rvSearchEl = $("#rv-search");
+  if (rvSearchEl) {
+    rvSearchEl.addEventListener("input", (e) => {
+      rvView.search = e.target.value;
+      renderReservedVehiclesTracker();
+    });
+  }
+  const rvStatusEl = $("#rv-filter-status");
+  if (rvStatusEl) {
+    rvStatusEl.addEventListener("change", (e) => {
+      rvView.status = e.target.value;
+      renderReservedVehiclesTracker();
+    });
+  }
+  const rvTableWrap = $("#rv-table-wrap");
+  if (rvTableWrap) {
+    rvTableWrap.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("[data-rv-vin]") : null;
+      if (!btn) return;
+      openRvVinDetail(btn.getAttribute("data-rv-vin"));
+    });
+  }
+  [
+    ["#stock-f-source", "source"],
+    ["#stock-f-product", "product"],
+    ["#stock-f-suffix", "suffix"],
+    ["#stock-f-year", "year"],
+    ["#stock-f-usage", "usage"],
+    ["#stock-f-location", "location"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      stockInvView[key] = e.target.value;
+      refreshStockFromFilters();
+    });
+  });
+  const stockClearEl = $("#stock-clear-filters");
+  if (stockClearEl) {
+    stockClearEl.addEventListener("click", () => {
+      stockInvView = { search: "", source: "", product: "", suffix: "", year: "", usage: "", location: "", car: "" };
+      refreshStockFromFilters();
+    });
+  }
+  const stockCarSelect = $("#stock-car-select");
+  if (stockCarSelect) {
+    stockCarSelect.addEventListener("change", (e) => {
+      stockInvView.car = e.target.value || "";
+      if (stockInvView.car) stockInvView.product = stockInvView.car;
+      refreshStockFromFilters();
+    });
+  }
+  const stockCarClear = $("#stock-car-clear");
+  if (stockCarClear) {
+    stockCarClear.addEventListener("click", () => {
+      stockInvView.car = "";
+      stockInvView.product = "";
+      refreshStockFromFilters();
+    });
+  }
+
+  [
+    ["#stock-alloc-product", "product"],
+    ["#stock-alloc-suffix", "suffix"],
+    ["#stock-alloc-year", "year"],
+    ["#stock-alloc-salesman", "salesman"],
+    ["#stock-alloc-source", "source"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      stockBoView[key] = e.target.value;
+      refreshStockFromFilters();
+    });
+  });
+  const stockAllocClear = $("#stock-alloc-clear");
+  if (stockAllocClear) {
+    stockAllocClear.addEventListener("click", () => {
+      stockBoView = { product: "", suffix: "", year: "", salesman: "", source: "" };
+      refreshStockFromFilters();
+    });
+  }
+  $("#pbi-wide-close").addEventListener("click", closeWideChart);
+  $("#pbi-wide-backdrop").addEventListener("click", (e) => {
+    if (e.target.id === "pbi-wide-backdrop") closeWideChart();
+    const accName = e.target.closest(".acc-remain-name,[data-emp-key]");
+    if (accName && accName.closest("#pbi-wide-table-wrap")) {
+      const key = accName.getAttribute("data-emp-key");
+      if (key) {
+        closeWideChart();
+        selectEmployee(key);
+      }
+    }
+  });
+  $("#sr-csv-btn").addEventListener("click", exportTelesalesSchedule);
+  function onEmpTableClick(e) {
+    const tr = e.target.closest("tr.emp-row");
+    if (!tr) return;
+    selectEmployee(tr.getAttribute("data-emp-key"));
+  }
+  const srTableWrap = $("#sr-table-wrap");
+  if (srTableWrap) srTableWrap.addEventListener("click", onEmpTableClick);
+  const srDayTableWrap = $("#sr-day-table-wrap");
+  if (srDayTableWrap) srDayTableWrap.addEventListener("click", onEmpTableClick);
+  const empDrawerClose = $("#emp-drawer-close");
+  if (empDrawerClose) empDrawerClose.addEventListener("click", closeEmployeeDrawer);
+  const aaDrillClose = $("#aa-drill-close");
+  if (aaDrillClose) aaDrillClose.addEventListener("click", closeAaVinDrill);
+  const aaDrillBackdrop = $("#aa-drill-backdrop");
+  if (aaDrillBackdrop) aaDrillBackdrop.addEventListener("click", closeAaVinDrill);
+  const empBackdrop = $("#emp-backdrop");
+  if (empBackdrop) empBackdrop.addEventListener("click", closeEmployeeDrawer);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const wide = $("#pbi-wide-backdrop");
+    if (wide && !wide.hidden) {
+      closeWideChart();
+      return;
+    }
+    const aaDrill = $("#aa-drill-drawer");
+    if (aaDrill && aaDrill.classList.contains("open")) {
+      closeAaVinDrill();
+      return;
+    }
+    if (srView.selectedKey) clearEmployeeFilter();
+    closeEmployeeDrawer();
+  });
+
+  const searchEl = $("#search");
+  if (searchEl) {
+    searchEl.addEventListener("input", (e) => {
+      view.search = e.target.value;
+      if (window._data) renderTable(window._data);
+    });
+  }
+  const filterExtra = $("#filter-extra");
+  if (filterExtra) {
+    filterExtra.addEventListener("change", (e) => {
+      view.extra = e.target.value;
+      if (window._data) renderTable(window._data);
+    });
+  }
+  const tabsEl = $("#tabs");
+  if (tabsEl) {
+    tabsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tab]");
+      if (!btn) return;
+      view.tab = btn.dataset.tab;
+      view.extra = "";
+      view.search = "";
+      if (searchEl) searchEl.value = "";
+      renderTabs();
+      renderTable(window._data);
+    });
+  }
+  const kpisEl = $("#kpis");
+  if (kpisEl) {
+    kpisEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tab]");
+      if (!btn || !window._data) return;
+      view.tab = btn.dataset.tab;
+      view.extra = "";
+      renderTabs();
+      renderTable(window._data);
+    });
+  }
+
+  function bindScheduleUi() {
+    const period = $("#sr-sched-period");
+    if (period) period.addEventListener("change", () => {
+      jumpToSchedulePeriod(period.value === "day" ? "day" : "month");
+    });
+    const plant = $("#sr-sched-plant");
+    if (plant) plant.addEventListener("change", () => {
+      srView.plant = plant.value || "";
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const salesman = $("#sr-sched-salesman");
+    if (salesman) salesman.addEventListener("change", () => {
+      srView.salesman = salesman.value || "";
+      srView.page = 1;
+      if (salesman.value) selectEmployee(salesman.value);
+      else if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const status = $("#sr-sched-status");
+    if (status) status.addEventListener("change", () => {
+      srView.status = status.value || "";
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const search = $("#sr-sched-search");
+    if (search) search.addEventListener("input", (e) => {
+      srView.search = e.target.value;
+      const hidden = $("#sr-search");
+      if (hidden) hidden.value = e.target.value;
+      const nameSearch = $("#sr-name-search");
+      if (nameSearch) nameSearch.value = e.target.value;
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const clear = $("#sr-sched-clear");
+    if (clear) clear.addEventListener("click", () => {
+      srView.plant = "";
+      srView.status = "";
+      srView.salesman = "";
+      srView.search = "";
+      srView.filter = "";
+      srView.page = 1;
+      ["#sr-sched-plant", "#sr-sched-status", "#sr-sched-salesman", "#sr-sched-search", "#sr-search", "#sr-name-search", "#sr-filter"].forEach((sel) => {
+        const el = $(sel);
+        if (el && (el.tagName === "SELECT" || el.tagName === "INPUT")) el.value = "";
+      });
+      clearEmployeeFilter();
+    });
+    const pagesize = $("#sr-sched-pagesize");
+    if (pagesize) pagesize.addEventListener("change", () => {
+      srView.pageSize = Number(pagesize.value) || 10;
+      srView.page = 1;
+      if (window._data && window._data.salesReport) renderSalesReportTable(window._data.salesReport);
+    });
+    const pages = $("#sr-sched-pages");
+    if (pages) pages.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-sr-page]");
+      if (!btn || btn.disabled) return;
+      const p = Number(btn.getAttribute("data-sr-page"));
+      if (!Number.isFinite(p) || p < 1) return;
+      srView.page = p;
+      if (window._data && window._data.salesReport) renderSalesReportTable(window._data.salesReport);
+    });
+    const today = $("#sr-sched-today");
+    if (today) today.addEventListener("click", () => {
+      const sel = $("#sr-date-preset");
+      if (sel) sel.value = "today";
+      onDatePresetChange("today");
+    });
+    const exp = $("#sr-sched-export");
+    if (exp) exp.addEventListener("click", () => { const b = $("#sr-csv-btn"); if (b) b.click(); });
+    const refresh = $("#sr-sched-refresh");
+    if (refresh) refresh.addEventListener("click", () => { const b = $("#run-btn"); if (b) b.click(); });
+    const prev = $("#sr-sched-prev");
+    if (prev) prev.addEventListener("click", () => { const b = $("#sr-day-prev"); if (b) b.click(); });
+    const next = $("#sr-sched-next");
+    if (next) next.addEventListener("click", () => { const b = $("#sr-day-next"); if (b) b.click(); });
+    const charts = $("#sr-sched-charts");
+    if (charts) charts.addEventListener("click", () => {
+      const card = document.querySelector(".sr-mock-perf");
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const schedule = $("#sr-schedule");
+    if (schedule) schedule.addEventListener("click", (e) => {
+      const more = e.target.closest(".sr-row-more");
+      if (!more) return;
+      const key = more.getAttribute("data-emp-key");
+      if (key) selectEmployee(key);
+    });
+  }
+  bindScheduleUi();
+
+  renderSlots();
+  switchNav("dashboard");
+  if (GEC_VIEW) {
+    document.title = "GEC Dashboard — Abdul Latif Jameel MOTORS";
+    document.body.classList.add("gec-view");
+    switchPanel("gec");
+    liveSync = Store.startLiveSync(() => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }), { initialAt: lastDataPushAt });
+  }
+  if (LEXUS_VIEW) {
+    document.title = "Lexus B2C Tracker — Abdul Latif Jameel MOTORS";
+    document.body.classList.add("lexus-view");
+    switchPanel("lexus");
+  } else {
+    const boot = GEC_VIEW
+      ? refreshFromAdmin()
+      : refreshFromAdmin("Opening shared Admin Push", { skipLocal: true });
+    Promise.resolve(boot).finally(() => {
+      if (liveSync || !Store || typeof Store.startLiveSync !== "function") return;
+      liveSync = Store.startLiveSync(
+        () => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }),
+        { initialAt: lastDataPushAt }
+      );
+      const badge = $("#live-badge");
+      if (badge) {
+        badge.textContent = "Live";
+        badge.className = "status ok";
+        badge.title = "Every open page on this server shows the same Admin Push";
+      }
+    });
+  }
+})();

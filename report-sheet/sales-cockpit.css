@@ -3555,3 +3555,11 @@ body.bo-dash-mode #bo-dash .bo-col-toggles { color: #8d9bb0; }
   body.bo-dash-mode #bo-dash .bo-fit-main { display: flex; flex-direction: column; gap: 8px; }
 }
 
+
+/* Toolbar controls sit inside padded chips. enterprise-ui.css pads every input/select with
+   `.5rem .75rem !important`, which clipped the dates ("11/14/202…") and "All showroo…". */
+#panel-salesreport .sr-date-range-field input[type="date"] { padding: 0 2px !important; }
+#panel-salesreport .sr-filter-select { padding-left: 2px !important; }
+@media (max-width: 1400px) {
+  #panel-salesreport .sr-filter-select { max-width: 128px; }
+}
