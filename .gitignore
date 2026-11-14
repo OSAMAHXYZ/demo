@@ -30,6 +30,10 @@ delivery-transformation-backup-last.json.tmp
 # Shared Sales Report push (Excel + targets) — runtime only
 report-sheet-data/
 
+# Keep copy of live files/entries (volume or local disk — never commit)
+/keep/
+lease-calculator/
+
 # Nested calculator git metadata backup
 toyota-internal-lease-calculator-main/.git.bak-nested/
 

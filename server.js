@@ -10,12 +10,35 @@ const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 
 const ROOT = __dirname;
-/** Persistent volume root (Railway: mount volume + set PERSISTENT_DATA_DIR=/data). Falls back to app root. */
-const PERSISTENT_ROOT = String(
-  process.env.PERSISTENT_DATA_DIR
-  || process.env.RAILWAY_VOLUME_MOUNT_PATH
+function resolvePersistentRoot() {
+  const env = String(process.env.PERSISTENT_DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim();
+  if (env) return path.resolve(env);
+  try {
+    if (fs.existsSync('/data')) {
+      fs.accessSync('/data', fs.constants.W_OK);
+      return '/data';
+    }
+  } catch {
+    /* no writable volume at /data */
+  }
+  return ROOT;
+}
+/** Persistent volume root (Railway: mount volume at /data). Falls back to app root. */
+const PERSISTENT_ROOT = resolvePersistentRoot();
+const VOLUME_ON = path.resolve(PERSISTENT_ROOT) !== path.resolve(ROOT);
+/** Second copy of live files/entries. Survives code deploys only when VOLUME_ON. */
+const KEEP_DIR = path.join(PERSISTENT_ROOT, 'keep');
+let keepSnapshotImpl = null;
+function scheduleKeepSnapshot(reason) {
+  if (typeof keepSnapshotImpl === 'function') keepSnapshotImpl(reason);
+}
+/** Changes on every Railway deploy so open browsers can load the new pages. */
+const APP_VERSION = String(
+  process.env.RAILWAY_GIT_COMMIT_SHA
+  || process.env.RAILWAY_REVISION
+  || process.env.RAILWAY_DEPLOYMENT_ID
   || ''
-).trim() || ROOT;
+).trim() || `boot-${Date.now()}`;
 const DATA_FILE = path.join(PERSISTENT_ROOT, 'delivery-inventory-data.json');
 const REPORT_SHEET_DIR = path.join(PERSISTENT_ROOT, 'report-sheet-data');
 const REPORT_SHEET_META = path.join(REPORT_SHEET_DIR, 'meta.json');
@@ -466,7 +489,8 @@ function defaultReportSheetMeta() {
     boErrorRulesAt: 0,
     fileNames: {},
     viewerAccess: sanitizeViewerAccess(null),
-    viewerAccessAt: 0
+    viewerAccessAt: 0,
+    cleared: false
   };
 }
 
@@ -525,6 +549,7 @@ function saveReportSheetMeta(meta) {
   const tmp = `${REPORT_SHEET_META}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(meta, null, 2), 'utf8');
   fs.renameSync(tmp, REPORT_SHEET_META);
+  scheduleKeepSnapshot('report-sheet-meta');
 }
 
 function reportSlotId(slot) {
@@ -547,6 +572,7 @@ function broadcastReservedOrdersUpdate(updatedAt) {
       try { client.send(payload); } catch { /* ignore */ }
     }
   }
+  scheduleKeepSnapshot('reserved-orders');
 }
 function saveReservedFilesToReportSheet({ esalesBuffer, esalesName, boBuffer, boName, reservedBuffer, reservedName }) {
   ensureReportSheetDirs();
@@ -3355,7 +3381,8 @@ function isPriorMonthDelivered(item) {
   return deliveredMonth < current;
 }
 
-const NOTES_ARCHIVE_DIR = path.join(ROOT, 'delivery-notes-archive');
+const NOTES_ARCHIVE_DIR = path.join(PERSISTENT_ROOT, 'delivery-notes-archive');
+const LEGACY_NOTES_ARCHIVE_DIR = path.join(ROOT, 'delivery-notes-archive');
 
 function ensureNotesArchiveDir() {
   if (!fs.existsSync(NOTES_ARCHIVE_DIR)) {
@@ -5029,7 +5056,9 @@ app.get('/api/report-sheet/meta', (_req, res) => {
     boErrorRulesAt: Number(meta.boErrorRulesAt) || 0,
     fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {},
     viewerAccess: sanitizeViewerAccess(meta.viewerAccess),
-    viewerAccessAt: Number(meta.viewerAccessAt) || 0
+    viewerAccessAt: Number(meta.viewerAccessAt) || 0,
+    cleared: !!meta.cleared,
+    appVersion: APP_VERSION
   });
 });
 
@@ -6045,9 +6074,12 @@ app.post('/api/report-sheet/push', async (req, res) => {
       viewerAccess: sanitizeViewerAccess(
         body.viewerAccess != null ? body.viewerAccess : prevMeta.viewerAccess
       ),
-      viewerAccessAt: Number(prevMeta.viewerAccessAt) || 0
+      viewerAccessAt: Number(prevMeta.viewerAccessAt) || 0,
+      boErrorRules: Array.isArray(prevMeta.boErrorRules) ? prevMeta.boErrorRules : [],
+      boErrorRulesAt: Number(prevMeta.boErrorRulesAt) || 0,
+      cleared: false
     };
-    saveReportSheetMeta(meta);
+    saveReportSheetMeta({ ...prevMeta, ...meta });
     broadcastReportSheetUpdate(at);
     // Do NOT rebuild reserved live VIN rows here (that would wipe statuses/notes).
     // When Back Order is pushed, notify reserved clients so Q1–Q3 recompute from the new BO file.
@@ -6113,6 +6145,8 @@ app.post('/api/report-sheet/push', async (req, res) => {
   } catch (err) {
     console.error('[report-sheet/push]', err);
     return res.status(500).json({ error: err.message || 'Push failed' });
+  } finally {
+    scheduleKeepSnapshot('report-sheet-push');
   }
 });
 
@@ -6125,6 +6159,9 @@ app.post('/api/report-sheet/clear', (_req, res) => {
     // GEC CONTROL is configuration, not pushed data — keep it.
     meta.gecControl = sanitizeGecControl(prev.gecControl);
     meta.gecControlAt = Number(prev.gecControlAt) || 0;
+    meta.boErrorRules = Array.isArray(prev.boErrorRules) ? prev.boErrorRules : [];
+    meta.boErrorRulesAt = Number(prev.boErrorRulesAt) || 0;
+    meta.cleared = true;
     saveReportSheetMeta(meta);
     broadcastReportSheetUpdate(meta.at);
     return res.json({ ok: true, at: meta.at });
@@ -9119,6 +9156,8 @@ function readBoHubToyota() {
 // Seed persistent report-sheet / reserved-orders files BEFORE attaching the reserved-orders
 // API so ensureStaff never boots against an empty volume and then overwrites real rights.
 try {
+  migrateLegacyAppRootToVolume();
+  restoreKeepIfMissing();
   seedReportSheetFromGitBackup();
 } catch (err) {
   console.error('[report-sheet] early git seed failed', err);
@@ -9206,7 +9245,8 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
 });
 
 require('./toyota-internal-lease-calculator-main/lease-calculator-api').attachLeaseCalculatorApi(app, {
-  password: '1234'
+  password: '1234',
+  dir: path.join(PERSISTENT_ROOT, 'lease-calculator')
 });
 
 require('./toyota-internal-lease-calculator-main/bo-data-api').attachBoDataApi(app, {
@@ -9252,6 +9292,7 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (socket) => {
   wsClients.add(socket);
   socket.send(JSON.stringify({ type: 'delivery_hub_updated', at: Date.now() }));
+  socket.send(JSON.stringify({ type: 'pages_updated', version: APP_VERSION, at: Date.now() }));
   socket.on('close', () => wsClients.delete(socket));
   socket.on('error', () => wsClients.delete(socket));
 });
@@ -9295,6 +9336,339 @@ function copyDirFilesIfMissing(srcDir, destDir) {
   }
   return n;
 }
+
+function keepLiveTargets() {
+  return [
+    { kind: 'dir', src: REPORT_SHEET_DIR, rel: 'report-sheet-data' },
+    { kind: 'dir', src: path.join(PERSISTENT_ROOT, 'bo-data'), rel: 'bo-data' },
+    { kind: 'dir', src: path.join(PERSISTENT_ROOT, 'contact-performance'), rel: 'contact-performance' },
+    { kind: 'dir', src: path.join(PERSISTENT_ROOT, 'lease-calculator'), rel: 'lease-calculator' },
+    { kind: 'file', src: DATA_FILE, rel: 'delivery-inventory-data.json' },
+    { kind: 'file', src: DELIVERY_TEAM_DATA, rel: 'delivery-team-data.json' },
+    { kind: 'file', src: path.join(PERSISTENT_ROOT, 'delivery-transformation-data.json'), rel: 'delivery-transformation-data.json' },
+    { kind: 'file', src: path.join(PERSISTENT_ROOT, 'toyota-b2c-tracker-data.json'), rel: 'toyota-b2c-tracker-data.json' },
+    { kind: 'file', src: path.join(PERSISTENT_ROOT, 'lexus-tracker-data.json'), rel: 'lexus-tracker-data.json' },
+    { kind: 'file', src: path.join(PERSISTENT_ROOT, 'controller-users.json'), rel: 'controller-users.json' },
+    { kind: 'dir', src: NOTES_ARCHIVE_DIR, rel: 'delivery-notes-archive' }
+  ];
+}
+
+function copyFileIfChanged(src, dest) {
+  if (!src || !dest || !fs.existsSync(src)) return false;
+  try {
+    const sst = fs.statSync(src);
+    if (!sst.isFile()) return false;
+    if (fs.existsSync(dest)) {
+      const dst = fs.statSync(dest);
+      if (dst.size === sst.size && Math.abs(dst.mtimeMs - sst.mtimeMs) < 2) return false;
+    }
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    try { fs.utimesSync(dest, sst.atime, sst.mtime); } catch { /* ignore */ }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function copyTreeFiltered(src, dest, { overwrite = false, skipNames = [] } = {}) {
+  if (!src || !dest || !fs.existsSync(src)) return 0;
+  const skip = new Set(skipNames);
+  let st;
+  try { st = fs.statSync(src); } catch { return 0; }
+  if (st.isFile()) {
+    if (overwrite) {
+      return copyFileIfChanged(src, dest) ? 1 : 0;
+    }
+    return copyFileIfMissing(src, dest) ? 1 : 0;
+  }
+  if (!st.isDirectory()) return 0;
+  let n = 0;
+  let names = [];
+  try { names = fs.readdirSync(src); } catch { return 0; }
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of names) {
+    if (!name || name.startsWith('.') || skip.has(name)) continue;
+    n += copyTreeFiltered(path.join(src, name), path.join(dest, name), { overwrite, skipNames });
+  }
+  return n;
+}
+
+function listTreeFiles(dir, relBase, out) {
+  if (!dir || !fs.existsSync(dir)) return;
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return; }
+  for (const name of names) {
+    if (!name || name.startsWith('.')) continue;
+    const abs = path.join(dir, name);
+    const rel = relBase ? `${relBase}/${name}` : name;
+    let st;
+    try { st = fs.statSync(abs); } catch { continue; }
+    if (st.isDirectory()) {
+      listTreeFiles(abs, rel, out);
+      continue;
+    }
+    if (!st.isFile()) continue;
+    out.push({
+      path: rel.replace(/\\/g, '/'),
+      bytes: st.size,
+      updatedAt: st.mtime.toISOString()
+    });
+  }
+}
+
+function countJsonEntries(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return 0;
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (Array.isArray(data)) return data.length;
+    if (!data || typeof data !== 'object') return 0;
+    if (Array.isArray(data.orders)) return data.orders.length;
+    if (data.orders && typeof data.orders === 'object' && !Array.isArray(data.orders)) return Object.keys(data.orders).length;
+    if (Array.isArray(data.rows)) return data.rows.length;
+    if (Array.isArray(data.items)) return data.items.length;
+    if (Array.isArray(data.staff)) return data.staff.length;
+    if (Array.isArray(data.vehicles)) return data.vehicles.length;
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+function readKeepManifest() {
+  const fp = path.join(KEEP_DIR, 'MANIFEST.json');
+  try {
+    if (!fs.existsSync(fp)) return null;
+    const parsed = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeKeepManifest(extra) {
+  const body = {
+    at: Date.now(),
+    volumeOn: VOLUME_ON,
+    persistentRoot: PERSISTENT_ROOT,
+    ...(extra && typeof extra === 'object' ? extra : {})
+  };
+  fs.mkdirSync(KEEP_DIR, { recursive: true });
+  fs.writeFileSync(path.join(KEEP_DIR, 'MANIFEST.json'), JSON.stringify(body, null, 2), 'utf8');
+  return body;
+}
+
+function snapshotKeep(reason) {
+  fs.mkdirSync(KEEP_DIR, { recursive: true });
+  let copied = 0;
+  for (const target of keepLiveTargets()) {
+    const dest = path.join(KEEP_DIR, target.rel);
+    if (target.kind === 'dir') {
+      copied += copyTreeFiltered(target.src, dest, { overwrite: true, skipNames: ['keep'] });
+    } else if (copyFileIfChanged(target.src, dest)) {
+      copied += 1;
+    }
+  }
+  const manifest = writeKeepManifest({ reason: String(reason || 'manual'), copied });
+  return { ok: true, copied, at: manifest.at, volumeOn: VOLUME_ON };
+}
+
+function restoreKeepIfMissing() {
+  if (!fs.existsSync(KEEP_DIR)) return { copied: 0 };
+  let copied = 0;
+  for (const target of keepLiveTargets()) {
+    const src = path.join(KEEP_DIR, target.rel);
+    if (target.kind === 'dir') {
+      copied += copyTreeFiltered(src, target.src, { overwrite: false, skipNames: ['keep'] });
+    } else if (copyFileIfMissing(src, target.src)) {
+      copied += 1;
+    }
+  }
+  return { copied };
+}
+
+function restoreKeepOverwrite() {
+  if (!fs.existsSync(KEEP_DIR)) return { ok: false, error: 'No keep copy yet', copied: 0 };
+  let copied = 0;
+  for (const target of keepLiveTargets()) {
+    const src = path.join(KEEP_DIR, target.rel);
+    if (target.kind === 'dir') {
+      copied += copyTreeFiltered(src, target.src, { overwrite: true, skipNames: ['keep'] });
+    } else if (copyFileIfChanged(src, target.src) || copyFileIfMissing(src, target.src)) {
+      copied += 1;
+    }
+  }
+  return { ok: true, copied };
+}
+
+function migrateLegacyAppRootToVolume() {
+  let copied = 0;
+  const leaseDest = path.join(PERSISTENT_ROOT, 'lease-calculator', 'admin-data.json');
+  const leaseSrc = path.join(ROOT, 'toyota-internal-lease-calculator-main', 'admin-data.json');
+  if (copyFileIfMissing(leaseSrc, leaseDest)) copied += 1;
+  if (!VOLUME_ON) return { copied };
+  const pairs = [
+    [path.join(ROOT, 'report-sheet-data'), REPORT_SHEET_DIR],
+    [path.join(ROOT, 'bo-data'), path.join(PERSISTENT_ROOT, 'bo-data')],
+    [path.join(ROOT, 'contact-performance'), path.join(PERSISTENT_ROOT, 'contact-performance')],
+    [path.join(ROOT, 'lease-calculator'), path.join(PERSISTENT_ROOT, 'lease-calculator')],
+    [path.join(ROOT, 'toyota-internal-lease-calculator-main', 'admin-data.json'), path.join(PERSISTENT_ROOT, 'lease-calculator', 'admin-data.json')],
+    [path.join(ROOT, 'delivery-inventory-data.json'), DATA_FILE],
+    [path.join(ROOT, 'delivery-team-data.json'), DELIVERY_TEAM_DATA],
+    [path.join(ROOT, 'delivery-transformation-data.json'), path.join(PERSISTENT_ROOT, 'delivery-transformation-data.json')],
+    [path.join(ROOT, 'toyota-b2c-tracker-data.json'), path.join(PERSISTENT_ROOT, 'toyota-b2c-tracker-data.json')],
+    [path.join(ROOT, 'lexus-tracker-data.json'), path.join(PERSISTENT_ROOT, 'lexus-tracker-data.json')],
+    [LEGACY_NOTES_ARCHIVE_DIR, NOTES_ARCHIVE_DIR]
+  ];
+  for (const [src, dest] of pairs) {
+    if (!src || !dest || src === dest || !fs.existsSync(src)) continue;
+    let st;
+    try { st = fs.statSync(src); } catch { continue; }
+    if (st.isDirectory()) copied += copyTreeFiltered(src, dest, { overwrite: false, skipNames: ['keep'] });
+    else if (copyFileIfMissing(src, dest)) copied += 1;
+  }
+  return { copied };
+}
+
+function keepStatusPayload() {
+  const files = [];
+  for (const target of keepLiveTargets()) {
+    if (target.kind === 'dir') listTreeFiles(target.src, target.rel, files);
+    else if (fs.existsSync(target.src)) {
+      try {
+        const st = fs.statSync(target.src);
+        if (st.isFile()) {
+          files.push({
+            path: target.rel,
+            bytes: st.size,
+            updatedAt: st.mtime.toISOString()
+          });
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  files.sort((a, b) => String(a.path).localeCompare(String(b.path)));
+  const liveOrders = path.join(REPORT_SHEET_DIR, 'reserved-orders-live.json');
+  const liveStaff = path.join(REPORT_SHEET_DIR, 'reserved-orders-staff.json');
+  const liveStatuses = path.join(REPORT_SHEET_DIR, 'reserved-orders-statuses.json');
+  const boFile = path.join(PERSISTENT_ROOT, 'bo-data', 'bo-data.json');
+  const slotFiles = REPORT_SLOT_IDS.map((id) => {
+    const fp = reportSheetFilePath(id);
+    let bytes = 0;
+    let updatedAt = '';
+    try {
+      if (fp && fs.existsSync(fp)) {
+        const st = fs.statSync(fp);
+        bytes = st.size;
+        updatedAt = st.mtime.toISOString();
+      }
+    } catch { /* ignore */ }
+    return { id, bytes, updatedAt, present: bytes > 0 };
+  });
+  const manifest = readKeepManifest();
+  return {
+    ok: true,
+    volumeOn: VOLUME_ON,
+    usingAppDisk: !VOLUME_ON,
+    persistentRoot: PERSISTENT_ROOT,
+    keepDir: KEEP_DIR,
+    railway: !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_ID),
+    lastKeepAt: manifest && manifest.at ? manifest.at : 0,
+    lastKeepReason: (manifest && manifest.reason) || '',
+    lastKeepCopied: (manifest && manifest.copied) || 0,
+    fileCount: files.length,
+    bytes: files.reduce((sum, row) => sum + (Number(row.bytes) || 0), 0),
+    entries: {
+      reservedOrders: countJsonEntries(liveOrders),
+      reservedStaff: countJsonEntries(liveStaff),
+      reservedStatuses: countJsonEntries(liveStatuses),
+      boRows: countJsonEntries(boFile)
+    },
+    slots: slotFiles,
+    files
+  };
+}
+
+function safeZipRel(name) {
+  const rel = String(name || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!rel || rel.includes('..') || rel === 'keep' || rel.startsWith('keep/')) return null;
+  return rel;
+}
+
+function buildKeepZip() {
+  const zip = new PizZip();
+  const skipped = [];
+  const status = keepStatusPayload();
+  zip.file('KEEP-STATUS.json', JSON.stringify({
+    ...status,
+    files: status.files.map((row) => ({ path: row.path, bytes: row.bytes, updatedAt: row.updatedAt }))
+  }, null, 2));
+  let packed = 0;
+  const maxBytes = 70 * 1024 * 1024;
+  for (const row of status.files) {
+    const rel = safeZipRel(row.path);
+    if (!rel) continue;
+    if (packed + (Number(row.bytes) || 0) > maxBytes) {
+      skipped.push(`${rel} (${row.bytes} bytes)`);
+      continue;
+    }
+    const abs = path.join(PERSISTENT_ROOT, rel);
+    try {
+      if (!fs.existsSync(abs)) continue;
+      zip.file(rel, fs.readFileSync(abs));
+      packed += Number(row.bytes) || 0;
+    } catch {
+      skipped.push(rel);
+    }
+  }
+  if (skipped.length) zip.file('SKIPPED.txt', skipped.join('\n'));
+  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+
+function restoreKeepZip(buf) {
+  if (!buf || !buf.length) return { ok: false, error: 'Empty zip' };
+  let zip;
+  try {
+    zip = new PizZip(buf);
+  } catch {
+    return { ok: false, error: 'Not a zip file' };
+  }
+  let copied = 0;
+  Object.keys(zip.files || {}).forEach((name) => {
+    const entry = zip.files[name];
+    if (!entry || entry.dir) return;
+    const rel = safeZipRel(name);
+    if (!rel || rel === 'KEEP-STATUS.json' || rel === 'SKIPPED.txt' || rel === 'MANIFEST.json') return;
+    let dest = null;
+    if (rel.startsWith('keep/')) return;
+    dest = path.join(PERSISTENT_ROOT, rel);
+    try {
+      const data = entry.asNodeBuffer();
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, data);
+      copied += 1;
+    } catch {
+      /* skip one file */
+    }
+  });
+  snapshotKeep('restore-zip');
+  return { ok: true, copied };
+}
+
+let keepTimer = null;
+keepSnapshotImpl = (reason) => {
+  clearTimeout(keepTimer);
+  keepTimer = setTimeout(() => {
+    try {
+      const result = snapshotKeep(reason);
+      if (result && result.copied) {
+        console.log(`[keep] saved ${result.copied} file(s) (${reason || 'manual'})`);
+      }
+    } catch (err) {
+      console.error('[keep] snapshot failed', err);
+    }
+  }, 1800);
+};
 
 /** Git snapshot of Admin Push + Data Uploader files. Copies only when the volume is empty. */
 function seedReportSheetFromGitBackup() {
@@ -9414,7 +9788,83 @@ function seedReportSheetFromGitBackup() {
   return { seeded: copied > 0, copied };
 }
 
+app.get('/api/app-version', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    ok: true,
+    version: APP_VERSION,
+    at: Date.now(),
+    volumeOn: VOLUME_ON
+  });
+});
+
+app.get('/api/data-keep', (_req, res) => {
+  try {
+    return res.json(keepStatusPayload());
+  } catch (err) {
+    console.error('[keep] status', err);
+    return res.status(500).json({ error: err.message || 'Keep status failed' });
+  }
+});
+
+app.post('/api/data-keep/snapshot', (_req, res) => {
+  try {
+    const result = snapshotKeep('admin');
+    return res.json(result);
+  } catch (err) {
+    console.error('[keep] snapshot', err);
+    return res.status(500).json({ error: err.message || 'Keep copy failed' });
+  }
+});
+
+app.get('/api/data-keep/download', (_req, res) => {
+  try {
+    const buf = buildKeepZip();
+    const day = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="keep-${day}.zip"`);
+    return res.send(buf);
+  } catch (err) {
+    console.error('[keep] download', err);
+    return res.status(500).json({ error: err.message || 'Keep download failed' });
+  }
+});
+
+app.post('/api/data-keep/restore', (req, res) => {
+  try {
+    const body = req.body || {};
+    if (body.zipBase64) {
+      const buf = Buffer.from(String(body.zipBase64), 'base64');
+      const result = restoreKeepZip(buf);
+      if (!result.ok) return res.status(400).json(result);
+      return res.json(result);
+    }
+    const result = restoreKeepOverwrite();
+    if (!result.ok) return res.status(400).json(result);
+    return res.json(result);
+  } catch (err) {
+    console.error('[keep] restore', err);
+    return res.status(500).json({ error: err.message || 'Keep restore failed' });
+  }
+});
+
 server.listen(PORT, () => {
+  try {
+    const migrated = migrateLegacyAppRootToVolume();
+    if (migrated && migrated.copied) {
+      console.log(`[keep] moved ${migrated.copied} file(s) from app disk onto the volume`);
+    }
+  } catch (err) {
+    console.error('[keep] volume migrate failed', err);
+  }
+  try {
+    const restored = restoreKeepIfMissing();
+    if (restored && restored.copied) {
+      console.log(`[keep] restored ${restored.copied} missing file(s) from keep copy`);
+    }
+  } catch (err) {
+    console.error('[keep] restore failed', err);
+  }
   try {
     const seeded = seedReportSheetFromGitBackup();
     if (seeded && seeded.copied) {
@@ -9453,8 +9903,19 @@ server.listen(PORT, () => {
   console.log(`[delivery-team] password: ${DELIVERY_TEAM_PASSWORD}`);
   console.log(`[delivery-team] data: ${DELIVERY_TEAM_DATA}`);
   console.log(`[delivery-team] UI: http://localhost:${PORT}/deliveryteam/`);
+  console.log(`[delivery] app version: ${APP_VERSION}`);
   console.log(`[delivery] persistent root: ${PERSISTENT_ROOT}`);
+  console.log(`[delivery] volume: ${VOLUME_ON ? 'ON' : 'OFF — files vanish on the next deploy unless a Railway volume is mounted at /data'}`);
+  console.log(`[delivery] keep copy: ${KEEP_DIR}`);
   console.log(`[delivery] data file: ${DATA_FILE}`);
   console.log(`[delivery] RTL archive (append-only): ${RTL_DAILY_DIR}`);
   console.log(`[delivery] RTL by-day mirrors: ${path.join(RTL_DAILY_DIR, 'by-day')}`);
+  if (!VOLUME_ON && (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_ID)) {
+    console.error('[keep] Railway volume is not mounted. Add a volume at /data and set PERSISTENT_DATA_DIR=/data.');
+  }
+  try {
+    snapshotKeep('boot');
+  } catch (err) {
+    console.error('[keep] boot snapshot failed', err);
+  }
 });

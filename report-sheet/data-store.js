@@ -270,7 +270,8 @@
    * @param {{ at?: number }} [opts]
    */
   async function saveWorkbookFiles(filesBySlot, opts) {
-    const files = {};
+    const merge = !!(opts && opts.merge);
+    const files = merge ? { ...(((await loadWorkbookFiles()) || {}).files || {}) } : {};
     SLOT_IDS.forEach((id) => {
       const f = filesBySlot[id];
       if (f && f.buffer) {
@@ -387,8 +388,9 @@
       return { at: serverAt, fromServer: true, meta, cached: true };
     }
 
-    // Cleared on server
-    if (!(Array.isArray(meta.slots) && meta.slots.length)) {
+    // Only wipe local files after an explicit Admin Clear — never after a code deploy
+    // or a Push that only added settings.
+    if (meta.cleared && !(Array.isArray(meta.slots) && meta.slots.length)) {
       await clearWorkbookFiles();
       localStorage.setItem(DATA_PUSH_KEY, JSON.stringify({
         at: serverAt,
@@ -399,8 +401,19 @@
       return { at: serverAt, fromServer: true, meta, cleared: true };
     }
 
-    const files = await downloadServerFiles(meta);
-    await saveWorkbookFiles(files, { at: serverAt });
+    if (!(Array.isArray(meta.slots) && meta.slots.length)) {
+      return { at: serverAt, fromServer: true, meta, cached: hasLocal };
+    }
+
+    const incoming = await downloadServerFiles(meta);
+    const prev = ((await loadWorkbookFiles()) || {}).files || {};
+    const merged = { ...prev };
+    Object.keys(incoming).forEach((id) => { merged[id] = incoming[id]; });
+    const serverSlots = new Set(meta.slots);
+    Object.keys(merged).forEach((id) => {
+      if (!serverSlots.has(id)) delete merged[id];
+    });
+    await saveWorkbookFiles(merged, { at: serverAt });
     return { at: serverAt, fromServer: true, meta, forced: force };
   }
 
@@ -456,6 +469,60 @@
     return data;
   }
 
+  const APP_VERSION_KEY = "toyota_app_version_v1";
+
+  function applyPagesUpdated(msg) {
+    if (!msg || msg.type !== "pages_updated" || !msg.version) return;
+    try {
+      const next = String(msg.version);
+      const prev = sessionStorage.getItem(APP_VERSION_KEY) || "";
+      if (!prev) {
+        sessionStorage.setItem(APP_VERSION_KEY, next);
+        return;
+      }
+      if (prev !== next) {
+        sessionStorage.setItem(APP_VERSION_KEY, next);
+        location.reload();
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let appVersionSyncStarted = false;
+  function startAppVersionSync() {
+    const api = { onSocketMessage: applyPagesUpdated };
+    if (appVersionSyncStarted) return api;
+    appVersionSyncStarted = true;
+    let current = "";
+    try { current = sessionStorage.getItem(APP_VERSION_KEY) || ""; } catch { /* ignore */ }
+    const check = async () => {
+      try {
+        const res = await fetch("/api/app-version", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        const v = String(data.version || "");
+        if (!v) return;
+        if (!current) {
+          current = v;
+          try { sessionStorage.setItem(APP_VERSION_KEY, v); } catch { /* ignore */ }
+          return;
+        }
+        if (v !== current) {
+          try { sessionStorage.setItem(APP_VERSION_KEY, v); } catch { /* ignore */ }
+          location.reload();
+        }
+      } catch {
+        /* offline */
+      }
+    };
+    setInterval(check, 15000);
+    global.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") check();
+    });
+    check();
+    return api;
+  }
+
   /** WebSocket + poll so other laptops refresh when Admin Push lands. */
   function startLiveSync(onUpdate, options) {
     const opts = options && typeof options === "object" ? options : {};
@@ -466,6 +533,7 @@
     let pollTimer = null;
     let debounceTimer = null;
     let stopped = false;
+    const versionSync = startAppVersionSync();
 
     const notify = (reason) => {
       if (typeof onUpdate !== "function") return;
@@ -480,6 +548,7 @@
       try {
         const meta = await fetchServerMeta();
         if (applyGecControlFromMeta(meta)) notifyGecControl();
+        if (meta && meta.appVersion) applyPagesUpdated({ type: "pages_updated", version: meta.appVersion });
         const at = Number(meta && meta.at) || 0;
         if (at && at !== lastAt) {
           lastAt = at;
@@ -509,6 +578,9 @@
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          if (versionSync && typeof versionSync.onSocketMessage === "function") {
+            versionSync.onSocketMessage(msg);
+          }
           if (msg.type === "report_sheet_updated") {
             const at = Number(msg.at) || Date.now();
             if (at !== lastAt) {
@@ -598,6 +670,8 @@
     pushToServer,
     clearOnServer,
     startLiveSync,
+    startAppVersionSync,
+    applyPagesUpdated,
     applySettingsToLocalStorage,
   };
 })(typeof window !== "undefined" ? window : globalThis);

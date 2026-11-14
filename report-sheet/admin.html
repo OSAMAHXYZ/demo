@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="bo-notifications.css?v=20261112boe2" />
   <script src="auth.js?v=20261109nn1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261110boe1"></script>
+  <script src="data-store.js?v=20261114live1"></script>
   <script src="bo-error-builtins.js?v=20261112boe2"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="allocation-plan-data.js?v=20261107mod1"></script>
@@ -538,6 +538,34 @@
     body.admin-page .target-row.is-vacation{opacity:.6}
     body.admin-page .target-emp-code{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted) !important;background:rgba(148,163,184,.08) !important;border-radius:6px;padding:2px 6px}
 
+    .shell:has(#panel-keep:not([hidden])) > #admin-kpis{display:none !important}
+    #panel-keep .keep-banner{
+      display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:12px;margin:0 0 14px;
+      border:1px solid var(--line);background:var(--sunk,#0c111b)
+    }
+    #panel-keep .keep-banner.ok{border-color:rgba(61,220,151,.35)}
+    #panel-keep .keep-banner.warn{border-color:rgba(255,176,32,.4)}
+    #panel-keep .keep-banner b{display:block;font-size:14px}
+    #panel-keep .keep-banner span{display:block;color:var(--ink-2,#b3bccb);font-size:13px;line-height:1.45;margin-top:4px}
+    #panel-keep .keep-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 14px}
+    #panel-keep .keep-kpi{padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2,#151b29)}
+    #panel-keep .keep-kpi i{display:block;font-style:normal;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#7f8899)}
+    #panel-keep .keep-kpi b{display:block;margin-top:6px;font-size:18px;font-family:"JetBrains Mono",monospace}
+    #panel-keep .keep-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+    #panel-keep .keep-table-wrap{overflow:auto;max-height:min(52vh,520px);border:1px solid var(--line);border-radius:12px}
+    #panel-keep table{width:100%;border-collapse:collapse;font-size:13px}
+    #panel-keep th,#panel-keep td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+    #panel-keep th{position:sticky;top:0;background:var(--surface-2,#151b29);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#7f8899)}
+    #panel-keep td.path{font-family:"JetBrains Mono",monospace;font-size:12px}
+    #panel-keep .keep-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle}
+    #panel-keep .keep-dot.on{background:var(--ok,#3ddc97)}
+    #panel-keep .keep-dot.off{background:var(--warn,#ffb020)}
+    @media (max-width:860px){
+      #panel-keep .keep-kpis{grid-template-columns:1fr 1fr}
+    }
+    @media (max-width:400px){
+      #panel-keep .keep-kpis{grid-template-columns:1fr}
+    }
     /* ===== BO Error Condition · 2026-11-14 layout ===== */
     .shell:has(#panel-bonotifications:not([hidden])) > #admin-kpis{display:none !important}
     .app-content:has(#panel-bonotifications:not([hidden])) .page-foot{display:none !important}
@@ -924,6 +952,10 @@
         </button>
       </nav>
       <div class="sidebar-footer">
+        <button type="button" class="tab side-nav-item" data-admin-panel="keep" id="tab-keep">
+          <span class="side-nav-icon" aria-hidden="true">▣</span>
+          <span class="side-nav-label">Keep data</span>
+        </button>
         <a class="side-nav-item side-nav-link" href="data-uploader.html">
           <span class="side-nav-icon" aria-hidden="true">⇪</span>
           <span class="side-nav-label">Data Uploader</span>
@@ -1226,6 +1258,45 @@
       </div>
     </section>
 
+    <section class="admin-panel" id="panel-keep" hidden>
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>Keep data</h2>
+          <span class="admin-section-tag">Files and entries stay after a code push</span>
+        </div>
+        <p class="admin-lead">
+          This is the copy of every pushed Excel file and every saved entry.
+          Code deploys do not replace it when the Railway volume is on.
+        </p>
+        <div class="keep-banner warn" id="keep-banner">
+          <div>
+            <b id="keep-banner-title">Checking keep copy…</b>
+            <span id="keep-banner-body">Reading the live files on this server.</span>
+          </div>
+        </div>
+        <div class="keep-kpis" id="keep-kpis"></div>
+        <div class="keep-actions">
+          <button type="button" class="btn-primary" id="keep-save-btn">Save keep copy</button>
+          <button type="button" class="btn" id="keep-download-btn">Download keep copy</button>
+          <button type="button" class="btn" id="keep-restore-btn">Restore keep copy to live</button>
+          <label class="btn" for="keep-upload-input">Upload keep copy</label>
+          <input type="file" id="keep-upload-input" accept=".zip,application/zip" hidden />
+          <button type="button" class="btn" id="keep-refresh-btn">Refresh</button>
+          <span class="hint" id="keep-result"></span>
+        </div>
+        <div class="keep-table-wrap">
+          <table>
+            <thead>
+              <tr><th>File</th><th>Size</th><th>Updated</th></tr>
+            </thead>
+            <tbody id="keep-files-body">
+              <tr><td colspan="3">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <footer class="page-foot">Admin only · Push updates all live dashboards · <a href="index.html">Open live report</a></footer>
   </div>
       </div>
@@ -1255,6 +1326,9 @@
   const currentUser = Auth && Auth.requireLogin({ adminOnly: true });
   if (!currentUser) return;
   Auth.paintUserCard(document.getElementById("sidebar-user-card"), currentUser);
+  if (window.ReportSheetStore && typeof window.ReportSheetStore.startAppVersionSync === "function") {
+    window.ReportSheetStore.startAppVersionSync();
+  }
   const logoutBtn = document.getElementById("logout-btn");
   if (logoutBtn) logoutBtn.onclick = () => Auth.logout();
   const isFullAdmin = Auth.isAdmin(currentUser);
@@ -1266,7 +1340,7 @@
   function applyPushPermissions() {
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       const panel = btn.dataset.adminPanel;
-      if (panel === "access") {
+      if (panel === "access" || panel === "keep") {
         btn.hidden = !isFullAdmin;
         return;
       }
@@ -1999,9 +2073,9 @@
   }
 
   function firstAllowedAdminPanel() {
-    const order = ["uploads", "contact", "ytd", "targets", "allocation", "gec", "bonotifications", "access"];
+    const order = ["uploads", "contact", "ytd", "targets", "allocation", "gec", "bonotifications", "access", "keep"];
     return order.find((id) => {
-      if (id === "access") return isFullAdmin;
+      if (id === "access" || id === "keep") return isFullAdmin;
       if (id === "contact" || id === "ytd") return Auth.canPushArea(id, currentUser) || Auth.canPushSection("uploads", currentUser);
       return Auth.canPushSection(id, currentUser);
     }) || "uploads";
@@ -2009,8 +2083,8 @@
 
   function showAdminPanel(which) {
     if (which === "notifications") which = "bonotifications";
-    if (which === "access" && !isFullAdmin) which = firstAllowedAdminPanel();
-    if (which !== "access" && which !== "contact" && which !== "ytd" && !Auth.canPushSection(which === "uploads" ? "uploads" : which, currentUser)) {
+    if ((which === "access" || which === "keep") && !isFullAdmin) which = firstAllowedAdminPanel();
+    if (which !== "access" && which !== "keep" && which !== "contact" && which !== "ytd" && !Auth.canPushSection(which === "uploads" ? "uploads" : which, currentUser)) {
       which = firstAllowedAdminPanel();
     }
     const uploads = $("#panel-uploads");
@@ -2019,6 +2093,7 @@
     const gec = $("#panel-gec");
     const boNotif = $("#panel-bonotifications");
     const accessPanel = $("#panel-access");
+    const keepPanel = $("#panel-keep");
     const focusContact = which === "contact" && Auth.canPushArea("contact", currentUser);
     const focusYtd = which === "ytd" && Auth.canPushArea("ytd", currentUser);
     if ((which === "contact" || which === "ytd") && Auth.canPushSection("uploads", currentUser)) which = "uploads";
@@ -2029,6 +2104,7 @@
     if (gec) gec.hidden = which !== "gec";
     if (boNotif) boNotif.hidden = which !== "bonotifications";
     if (accessPanel) accessPanel.hidden = which !== "access" || !isFullAdmin;
+    if (keepPanel) keepPanel.hidden = which !== "keep" || !isFullAdmin;
     const contactCard = document.getElementById("contact-files");
     const ytdCard = document.getElementById("ytd-sales-files");
     if (contactCard) contactCard.hidden = !Auth.canPushArea("contact", currentUser) && !isFullAdmin;
@@ -2038,6 +2114,7 @@
       Auth.fetchAccess().then(paintViewerAccess).catch(paintViewerAccess);
       loadCtrlUsers();
     }
+    if (which === "keep" && isFullAdmin) loadKeepStatus();
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       const active = focusContact ? "contact" : (focusYtd ? "ytd" : which);
       btn.classList.toggle("active", btn.dataset.adminPanel === active);
@@ -2435,7 +2512,7 @@
         showError(`Server sync failed: ${err.message || err}. Saved on this browser only.`);
       }
 
-      const dataStamp = await Store.saveWorkbookFiles(filesBySlot, { at: serverAt });
+      const dataStamp = await Store.saveWorkbookFiles(filesBySlot, { at: serverAt, merge: true });
       if (server) {
         if (pushedGec) {
           Store.writeGecControl(pushedGec, serverAt);
@@ -2662,6 +2739,130 @@
     renderTargetsPanel();
     setStatus("Names reset — click Push to live", "busy");
   });
+  function keepBytes(n) {
+    const v = Number(n) || 0;
+    if (v < 1024) return v + " B";
+    if (v < 1024 * 1024) return (v / 1024).toFixed(1) + " KB";
+    return (v / (1024 * 1024)).toFixed(1) + " MB";
+  }
+  function keepWhen(isoOrAt) {
+    const ms = typeof isoOrAt === "number" ? isoOrAt : Date.parse(isoOrAt || "");
+    if (!ms) return "—";
+    try { return new Date(ms).toLocaleString(); } catch { return "—"; }
+  }
+  function setKeepResult(text, ok) {
+    const el = $("#keep-result");
+    if (!el) return;
+    el.textContent = text || "";
+    el.style.color = ok ? "var(--ok,#3ddc97)" : "var(--warn,#ffb020)";
+  }
+  async function loadKeepStatus() {
+    const body = $("#keep-files-body");
+    const banner = $("#keep-banner");
+    const title = $("#keep-banner-title");
+    const text = $("#keep-banner-body");
+    const kpis = $("#keep-kpis");
+    try {
+      const res = await fetch("/api/data-keep", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Keep status failed");
+      const on = !!data.volumeOn;
+      if (banner) banner.className = "keep-banner " + (on ? "ok" : "warn");
+      if (title) title.innerHTML = `<span class="keep-dot ${on ? "on" : "off"}"></span>${on ? "Volume is on — files stay after every push" : "Volume is off — files vanish on the next deploy"}`;
+      if (text) {
+        text.textContent = on
+          ? "Pushed Excel files and saved entries live on the volume. A keep copy is updated after every Push and after Reserved Orders saves."
+          : "Railway → this service → Volumes → New volume → mount path /data. Then set PERSISTENT_DATA_DIR=/data. After that, a code push leaves files and entries as they are.";
+      }
+      if (kpis) {
+        kpis.innerHTML = `
+          <div class="keep-kpi"><i>Volume</i><b>${on ? "ON" : "OFF"}</b></div>
+          <div class="keep-kpi"><i>Live files</i><b>${data.fileCount || 0}</b></div>
+          <div class="keep-kpi"><i>Reserved entries</i><b>${(data.entries && data.entries.reservedOrders) || 0}</b></div>
+          <div class="keep-kpi"><i>Last keep copy</i><b>${data.lastKeepAt ? keepWhen(data.lastKeepAt) : "None yet"}</b></div>`;
+      }
+      const rows = Array.isArray(data.files) ? data.files : [];
+      if (body) {
+        body.innerHTML = rows.length
+          ? rows.map((row) => `<tr><td class="path">${escapeHtml(row.path || "")}</td><td>${keepBytes(row.bytes)}</td><td>${keepWhen(row.updatedAt)}</td></tr>`).join("")
+          : `<tr><td colspan="3">No live files yet</td></tr>`;
+      }
+    } catch (err) {
+      if (banner) banner.className = "keep-banner warn";
+      if (title) title.textContent = "Keep copy could not be read";
+      if (text) text.textContent = err.message || "Request failed";
+      if (body) body.innerHTML = `<tr><td colspan="3">${escapeHtml(err.message || "Request failed")}</td></tr>`;
+    }
+  }
+  async function saveKeepCopy() {
+    setKeepResult("Saving…", true);
+    try {
+      const res = await fetch("/api/data-keep/snapshot", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setKeepResult("Keep copy saved · " + (data.copied || 0) + " files", true);
+      setStatus("Keep copy saved", "ok");
+      await loadKeepStatus();
+    } catch (err) {
+      setKeepResult(err.message || "Save failed", false);
+    }
+  }
+  async function restoreKeepCopy() {
+    if (!confirm("Replace live files and entries with the keep copy on this server?")) return;
+    setKeepResult("Restoring…", true);
+    try {
+      const res = await fetch("/api/data-keep/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Restore failed");
+      setKeepResult("Restored · " + (data.copied || 0) + " files", true);
+      setStatus("Keep copy restored to live", "ok");
+      await loadKeepStatus();
+    } catch (err) {
+      setKeepResult(err.message || "Restore failed", false);
+    }
+  }
+  async function uploadKeepCopy(file) {
+    if (!file) return;
+    setKeepResult("Uploading…", true);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      const res = await fetch("/api/data-keep/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zipBase64: btoa(binary) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setKeepResult("Uploaded keep copy · " + (data.copied || 0) + " files", true);
+      setStatus("Keep copy uploaded to live", "ok");
+      await loadKeepStatus();
+    } catch (err) {
+      setKeepResult(err.message || "Upload failed", false);
+    }
+  }
+  const keepSaveBtn = $("#keep-save-btn");
+  if (keepSaveBtn) keepSaveBtn.addEventListener("click", saveKeepCopy);
+  const keepRestoreBtn = $("#keep-restore-btn");
+  if (keepRestoreBtn) keepRestoreBtn.addEventListener("click", restoreKeepCopy);
+  const keepRefreshBtn = $("#keep-refresh-btn");
+  if (keepRefreshBtn) keepRefreshBtn.addEventListener("click", () => loadKeepStatus());
+  const keepDownloadBtn = $("#keep-download-btn");
+  if (keepDownloadBtn) keepDownloadBtn.addEventListener("click", () => {
+    window.location.href = "/api/data-keep/download";
+  });
+  const keepUpload = $("#keep-upload-input");
+  if (keepUpload) keepUpload.addEventListener("change", () => {
+    const file = keepUpload.files && keepUpload.files[0];
+    keepUpload.value = "";
+    uploadKeepCopy(file);
+  });
+
   $("#push-btn").addEventListener("click", pushToLive);
   $("#push-btn-2").addEventListener("click", pushToLive);
   $("#push-btn-3").addEventListener("click", pushToLive);

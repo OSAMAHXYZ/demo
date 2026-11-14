@@ -35,6 +35,29 @@ function authenticate(req, res, next) {
 
 function attachLeaseCalculatorApi(app, options = {}) {
     const password = options.password || BACKEND_PASSWORD;
+    const dataFile = options.dataFile
+        || (options.dir ? path.join(options.dir, 'admin-data.json') : DATA_FILE);
+    if (options.dir) {
+        try { fs.mkdirSync(options.dir, { recursive: true }); } catch { /* ignore */ }
+    }
+    const readStored = () => {
+        try {
+            if (!fs.existsSync(dataFile)) {
+                return { banks: [], cars: {} };
+            }
+            const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+            return {
+                banks: Array.isArray(data.banks) ? data.banks : [],
+                cars: data.cars && typeof data.cars === 'object' ? data.cars : {}
+            };
+        } catch (e) {
+            return { banks: [], cars: {} };
+        }
+    };
+    const writeStored = (next) => {
+        fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+        fs.writeFileSync(dataFile, JSON.stringify(next, null, 2), 'utf8');
+    };
     const auth = (req, res, next) => {
         const value = req.body?.password || req.query?.password;
         if (value === password) return next();
@@ -43,7 +66,7 @@ function attachLeaseCalculatorApi(app, options = {}) {
 
     app.get('/api/banks', (req, res) => {
         try {
-            res.json(readData());
+            res.json(readStored());
         } catch (error) {
             console.error('[lease-calculator-api] GET /api/banks', error);
             res.status(500).json({ error: 'Failed to load banks' });
@@ -52,7 +75,7 @@ function attachLeaseCalculatorApi(app, options = {}) {
 
     app.get('/api/cars', (req, res) => {
         try {
-            const data = readData();
+            const data = readStored();
             res.json({ cars: data.cars });
         } catch (error) {
             console.error('[lease-calculator-api] GET /api/cars', error);
@@ -65,8 +88,8 @@ function attachLeaseCalculatorApi(app, options = {}) {
             if (!Array.isArray(req.body?.banks)) {
                 return res.status(400).json({ error: 'banks array is required' });
             }
-            const existing = readData();
-            writeData({ ...existing, banks: req.body.banks });
+            const existing = readStored();
+            writeStored({ ...existing, banks: req.body.banks });
             if (typeof options.onUpdate === 'function') options.onUpdate('banks');
             res.json({ success: true, message: 'Bank settings updated successfully' });
         } catch (error) {
@@ -80,8 +103,8 @@ function attachLeaseCalculatorApi(app, options = {}) {
             if (!req.body?.cars || typeof req.body.cars !== 'object') {
                 return res.status(400).json({ error: 'cars object is required' });
             }
-            const existing = readData();
-            writeData({ ...existing, cars: req.body.cars });
+            const existing = readStored();
+            writeStored({ ...existing, cars: req.body.cars });
             if (typeof options.onUpdate === 'function') options.onUpdate('cars');
             res.json({ success: true, message: 'Car settings updated successfully' });
         } catch (error) {
@@ -90,7 +113,7 @@ function attachLeaseCalculatorApi(app, options = {}) {
         }
     });
 
-    return { readData, writeData, DATA_FILE };
+    return { readData: readStored, writeData: writeStored, DATA_FILE: dataFile };
 }
 
 module.exports = {

@@ -22625,7 +22625,7 @@
     document.title = "GEC Dashboard — Abdul Latif Jameel MOTORS";
     document.body.classList.add("gec-view");
     switchPanel("gec");
-    liveSync = Store.startLiveSync(() => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }), { initialAt: lastDataPushAt });
+    liveSync = Store.startLiveSync(() => refreshFromAdmin("Updated from Admin Push", { skipLocal: true, force: true }), { initialAt: lastDataPushAt });
   }
   if (LEXUS_VIEW) {
     document.title = "Lexus B2C Tracker — Abdul Latif Jameel MOTORS";
@@ -22638,7 +22638,7 @@
     Promise.resolve(boot).finally(() => {
       if (liveSync || !Store || typeof Store.startLiveSync !== "function") return;
       liveSync = Store.startLiveSync(
-        () => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }),
+        () => refreshFromAdmin("Updated from Admin Push", { skipLocal: true, force: true }),
         { initialAt: lastDataPushAt }
       );
       const badge = $("#live-badge");

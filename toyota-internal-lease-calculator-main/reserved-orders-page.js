@@ -2820,6 +2820,17 @@
         const socket = new WebSocket(`${protocol}//${location.host}`);
         socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
+            if (msg.type === 'pages_updated' && msg.version) {
+                try {
+                    const key = 'toyota_app_version_v1';
+                    const prev = sessionStorage.getItem(key) || '';
+                    if (!prev) sessionStorage.setItem(key, String(msg.version));
+                    else if (prev !== String(msg.version)) {
+                        sessionStorage.setItem(key, String(msg.version));
+                        location.reload();
+                    }
+                } catch (e) { /* ignore */ }
+            }
             if (msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') { loadLive(); paintMyAlerts(); }
         });
     } catch (e) { /* polling remains */ }

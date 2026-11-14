@@ -15,7 +15,7 @@
   <script src="chart-defaults.js?v=20261114p1" defer></script>
   <script src="employee-roster.js?v=20261109cons1" defer></script>
   <script src="auth.js?v=20261105zt1" defer></script>
-  <script src="data-store.js?v=20261110boe1" defer></script>
+  <script src="data-store.js?v=20261114live1" defer></script>
   <script src="bo-error-conditions.js?v=20261110boe1" defer></script>
   <script src="bo-error-builtins.js?v=20261112boe2" defer></script>
   <script src="gec-data.js?v=20261023op1" defer></script>
@@ -2017,7 +2017,7 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
       <h2>Waiting for Admin Push</h2>
       <p style="color:var(--muted);font-size:.9rem;margin:0 0 12px">
         Open <a href="admin.html">Admin</a>, upload Excel (<b>Sales Raw</b> for Sales Report), set targets, then click <b>Push to live</b>.
-        On this page, click <b>Refresh</b> when you want the latest data (no auto-reload).
+        Open pages update on their own when Admin Push lands — existing files stay, only new data is added.
       </p>
       <div class="banner load" id="load-banner">Loading pushed workbooks…</div>
       <div class="banner err" id="error-banner"></div>
@@ -3711,7 +3711,7 @@ body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba
     </div>
   </div>
 
-<script src="report-app.js?v=5c84d0719f" defer></script>
+<script src="report-app.js?v=20261114live1" defer></script>
 <script id="executive-present">
 /* Executive presentation mode · visual only.
    Adds a "Present" button to the top bar. It hides the sidebar, search and
