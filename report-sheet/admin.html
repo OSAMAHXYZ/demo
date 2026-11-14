@@ -538,124 +538,123 @@
     body.admin-page .target-row.is-vacation{opacity:.6}
     body.admin-page .target-emp-code{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted) !important;background:rgba(148,163,184,.08) !important;border-radius:6px;padding:2px 6px}
 
-    /* hide empty boxes the builder leaves behind (they show up again when filled) */
-    body.admin-page #boe-rules-root :is(div,p,section,pre):empty{display:none !important}
-
-    /* cleaner BO Error Condition builder */
-    body.admin-page #panel-bonotifications .br-form-clean{display:flex;flex-direction:column;gap:14px}
-    body.admin-page #panel-bonotifications .br-sec{padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(148,163,184,.04)}
-    body.admin-page #panel-bonotifications .br-sec-title{margin:0 0 10px;font:700 11px/1 "Archivo",system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-    body.admin-page #panel-bonotifications .br-car-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-    body.admin-page #panel-bonotifications .br-car-chip{display:inline-flex;align-items:center;gap:0;padding:0;margin:0;border:1px solid var(--line-2);border-radius:999px;background:var(--sunk);cursor:pointer;overflow:hidden}
-    body.admin-page #panel-bonotifications .br-car-chip input{position:absolute;opacity:0;pointer-events:none}
-    body.admin-page #panel-bonotifications .br-car-chip span{display:block;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
-    body.admin-page #panel-bonotifications .br-car-chip.is-on{border-color:rgba(255,45,66,.55);background:rgba(255,45,66,.12);box-shadow:0 0 0 2px rgba(255,45,66,.12)}
-    body.admin-page #panel-bonotifications .br-car-chip.is-on span{color:#fff}
-    body.admin-page #panel-bonotifications .br-car-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px}
-    body.admin-page #panel-bonotifications .br-cond{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(110px,.9fr) minmax(0,1fr) auto;gap:8px;align-items:center;margin:0 0 8px}
-    body.admin-page #panel-bonotifications .br-cond-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
-    body.admin-page #panel-bonotifications .br-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-    body.admin-page #panel-bonotifications .br-meta-grid .check{grid-column:1 / -1;align-items:center}
-    body.admin-page #panel-bonotifications .br-msg summary{cursor:pointer;font-weight:700;color:var(--ink);margin-bottom:10px}
-    body.admin-page #panel-bonotifications .br-next{margin:0;padding:12px 14px;border:1px solid rgba(255,45,66,.28);border-radius:14px;background:rgba(255,45,66,.06)}
-    body.admin-page #panel-bonotifications .br-next-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    body.admin-page #panel-bonotifications .br-next-choice button{text-align:left;padding:12px;border-radius:12px;min-height:88px}
-    @media (max-width:900px){
-      body.admin-page #panel-bonotifications .br-cond{grid-template-columns:1fr}
-      body.admin-page #panel-bonotifications .br-meta-grid,.br-next-choice{grid-template-columns:1fr}
-    }
-
-    /* ===== BO Error Condition · one screen ===== */
+    /* ===== BO Error Condition · 2026-11-14 layout ===== */
     .shell:has(#panel-bonotifications:not([hidden])) > #admin-kpis{display:none !important}
-    body.admin-page #panel-bonotifications .card{padding:16px 18px !important;display:flex;flex-direction:column;gap:10px}
-    body.admin-page #panel-bonotifications .pbi-viz-head{margin:0 !important;padding-bottom:10px}
-    body.admin-page #panel-bonotifications .admin-lead{margin:0 !important;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;cursor:help}
-    body.admin-page #panel-bonotifications .admin-lead:hover{-webkit-line-clamp:unset}
-    body.admin-page #bo-notif-unlock-note:empty, body.admin-page #bo-notif-unlock-note{margin:0 !important;font-size:12px}
-    body.admin-page #bo-notif-unlock-note:empty{display:none}
-
-    .bon-stage{display:grid;grid-template-columns:minmax(0,1fr) clamp(270px,20vw,330px);gap:14px;align-items:stretch}
-    .bon-stage > #boe-rules-root{min-width:0}
-
-    /* builder parts found by the script (class names added at run time) */
-    .bon-fit{display:grid !important;grid-template-columns:minmax(0,4fr) minmax(0,5fr);grid-auto-rows:min-content;column-gap:10px;row-gap:10px;align-content:start}
-    .bon-fit > *{grid-column:1 / -1;min-width:0;margin-top:0 !important;margin-bottom:0 !important;order:9}
-    .bon-fit > .bon-p-file, .bon-fit > .bon-p-stats{order:0}
-    .bon-fit > .bon-p-cols-slot{order:5}
-    /* BO file details: one quiet line */
-    .bon-p-file .bon-p-boxes, .bon-p-boxes.bon-p-line{display:flex !important;flex-wrap:wrap;gap:4px 18px !important;grid-template-columns:none !important}
-    .bon-p-boxes.bon-p-line > *{display:flex !important;align-items:baseline;gap:7px;padding:0 !important;border:0 !important;background:transparent !important;min-width:0}
-    .bon-p-boxes.bon-p-line > * > :first-child{font-size:10px !important;letter-spacing:.12em;color:var(--muted) !important}
-    .bon-p-boxes.bon-p-line > * > :last-child{font-size:13px !important;font-weight:600 !important;color:var(--ink) !important;margin:0 !important;max-width:280px}
-    .bon-p-boxes.bon-p-line > * + *::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--line-2);align-self:center;margin-right:11px}
-    /* stats: five slim tiles */
-    .bon-p-boxes{gap:6px !important;margin:0 !important}
-    .bon-p-boxes:not(.bon-p-line) > *{padding:7px 10px !important;border-radius:10px !important;min-width:0}
-    .bon-p-boxes:not(.bon-p-line) > * > :first-child{font-size:9.5px !important;letter-spacing:.1em !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;display:block}
-    .bon-p-boxes:not(.bon-p-line) > * > :last-child{font-size:15px !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:2px !important}
-    .bon-p-boxes:not(.bon-p-line){display:grid !important;grid-template-columns:repeat(auto-fit,minmax(110px,1fr)) !important}
-    .bon-fit .bon-p-note, .bon-fit > p:not(.bon-p-cols-slot){display:none !important}
-    .bon-p-cols{margin:0 !important;display:grid !important;grid-template-columns:minmax(190px,232px) minmax(0,1fr) !important;column-gap:16px !important;row-gap:12px !important}
-    .bon-p-col{min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-gutter:stable}
-    .bon-p-col-rules{border-right:1px solid var(--line);padding-right:14px}
-    .bon-p-col :is(h2,h3,h4){margin-top:0 !important}
-    .bon-p-col :is(input:not([type=checkbox]):not([type=radio]),select){min-height:34px !important;height:34px}
-    .bon-p-col textarea{min-height:90px}
-    .bon-p-col :is(select,input:not([type=checkbox]):not([type=radio]),textarea){min-width:0 !important;max-width:100%}
-
-    /* fixed height so the page itself never scrolls */
-    @media (min-width:1100px) and (min-height:640px){
-      .bon-stage{height:var(--bon-h,auto)}
-      #boe-rules-root.bon-has-fit{height:100%;min-height:0;overflow:hidden}
-      #boe-rules-root.bon-has-fit .bon-p-chain{height:100%;min-height:0}
-      .bon-fit{height:100%;min-height:0;grid-template-rows:minmax(0,1fr);grid-auto-rows:min-content;overflow:hidden}
-      .bon-fit:has(> .bon-p-file, > .bon-p-stats){grid-template-rows:auto minmax(0,1fr)}
-      .bon-fit:has(> .bon-p-file):has(> .bon-p-stats){grid-template-rows:auto auto minmax(0,1fr)}
-      .bon-fit > .bon-p-cols-slot{min-height:0;align-self:stretch}
-      .bon-p-cols{height:100%;min-height:0;align-items:stretch !important}
-      .bon-p-col{max-height:100%}
-      .bon-dock{height:100%}
-    }
-
-    /* the "what next?" side panel */
-    .bon-dock{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;min-width:0;overflow:auto;
-      background:linear-gradient(180deg,rgba(25,33,50,.9),rgba(14,19,30,.9));border:1px solid var(--line-2);transition:border-color .3s,box-shadow .3s}
-    .bon-dock.ready{border-color:rgba(255,45,66,.45);box-shadow:0 0 0 4px rgba(255,45,66,.07),0 20px 50px -24px rgba(255,45,66,.45)}
-    .bon-dock .bon-side-h{display:flex;gap:10px;align-items:center}
-    .bon-dock .bon-ico{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(148,163,184,.1);color:var(--muted);font-weight:800;transition:background .3s,color .3s}
-    .bon-dock.ready .bon-ico{background:rgba(255,45,66,.16);color:#ff8a96}
-    .bon-dock small.bon-eyebrow{display:block;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-    .bon-dock #bon-title{display:block;color:var(--ink);font:700 15px/1.25 "Archivo",system-ui,sans-serif;margin-top:2px}
-    .bon-dock .bon-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .bon-dock .bon-kpis > div{background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-    .bon-dock .bon-kpis b{display:block;font:800 26px/1 "Archivo",system-ui,sans-serif;color:var(--ink);font-variant-numeric:tabular-nums;transition:color .3s}
-    .bon-dock.ready .bon-kpis b{color:#fff}
-    .bon-dock .bon-kpis small{display:block;margin-top:4px;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-    .bon-dock #bon-sub{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5;min-height:2.9em}
-    .bon-dock .bon-choice{display:flex;flex-direction:column;gap:8px}
-    .bon-dock .bon-choice .bon-btn{height:auto;padding:11px 12px;flex-direction:row;align-items:flex-start;text-align:left;line-height:1.3;width:100%}
-    .bon-dock .bon-choice .bon-btn i{margin-top:1px}
-    .bon-dock .bon-choice .bon-btn span{display:flex;flex-direction:column;gap:3px}
-    .bon-dock .bon-choice .bon-btn em{font-style:normal;font-weight:500;font-size:11.5px;opacity:.75}
-    .bon-dock:not(.ready) .bon-choice .bon-btn{filter:saturate(.3)}
-    .bon-dock .bon-pick{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:12px;border-top:1px solid var(--line)}
-    .bon-dock .bon-pick label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-    .bon-dock .bon-pick select{width:100%;height:36px;background-color:var(--sunk);color:var(--ink);border:1px solid var(--line-2);border-radius:10px}
-    .bon-dock .bon-result{display:none;padding:9px 11px;border-radius:10px;background:rgba(61,220,151,.08);border:1px solid rgba(61,220,151,.3);color:#9cf0c9;font-size:12.5px;line-height:1.45}
-    .bon-dock .bon-result.show{display:block;animation:adm-rise .3s ease both}
-    @media (max-width:1099px){.bon-stage{grid-template-columns:1fr}.bon-fit{grid-template-columns:1fr}.bon-fit > .bon-p-file,.bon-fit > .bon-p-stats{grid-column:1}.bon-p-col-rules{border-right:0;padding-right:0}}
-
-    /* panel chrome while on this page */
     .app-content:has(#panel-bonotifications:not([hidden])) .page-foot{display:none !important}
+    body.admin-page #panel-bonotifications > .card.admin-section-card > .pbi-viz-head,
+    body.admin-page #panel-bonotifications > .card.admin-section-card > .admin-lead,
     body.admin-page #panel-bonotifications #bo-notif-unlock-note{display:none !important}
-    .bon-dock .bon-choice .bon-btn{display:grid;grid-template-columns:18px minmax(0,1fr);column-gap:8px;border-radius:12px}
-    .bon-dock .bon-mini{display:flex;flex-direction:column;gap:4px;min-height:0}
-    .bon-dock .bon-mini:empty{display:none}
-    .bon-dock .bon-mini > small{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
-    .bon-dock .bon-mini > div{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;background:rgba(148,163,184,.05);font-size:12.5px;color:var(--ink-2);animation:adm-rise .3s ease both}
-    .bon-dock .bon-mini > div b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-weight:600}
-    .bon-dock .bon-mini > div span{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--muted)}
-    .bon-dock .bon-mini > div i{font-style:normal;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:rgba(122,162,255,.14);color:#c7d6ff;font-size:11px;font-weight:700}
+    body.admin-page #panel-bonotifications > .card.admin-section-card{
+      padding:0 !important;overflow:visible !important;display:flex;flex-direction:column;gap:0;
+      border-radius:12px;border:1px solid var(--line);box-shadow:none;background:var(--surface)}
+    body.admin-page #boe-rules-root{flex:1;min-width:0;overflow:visible;padding:0;background:transparent !important;color:var(--ink-2);font-size:13px}
+    body.admin-page #boe-rules-root :is(h1,h2,h3,h4){color:var(--ink) !important;font-family:"Archivo",system-ui,sans-serif !important}
+
+    .bec-page{display:flex;flex-direction:column;gap:12px;padding:16px;min-width:0}
+    .bec-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+    .bec-head h2{margin:0;font-size:16px;font-weight:700;letter-spacing:-.01em}
+    .bec-file{margin:4px 0 0;font-size:12px;color:var(--muted);font-family:"JetBrains Mono",ui-monospace,monospace}
+    .bec-stats{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12px;color:var(--ink-2);align-items:center}
+    .bec-stats b{font-family:"Archivo",system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);margin-right:4px}
+    .bec-stat-bad b{color:var(--bad)}
+    .bec-stat-ok b{color:var(--ok)}
+
+    .bec-workspace{display:grid;grid-template-columns:170px minmax(0,1fr) 190px;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:visible;min-height:420px}
+    .bec-col{padding:12px;min-width:0}
+    .bec-col + .bec-col{border-left:1px solid var(--line)}
+    .bec-col-k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+    .bec-builder{display:flex;flex-direction:column;gap:16px}
+
+    .bec-rules-top{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .bec-plus{flex:none;width:32px;height:32px !important;padding:0 !important;border-radius:8px !important;background:rgba(255,45,66,.12) !important;border:1px solid rgba(255,45,66,.4) !important;color:#ff8a96 !important;font-size:18px !important;line-height:1 !important;box-shadow:none !important}
+    .bec-search{flex:1;min-width:0;margin:0}
+    .bec-search input{width:100%;height:32px;min-height:32px !important;padding:0 10px;border-radius:8px;background:var(--sunk);border:1px solid var(--line-2);color:var(--ink);font-size:12.5px}
+    .bec-rule-pick{display:none;width:100%;height:32px;margin-bottom:8px}
+    .bec-rule-list{display:flex;flex-direction:column;gap:4px}
+    .bec-rule{display:flex;align-items:stretch;gap:2px;border-radius:8px}
+    .bec-rule-main{flex:1;min-width:0;text-align:left;padding:8px 8px !important;border:0 !important;background:transparent !important;border-radius:8px !important;box-shadow:none !important;transform:none !important}
+    .bec-rule-main b{display:block;font-size:13px;color:var(--ink);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bec-rule-main span{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bec-rule.is-on{background:rgba(255,45,66,.12)}
+    .bec-rule.is-on .bec-rule-main b{color:#ff8a96}
+    .bec-rule.is-paused{opacity:.45}
+    .bec-rule-more{display:flex;flex-direction:column;justify-content:center}
+    .bec-rule-more button{height:22px !important;min-height:0 !important;padding:0 6px !important;font-size:10px !important;border:0 !important;background:transparent !important;color:var(--muted) !important;box-shadow:none !important}
+    .bec-empty{padding:16px 4px;text-align:center}
+    .bec-empty p{margin:0 0 10px;font-size:12px;color:var(--muted)}
+    .bec-empty-btn{height:auto !important;min-height:32px;padding:6px 10px !important;font-size:12px !important;white-space:normal;line-height:1.3 !important}
+
+    .bec-step{display:flex;flex-direction:column;gap:8px}
+    .bec-step-h{display:flex;align-items:center;gap:8px;margin:0;font-size:13px !important;font-weight:650 !important;color:var(--ink) !important}
+    .bec-step-h i{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;font:700 11px/1 "Archivo",system-ui,sans-serif;font-style:normal}
+    .bec-step-h em{margin-left:auto;font-style:normal;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+    .bec-match{margin-left:auto;height:26px !important;min-height:26px !important;padding:0 22px 0 8px !important;border-radius:999px !important;font-size:11px !important;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--sunk) !important;border:1px solid var(--line-2) !important;color:var(--ink-2) !important}
+    .bec-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .bec-row2 label,.bec-step label{display:flex;flex-direction:column;gap:4px;min-width:0;margin:0;font-size:13px}
+    .bec-page [hidden]{display:none !important}
+    .bec-step label > span,.bec-page .br-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+    .bec-page :is(input:not([type=checkbox]):not([type=radio]),select,textarea){height:32px;min-height:32px;padding:0 10px;border-radius:8px;background:var(--sunk);border:1px solid var(--line-2);color:var(--ink);font-size:13px}
+    .bec-page textarea{height:auto;min-height:88px;padding:8px 10px;line-height:1.45}
+    .bec-active{flex-direction:row !important;align-items:center;gap:8px !important;font-size:13px;color:var(--ink-2)}
+    .bec-add-link{align-self:flex-start;background:none !important;border:0 !important;box-shadow:none !important;color:var(--you) !important;padding:0 !important;height:auto !important;min-height:0 !important;font-size:12.5px !important;font-weight:650 !important;transform:none !important}
+    .bec-page .br-apply{padding:10px 12px;border-radius:8px;background:var(--sunk);border:1px solid var(--line);font-size:12.5px;line-height:1.45;color:var(--ink-2)}
+    .bec-page .br-conditions{display:flex;flex-direction:column;gap:8px}
+    .bec-page .br-cond{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(90px,.9fr) minmax(0,1fr) 28px;gap:8px;align-items:center;margin:0}
+    .bec-page .br-cond-remove{width:28px;height:28px !important;padding:0 !important;border-radius:8px !important;font-size:16px !important;line-height:1 !important}
+    .bec-page .br-car-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+    .bec-page .br-car-chip{display:inline-flex;margin:0;border:1px solid var(--line-2);border-radius:999px;background:var(--sunk);cursor:pointer;overflow:hidden}
+    .bec-page .br-car-chip input{position:absolute;opacity:0;pointer-events:none}
+    .bec-page .br-car-chip span{display:block;padding:6px 10px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+    .bec-page .br-car-chip.is-on{border-color:rgba(255,45,66,.55);background:rgba(255,45,66,.12)}
+    .bec-page .br-car-chip.is-on span{color:#fff}
+    .bec-page .br-car-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
+    .bec-page .muted{margin:0;font-size:12px;color:var(--muted)}
+    .bec-msg > summary{list-style:none;cursor:pointer}
+    .bec-msg > summary::-webkit-details-marker{display:none}
+    .bec-msg[open]{gap:8px}
+    .bec-page .br-chips{display:flex;flex-wrap:wrap;gap:6px}
+    .bec-page .br-chips button{height:26px !important;padding:0 8px !important;font-size:11px !important;font-family:"JetBrains Mono",ui-monospace,monospace}
+
+    .bec-preview{display:flex;flex-direction:column;gap:12px}
+    .bec-preview-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .bec-preview-nums > div{padding:8px 0}
+    .bec-preview-nums strong{display:block;font:800 26px/1 "Archivo",system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink)}
+    .bec-preview-nums > div:first-child strong{color:var(--bad)}
+    .bec-preview-nums span{display:block;margin-top:4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .bec-preview-sub{margin:0;font-size:12px;line-height:1.45;color:var(--muted)}
+    .bec-preview .bon-mini{display:flex;flex-direction:column;gap:4px}
+    .bec-preview .bon-mini > div{display:flex;justify-content:space-between;gap:8px;padding:6px 0;font-size:12.5px;color:var(--ink-2);border-bottom:1px solid var(--line)}
+    .bec-preview .bon-mini b{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bec-preview .bon-mini span{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted)}
+    .bec-more{margin:4px 0 0;font-size:12px;color:var(--muted)}
+    .bec-view-orders{align-self:flex-start;background:none !important;border:0 !important;box-shadow:none !important;color:var(--you) !important;padding:0 !important;height:auto !important;font-size:12.5px !important;transform:none !important}
+    .bec-orders-wrap{font-size:12px;color:var(--muted)}
+    .bec-orders-wrap[open]{color:var(--ink-2)}
+    .bec-page .bon-result{display:none;padding:8px 10px;border-radius:8px;background:rgba(61,220,151,.08);border:1px solid rgba(61,220,151,.3);color:#9cf0c9;font-size:12.5px}
+    .bec-page .bon-result.show{display:block}
+
+    .bec-actions{position:sticky;bottom:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;margin:0 -16px -16px;border-top:1px solid var(--line);border-radius:0 0 12px 12px;background:rgba(17,22,34,.96);backdrop-filter:blur(8px)}
+    .bec-status{margin:0;font-size:12.5px;color:var(--ink-2)}
+    .bec-actions-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+    .bec-need-test{font-size:12px;color:var(--warn)}
+    .bec-need-test.bec-need-flash{animation:bec-flash .6s ease}
+    .bec-btn{height:32px !important;padding:0 12px !important;border-radius:8px !important;font-size:12.5px !important;font-weight:650 !important;box-shadow:none !important}
+    .bec-btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:1px solid rgba(255,90,105,.6) !important}
+    .bec-legacy{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+    @media (max-width:1100px){
+      .bec-workspace{grid-template-columns:170px minmax(0,1fr)}
+      .bec-preview{grid-column:1 / -1;border-left:0;border-top:1px solid var(--line)}
+    }
+    @media (max-width:800px){
+      .bec-workspace{grid-template-columns:1fr}
+      .bec-col + .bec-col{border-left:0;border-top:1px solid var(--line)}
+      .bec-rule-pick{display:block}
+      .bec-rule-list,.bec-rules-top{display:none}
+      .bec-row2,.bec-page .br-cond{grid-template-columns:1fr}
+      .bec-head{align-items:flex-start}
+    }
+    @keyframes bec-flash{0%,100%{opacity:1}40%{opacity:.25}}
     @keyframes adm-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
     @keyframes bon-pop{0%{transform:translateY(10px) scale(.98);opacity:.4}100%{transform:none;opacity:1}}
     @keyframes bon-sh{to{background-position:-200% 0}}
@@ -838,6 +837,14 @@
     html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-form label > span,
     html body.live-app.admin-page.toyota-theme #panel-bonotifications .br-label{
       color:#7f8899 !important;
+    }
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications #br-add-cond,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .bec-add-link,
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .bec-view-orders{
+      background:none !important;border:0 !important;box-shadow:none !important;color:#7aa2ff !important;padding:0 !important;height:auto !important;
+    }
+    html body.live-app.admin-page.toyota-theme #panel-bonotifications .bec-btn.primary{
+      background:linear-gradient(180deg,#ff2d42,#d40a1c) !important;color:#fff !important;border-color:rgba(255,90,105,.6) !important;
     }
     html body.live-app.admin-page.toyota-theme .alloc-edit-bar :is(input,select){
       background:#0c111b !important;
@@ -1931,7 +1938,7 @@
     const note = $("#bo-notif-unlock-note");
     if (note) note.textContent = "Loading BO Error Condition…";
     const script = document.createElement("script");
-    script.src = "/bo-rules-ui.js?v=20261112boe2";
+    script.src = "/bo-rules-ui.js?v=20261114ux2";
     script.onload = () => { if (note) note.textContent = ""; };
     script.onerror = () => {
       boNotifLoaded = false;
@@ -3082,7 +3089,6 @@
   const panel = document.getElementById("panel-bonotifications");
   const root = document.getElementById("boe-rules-root");
   if (!panel || !root) return;
-  const card = root.closest(".card") || root.parentElement;
   const API = "/api/reserved-orders";
   const rawFetch = window.fetch.bind(window);
   const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -3091,99 +3097,14 @@
 
   const state = { rule: null, data: null, mode: "", staff: null, headers: null, rules: null, picked: new Set(), busy: false, testSeq: 0 };
 
-  /* ---------- side panel ("what next?") ---------- */
-  const dock = document.createElement("aside");
-  dock.className = "bon-dock";
-  dock.setAttribute("aria-label", "Next step");
-  dock.innerHTML = `
-    <div class="bon-side-h"><span class="bon-ico">?</span><div><small class="bon-eyebrow">Next step</small><b id="bon-title">Test a condition</b></div></div>
-    <div class="bon-kpis"><div><b id="bon-o">—</b><small>Orders</small></div><div><b id="bon-e">—</b><small>Employees</small></div></div>
-    <p id="bon-sub">Build a condition and press Test conditions. Then choose what to do with the orders.</p>
-    <div class="bon-result" id="bon-result" role="status"></div>
-    <div class="bon-mini" id="bon-mini"></div>
-    <div class="bon-choice">
-      <button type="button" class="bon-btn bon-red" id="bon-go-err" disabled><i>⚠</i><span>Add to BO Error dashboard<em>Report Sheet BO Errors + Order Errors for selected employees</em></span></button>
-      <button type="button" class="bon-btn bon-blue" id="bon-go-msg" disabled><i>✉</i><span>Send employee message<em>Select employees · Messages + Send to WhatsApp</em></span></button>
-    </div>
-    <div class="bon-pick" id="bon-pickwrap"><label for="bon-saved">Or test a saved rule</label><select id="bon-saved"><option value="">Saved rules…</option></select></div>`;
-  const stage = document.createElement("div");
-  stage.className = "bon-stage";
-  root.parentNode.insertBefore(stage, root);
-  stage.append(root, dock);
-
-  /* ---------- fit the builder on one screen ---------- */
-  const textOf = (el) => String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-  function findByText(re, within) {
-    const all = (within || root).querySelectorAll("h1,h2,h3,h4,h5,b,strong,small,span,label,div,p");
-    for (const el of all) {
-      if (el.children.length > 2) continue;
-      if (re.test(textOf(el))) return el;
-    }
-    return null;
+  function el(id) { return document.getElementById(id); }
+  function flashNeedTest() {
+    const need = el("bon-need-test");
+    if (!need) return;
+    need.hidden = false;
+    need.classList.add("bec-need-flash");
+    setTimeout(() => need.classList.remove("bec-need-flash"), 700);
   }
-  function childOf(frame, el) {
-    while (el && el.parentElement !== frame) el = el.parentElement;
-    return el;
-  }
-  function lca(a, b) {
-    const seen = new Set();
-    for (let n = a; n; n = n.parentElement) seen.add(n);
-    for (let n = b; n; n = n.parentElement) if (seen.has(n)) return n;
-    return null;
-  }
-  function tag(el, cls) { if (el && !el.classList.contains(cls)) el.classList.add(cls); }
-  function gridOf(lab) {
-    if (!lab) return null;
-    let box = lab;
-    while (box.parentElement && box.parentElement !== root && box.parentElement.children.length < 3) box = box.parentElement;
-    return box.parentElement && box.parentElement.children.length >= 3 ? box.parentElement : null;
-  }
-  let fitting = false;
-  function fitBuilder() {
-    if (fitting) return;
-    fitting = true;
-    try {
-      const rulesHead = findByText(/^message rules$/);
-      const formHead = findByText(/^(new message rule|edit message rule|message rule)$/) || findByText(/^(new|edit) .*rule$/);
-      if (!rulesHead || !formHead) return;
-      const cols = lca(rulesHead, formHead);
-      if (!cols || !root.contains(cols)) return;
-      const fileGrid = gridOf(findByText(/^bo file$/));
-      const statGrid = gridOf(findByText(/^messages generated$/));
-      let frame = cols;
-      [fileGrid, statGrid].forEach((g) => { if (g) frame = lca(frame, g); });
-      if (frame === cols) frame = cols.parentElement;
-      if (!frame || !root.contains(frame) && frame !== root) return;
-      tag(frame, "bon-fit");
-      for (let n = frame; n && n !== root; n = n.parentElement) if (n !== frame) tag(n, "bon-p-chain");
-      if (frame !== root) for (let n = frame.parentElement; n && n !== root; n = n.parentElement) tag(n, "bon-p-chain");
-      const colsChild = childOf(frame, cols);
-      tag(colsChild, "bon-p-cols-slot");
-      for (let n = cols; n && n !== colsChild; n = n.parentElement) tag(n, "bon-p-chain");
-      tag(cols, "bon-p-cols");
-      [...cols.children].forEach((c) => {
-        if (c.contains(rulesHead)) { tag(c, "bon-p-col"); tag(c, "bon-p-col-rules"); }
-        else if (c.contains(formHead)) { tag(c, "bon-p-col"); tag(c, "bon-p-col-form"); }
-      });
-      if (fileGrid) { tag(childOf(frame, fileGrid), "bon-p-file"); tag(fileGrid, "bon-p-boxes"); tag(fileGrid, "bon-p-line"); }
-      if (statGrid) { tag(childOf(frame, statGrid), "bon-p-stats"); tag(statGrid, "bon-p-boxes"); }
-      const note = findByText(/^the back order file is pushed from/);
-      if (note && frame.contains(note)) tag(note, "bon-p-note");
-      root.classList.add("bon-has-fit");
-    } finally { fitting = false; sizeStage(); }
-  }
-  function sizeStage() {
-    if (panel.hidden) return;
-    const card = stage.closest(".card");
-    const top = stage.getBoundingClientRect().top + window.scrollY;
-    const cs = card ? getComputedStyle(card) : null;
-    const below = (cs ? parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth) : 0) + 22;
-    const h = Math.max(480, Math.floor(window.innerHeight - top - below));
-    stage.style.setProperty("--bon-h", h + "px");
-  }
-  let fitTimer = 0;
-  new MutationObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(fitBuilder, 60); }).observe(root, { childList: true, subtree: true });
-  window.addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitBuilder, 80); });
 
   /* ---------- drawer ---------- */
   const scrim = document.createElement("div");
@@ -3244,10 +3165,10 @@
     const detail = event && event.detail;
     if (!detail) return;
     if (detail.error) {
-      document.getElementById("bon-title").textContent = "Test failed";
-      document.getElementById("bon-sub").textContent = detail.error;
-      document.getElementById("bon-go-err").disabled = true;
-      document.getElementById("bon-go-msg").disabled = true;
+      const title = el("bon-title");
+      const sub = el("bon-sub");
+      if (title) title.textContent = "Test failed";
+      if (sub) sub.textContent = detail.error;
       return;
     }
     if (detail.rule && detail.data) onTested(detail.rule, detail.data);
@@ -3266,9 +3187,7 @@
     }
     paintDock();
     if ((Number(state.data.orderCount) || 0) > 0) {
-      toast("Test ready", `${state.data.orderCount} orders · ${state.data.employeeCount || 0} employees — choose Add to dashboard or Send`);
-    } else {
-      toast("No matching orders", "Change the column / value and press Test conditions again.", true);
+      toast("Test ready", `${state.data.orderCount} orders · ${state.data.employeeCount || 0} employees`);
     }
   }
 
@@ -3277,24 +3196,35 @@
     const orders = Number(d.orderCount) || 0;
     const emps = Number(d.employeeCount) || 0;
     const has = !!state.rule && orders > 0;
-    dock.classList.toggle("ready", has);
-    dock.querySelector(".bon-ico").textContent = has ? "✓" : (state.rule ? "0" : "?");
-    document.getElementById("bon-title").textContent = has ? "What do you want to do?" : (state.rule ? "No orders match" : "Test a condition");
-    document.getElementById("bon-o").textContent = state.rule ? orders.toLocaleString("en-US") : "—";
-    document.getElementById("bon-e").textContent = state.rule ? emps.toLocaleString("en-US") : "—";
-    document.getElementById("bon-sub").textContent = state.rule
-      ? (d.conditionText || state.rule.name || "Checked against the current Back Order file") + (d.warning ? " · " + d.warning : "")
-      : "Build a condition and press Test conditions. Then choose what to do with the orders.";
-    document.getElementById("bon-result").classList.remove("show");
+    const title = el("bon-title");
+    const o = el("bon-o");
+    const e = el("bon-e");
+    const sub = el("bon-sub");
+    const mini = el("bon-mini");
+    const result = el("bon-result");
+    const view = el("bon-view-orders");
+    const need = el("bon-need-test");
+    if (title) title.textContent = has ? "Live preview" : (state.rule ? "No orders match" : "Live preview");
+    if (o) o.textContent = state.rule ? orders.toLocaleString("en-US") : "—";
+    if (e) e.textContent = state.rule ? emps.toLocaleString("en-US") : "—";
+    if (sub) {
+      sub.textContent = state.rule
+        ? (d.conditionText || state.rule.name || "Checked against the current Back Order file") + (d.warning ? " · " + d.warning : "")
+        : "Change cars or conditions to preview matches.";
+    }
+    if (result) result.classList.remove("show");
+    if (need) need.hidden = !!state.rule;
+    if (view) view.hidden = !has;
     const top = (d.previews || []).slice().sort((a, b) => (Number(b.orderCount) || 0) - (Number(a.orderCount) || 0)).slice(0, 5);
-    document.getElementById("bon-mini").innerHTML = has && top.length
-      ? `<small>Employees with most orders</small>` + top.map((p) => {
-        const name = String(p.salesmanName || p.name || "Employee");
-        return `<div><i>${esc(name.trim().charAt(0).toUpperCase())}</i><b>${esc(name)}</b>${p.orderCount != null ? `<span>${Number(p.orderCount)}</span>` : ""}</div>`;
-      }).join("") + ((d.previews || []).length > 5 ? `<small style="text-transform:none;letter-spacing:0;font-weight:500">+ ${(d.previews || []).length - 5} more</small>` : "")
-      : "";
-    document.getElementById("bon-go-err").disabled = !has;
-    document.getElementById("bon-go-msg").disabled = !has;
+    const extra = Math.max(0, (d.previews || []).length - top.length);
+    if (mini) {
+      mini.innerHTML = has && top.length
+        ? top.map((p) => {
+          const name = String(p.salesmanName || p.name || "Employee");
+          return `<div><b>${esc(name)}</b>${p.orderCount != null ? `<span>${Number(p.orderCount)}</span>` : ""}</div>`;
+        }).join("") + (extra ? `<p class="bec-more">+${extra} more</p>` : "")
+        : "";
+    }
   }
 
   /* saved rules in the dock */
@@ -3305,22 +3235,25 @@
       if (!res.ok) throw new Error(data.error || "");
       state.rules = (data.rules || []).filter((r) => r && !r.archived);
       state.headers = (data.file && data.file.headers) || [];
-      const sel = document.getElementById("bon-saved");
-      sel.innerHTML = '<option value="">Saved rules…</option>' + state.rules.map((r) => `<option value="${esc(r.id)}">${esc(r.name || "Untitled condition")}</option>`).join("");
+      const sel = el("bon-saved");
+      if (sel) sel.innerHTML = '<option value="">Saved rules…</option>' + state.rules.map((r) => `<option value="${esc(r.id)}">${esc(r.name || "Untitled condition")}</option>`).join("");
     } catch (e) { state.headers = state.headers || []; }
   }
-  document.getElementById("bon-saved").addEventListener("change", async (e) => {
+  panel.addEventListener("change", async (e) => {
+    if (!e.target || e.target.id !== "bon-saved") return;
     const rule = (state.rules || []).find((r) => r.id === e.target.value);
     if (!rule) return;
-    document.getElementById("bon-title").textContent = "Checking…";
+    const title = el("bon-title");
+    if (title) title.textContent = "Checking…";
     const copy = JSON.parse(JSON.stringify(rule));
     delete copy.current;
     const { res, data } = await api("/bo-rules/test", { rule: copy });
     if (!res.ok) { toast("Could not test the rule", data.error || "", true); paintDock(); return; }
     onTested(copy, data);
   });
-  new MutationObserver(() => { if (!panel.hidden) { loadMeta(); requestAnimationFrame(fitBuilder); } }).observe(panel, { attributes: true, attributeFilter: ["hidden"] });
-  if (!panel.hidden) { loadMeta(); requestAnimationFrame(fitBuilder); }
+  new MutationObserver(() => { if (!panel.hidden) loadMeta(); }).observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(() => { if (state.rule) paintDock(); }).observe(root, { childList: true });
+  if (!panel.hidden) loadMeta();
 
   async function loadStaff() {
     if (state.staff) return state.staff;
@@ -3355,7 +3288,7 @@
   /* ---------- open drawer ---------- */
   let draft = null;
   async function open(mode) {
-    if (!state.rule) return;
+    if (!state.rule || !(Number(state.data && state.data.orderCount) || 0)) { flashNeedTest(); return; }
     state.mode = mode;
     draft = {
       title: state.rule.name || "Order correction",
@@ -3385,8 +3318,10 @@
     scrim.classList.remove("open");
     drawer.setAttribute("aria-hidden", "true");
   }
-  document.getElementById("bon-go-err").addEventListener("click", () => open("err"));
-  document.getElementById("bon-go-msg").addEventListener("click", () => open("msg"));
+  panel.addEventListener("click", (e) => {
+    if (e.target.closest("#bon-go-err")) { e.preventDefault(); open("err"); }
+    else if (e.target.closest("#bon-go-msg")) { e.preventDefault(); open("msg"); }
+  });
   document.getElementById("bon-close").addEventListener("click", close);
   document.getElementById("bon-cancel").addEventListener("click", close);
   scrim.addEventListener("click", close);

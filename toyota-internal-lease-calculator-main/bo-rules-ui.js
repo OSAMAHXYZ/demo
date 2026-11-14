@@ -11,6 +11,7 @@
     let previewKey = '';
     let lastTest = null;
     let nextBusy = false;
+    let autoTestTimer = 0;
     const onReportSheet = () => !!document.getElementById('panel-bonotifications');
     const DEFAULT_MESSAGE = 'Hello {employeeName},\n\nYou have {affectedOrderCount} {product} back orders under your name where {conditionText}.\n\nPlease update it to {correctValue} for the affected orders below:\n{orderDateLine}\n\nOnly the orders listed above match this condition.';
     const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'conditionText', 'orderNumber', 'orderDate', 'deadline', 'orderDateLine', 'orderLines'];
@@ -44,14 +45,27 @@
         const date = new Date(value);
         return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
     }
+    function stampShort(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        return `${date.getDate()} ${months[date.getMonth()]}, ${hh}:${mm}`;
+    }
     async function load(keepId) {
         try {
             pack = await api('/api/reserved-orders/bo-rules?password=' + encodeURIComponent(password()));
+            if (!pack || typeof pack !== 'object') pack = {};
+            if (!Array.isArray(pack.rules)) pack.rules = [];
+            if (!pack.file || typeof pack.file !== 'object') pack.file = {};
+            if (!Array.isArray(pack.products)) pack.products = [];
             if (keepId) detail = await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(keepId) + '?password=' + encodeURIComponent(password()));
             else if (detail && detail.rule) detail = await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(detail.rule.id) + '?password=' + encodeURIComponent(password()));
             render();
         } catch (error) {
-            render();
+            try { render(); } catch (e) { root.innerHTML = `<p class="err">${esc(error.message || 'Could not load BO error rules.')}</p>`; }
             const box = document.getElementById('br-error');
             if (box) box.textContent = error.message === 'unauthorized' ? 'Sign in again to manage BO error rules.' : error.message;
         }
@@ -132,7 +146,7 @@
             <select class="br-cond-col">${columnOptions(cond.column || '')}</select>
             <select class="br-cond-op">${OPS.map(([id, label]) => `<option value="${id}"${id === op ? ' selected' : ''}>${label}</option>`).join('')}</select>
             <input class="br-cond-val" value="${esc((cond.values || []).join(', '))}" placeholder="${list ? 'Comma-separated values' : 'Value'}"${hide ? ' hidden' : ''}>
-            <button type="button" class="br-cond-remove">Remove</button>
+            <button type="button" class="br-cond-remove" aria-label="Remove">×</button>
         </div>`;
     }
     function readConditions() {
@@ -263,10 +277,215 @@
             <div id="br-orders"></div>
         </section>`;
     }
+    function fileLine(file) {
+        const name = file.fileName || 'Back Orders';
+        const rows = Number(file.rowCount || 0).toLocaleString('en-US');
+        return `${name} · ${rows} rows · updated ${stampShort(file.updatedAt)}`;
+    }
+    function slimStatsHtml() {
+        const rules = pack.rules.filter((rule) => !rule.archived);
+        const employees = rules.reduce((sum, rule) => sum + (rule.affectedEmployees || 0), 0);
+        const pendingOrders = rules.reduce((sum, rule) => sum + Math.max(0, (rule.affectedOrders || 0) - (rule.sentOrders || 0)), 0);
+        const sent = rules.reduce((sum, rule) => sum + (rule.sentOrders || 0), 0);
+        return `<div class="bec-stats">
+            <span><b>${rules.length}</b> rules</span>
+            <span class="bec-stat-bad"><b>${pendingOrders}</b> open errors</span>
+            <span><b>${employees}</b> employees</span>
+            <span class="bec-stat-ok"><b>${sent}</b> fixed</span>
+        </div>`;
+    }
+    function carList(selected) {
+        const pickedCars = picked(selected, 'products', 'product');
+        const seen = new Set();
+        const list = [];
+        (pack.products || []).concat(pickedCars).forEach((name) => {
+            const text = String(name || '').trim();
+            const key = text.toLowerCase();
+            if (!text || seen.has(key)) return;
+            seen.add(key);
+            list.push(text);
+        });
+        return { pickedCars, list };
+    }
+    function adminRuleListHtml() {
+        const rows = pack.rules.filter((rule) => !rule.archived && (!q || String(rule.name).toLowerCase().includes(q) || String(rule.product || '').toLowerCase().includes(q)));
+        const activeId = (editing && editing.id) || (detail && detail.rule && detail.rule.id) || '';
+        const options = [`<option value="">New rule</option>`].concat(pack.rules.filter((rule) => !rule.archived).map((rule) => {
+            const cars = picked(rule, 'products', 'product');
+            const scope = cars.length ? cars.join(', ') : (rule.product || 'All cars');
+            return `<option value="${esc(rule.id)}"${rule.id === activeId ? ' selected' : ''}>${esc(rule.name)} · ${esc(scope)} · ${rule.affectedOrders || 0}</option>`;
+        })).join('');
+        const list = !rows.length
+            ? `<div class="bec-empty">${q ? '<p>No matching rules.</p>' : ''}<button type="button" class="bec-empty-btn" data-new-rule>Create your first rule</button></div>`
+            : rows.map((rule) => {
+                const cars = picked(rule, 'products', 'product');
+                const scope = cars.length ? cars.join(', ') : (rule.product || 'All cars');
+                const paused = rule.active === false;
+                const on = rule.id === activeId;
+                return `<div class="bec-rule${on ? ' is-on' : ''}${paused ? ' is-paused' : ''}">
+                    <button type="button" class="bec-rule-main" data-open="${esc(rule.id)}">
+                        <b>${esc(rule.name)}</b>
+                        <span>${esc(scope)} · ${rule.affectedOrders || 0}</span>
+                    </button>
+                    <div class="bec-rule-more">
+                        <button type="button" data-archive="${esc(rule.id)}">${rule.archived ? 'Restore' : 'Archive'}</button>
+                        <button type="button" class="br-danger" data-delete="${esc(rule.id)}" aria-label="Delete">×</button>
+                    </div>
+                </div>`;
+            }).join('');
+        return `<select class="bec-rule-pick sel" id="bec-rule-pick">${options}</select>
+            <div class="bec-rule-list">${list}</div>`;
+    }
+    function reportSheetHtml(file, selected) {
+        const cars = carList(selected);
+        const hasCars = cars.pickedCars.length > 0;
+        const chips = cars.list.map((name) => {
+            const on = cars.pickedCars.some((c) => String(c).toLowerCase() === name.toLowerCase());
+            return `<label class="br-car-chip${on ? ' is-on' : ''}"><input type="checkbox" class="br-car-check" value="${esc(name)}"${on ? ' checked' : ''}><span>${esc(name)}</span></label>`;
+        }).join('') || '<p class="muted">No cars in the BO file yet.</p>';
+        const carOptions = cars.list.map((name) => `<option value="${esc(name)}"${cars.pickedCars.some((c) => String(c).toLowerCase() === name.toLowerCase()) ? ' selected' : ''}>${esc(name)}</option>`).join('');
+        const source = selected.deadlineSource;
+        const tested = !!(lastTest && lastTest.orderCount);
+        const status = lastTest
+            ? (lastTest.orderCount ? `✓ Tested · ${lastTest.orderCount} orders` : 'Tested · 0 orders')
+            : 'Not tested yet';
+        return `<div class="bec-page">
+            <header class="bec-head">
+                <div>
+                    <h2>BO Error Condition</h2>
+                    <p class="bec-file">${esc(fileLine(file))}</p>
+                </div>
+                ${slimStatsHtml()}
+            </header>
+            <div class="bec-workspace">
+                <aside class="bec-col bec-rules">
+                    <div class="bec-col-k">Rules</div>
+                    <div class="bec-rules-top">
+                        <button type="button" class="bec-plus" id="br-new" aria-label="New rule">+</button>
+                        <label class="bec-search"><input id="br-search" type="search" placeholder="Search" value="${esc(q)}"></label>
+                    </div>
+                    ${adminRuleListHtml()}
+                </aside>
+                <div class="bec-col bec-builder">
+                    <section class="bec-step">
+                        <h3 class="bec-step-h"><i>1</i> Name and cars</h3>
+                        <div class="bec-row2">
+                            <label><span>Rule name</span><input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional — auto-filled"></label>
+                            <label><span>Cars</span>
+                                <select id="br-car-mode">
+                                    <option value="all"${hasCars ? '' : ' selected'}>All cars</option>
+                                    <option value="cars"${hasCars ? ' selected' : ''}>Select car(s)</option>
+                                </select>
+                            </label>
+                        </div>
+                        <p class="muted" id="br-car-help"></p>
+                        <div id="br-car-pick" ${hasCars ? '' : 'hidden'}>
+                            <div class="br-car-chips" id="br-car-chips">${chips}</div>
+                            <select id="br-cars" multiple hidden>${carOptions}</select>
+                            <div class="br-car-add">
+                                <input id="br-car-custom" type="text" placeholder="Add a car name">
+                                <button type="button" id="br-car-add-btn">Add</button>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="bec-step">
+                        <h3 class="bec-step-h"><i>2</i> Conditions
+                            <select id="br-match" class="bec-match">
+                                <option value="all"${initialMode(selected) === 'all' ? ' selected' : ''}>Match all</option>
+                                <option value="any"${initialMode(selected) === 'any' ? ' selected' : ''}>Match any</option>
+                            </select>
+                        </h3>
+                        <div class="br-conditions" id="br-conditions">${savedConditions(selected).map(conditionRow).join('')}</div>
+                        <button type="button" class="bec-add-link" id="br-add-cond">+ Add condition</button>
+                        <div class="br-apply" id="br-apply"></div>
+                    </section>
+                    <section class="bec-step">
+                        <h3 class="bec-step-h"><i>3</i> Correction and deadline</h3>
+                        <div class="bec-row2">
+                            <label><span>Correction value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
+                            <label><span>Deadline</span><select id="br-date-source">
+                                <option value="column"${['fixed', 'sent'].includes(source) ? '' : ' selected'}>From a column</option>
+                                <option value="fixed"${source === 'fixed' ? ' selected' : ''}>Specific date</option>
+                                <option value="sent"${source === 'sent' ? ' selected' : ''}>Date the employee sends it</option>
+                            </select></label>
+                        </div>
+                        <div class="bec-row2 bec-deadline-extra">
+                            <label id="br-date-column-wrap"${['fixed', 'sent'].includes(source) ? ' hidden' : ''}><span>BO date column</span><select id="br-date-column"><option value="">Order Date</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${selected.deadlineColumn === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                            <label id="br-date-fixed-wrap"${source === 'fixed' ? '' : ' hidden'}><span>Specific date</span><input id="br-date-fixed" type="date" value="${esc(selected.deadlineDate || '')}"></label>
+                            <label id="br-deadline-wrap"${source === 'fixed' ? ' hidden' : ''}><span>Days after</span><select id="br-deadline">${dayOptions(selected.deadlineDays)}</select></label>
+                        </div>
+                        <label class="check bec-active"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
+                    </section>
+                    <details class="bec-step bec-msg">
+                        <summary class="bec-step-h"><i>4</i> Message <em>optional</em></summary>
+                        <label><span>Message template</span><textarea id="br-message" rows="4">${esc(selected.message || DEFAULT_MESSAGE)}</textarea></label>
+                        <label><span>WhatsApp message</span><textarea id="br-wa" rows="3" placeholder="Optional. Leave blank to use the message template.">${esc(selected.whatsappMessage || '')}</textarea></label>
+                        <label><span>Language</span><select id="br-lang"><option value="en">English</option><option value="ar">Arabic</option></select></label>
+                        <div>
+                            <span class="br-label">Available placeholders</span>
+                            <div class="br-chips">${PLACEHOLDERS.map((key) => `<button type="button" data-token="{${key}}">{${key}}</button>`).join('')}</div>
+                        </div>
+                        <div class="br-maps">
+                            <label><span>Order number column</span><select id="br-map-order">${columnOptions(mapValue(selected, 'orderNumber'), 'Usual order column')}</select></label>
+                            <label><span>Order date column</span><select id="br-map-date">${columnOptions(mapValue(selected, 'orderDate'), 'Usual date column')}</select></label>
+                            <label><span>Product column</span><select id="br-map-product">${columnOptions(mapValue(selected, 'product'), 'Usual product column')}</select></label>
+                        </div>
+                        <div>
+                            <span class="br-label" id="br-preview-caption">Message template</span>
+                            <div class="br-template" id="br-template"></div>
+                        </div>
+                        <div class="br-preview-box is-example">
+                            <div class="br-bubble" id="br-preview"></div>
+                        </div>
+                    </details>
+                    <div class="err" id="br-error"></div>
+                    <p id="br-note"></p>
+                </div>
+                <aside class="bec-col bec-preview" id="bec-preview">
+                    <div class="bec-col-k">Live preview</div>
+                    <div class="bec-preview-nums">
+                        <div><strong id="bon-o">${lastTest ? (lastTest.orderCount || 0) : '—'}</strong><span>matched orders</span></div>
+                        <div><strong id="bon-e">${lastTest ? (lastTest.employeeCount || 0) : '—'}</strong><span>employees</span></div>
+                    </div>
+                    <p class="bec-preview-sub" id="bon-sub">${lastTest ? (lastTest.conditionText || '') : 'Change cars or conditions to preview matches.'}</p>
+                    <div class="bon-mini" id="bon-mini"></div>
+                    <button type="button" class="bec-view-orders" id="bon-view-orders"${tested ? '' : ' hidden'}>View orders →</button>
+                    <details class="bec-orders-wrap" id="br-test-wrap"><summary>Matching orders</summary><div class="br-test-out" id="br-test-out"></div></details>
+                    <b id="bon-title" hidden></b>
+                    <div id="bon-result" class="bon-result"></div>
+                    <div id="bon-saved" hidden></div>
+                    <div class="bon-pick" id="bon-pickwrap" hidden></div>
+                </aside>
+            </div>
+            <div class="bec-actions" id="bec-actions">
+                <p class="bec-status" id="br-next-note">${status}</p>
+                <div class="bec-actions-right">
+                    <span class="bec-need-test" id="bon-need-test"${lastTest ? ' hidden' : ''}>Test the condition first</span>
+                    <button type="button" class="bec-btn" id="br-test">Test</button>
+                    <button type="button" class="bec-btn" id="bon-go-msg">Send to employees</button>
+                    <button type="button" class="bec-btn primary" id="bon-go-err">Make BO error</button>
+                </div>
+            </div>
+            <div class="bec-legacy" aria-hidden="true">
+                ${nextChoiceHtml(!!(lastTest && lastTest.orderCount))}
+                ${reviewHtml()}
+                <div class="br-buttons">
+                    <button class="solid" id="br-push" type="button" hidden${(lastTest && lastTest.orderCount === 0) || (!lastTest && detail && detail.rule && detail.rule.lastAnalysisAt && !detail.rule.affectedOrders) ? ' disabled' : ''}>Send to employees</button>
+                    <button id="br-save-run" type="button" hidden>Generate messages</button>
+                    <button id="br-copy" type="button">Copy template</button>
+                    <button id="br-reset" type="button">Reset unsaved edits</button>
+                </div>
+            </div>
+        </div>`;
+    }
     function render() {
+        if (!pack || typeof pack !== 'object') pack = {};
+        if (!Array.isArray(pack.rules)) pack.rules = [];
+        if (!pack.file || typeof pack.file !== 'object') pack.file = {};
+        if (!Array.isArray(pack.products)) pack.products = [];
         const file = pack.file || {};
         const selected = editing || {};
-        root.innerHTML = `<div class="br-page">
+        root.innerHTML = onReportSheet() ? reportSheetHtml(file, selected) : `<div class="br-page">
             <section class="panel br-file">
                 <div><b>BO file</b><span>${esc(file.fileName || 'No Back Order file yet')}</span></div>
                 <div><b>First worksheet</b><span>${esc(file.sheetName || '—')}</span></div>
@@ -407,6 +626,15 @@
         paintPreview();
         if (lastTest) paintTest(lastTest);
         bind();
+        if (onReportSheet()) {
+            if (lastTest) {
+                try {
+                    window.dispatchEvent(new CustomEvent('boe-rules-tested', { detail: { rule: formRule(), data: lastTest } }));
+                } catch (e) { /* ignore */ }
+            } else {
+                scheduleAutoTest();
+            }
+        }
     }
     function picked(rule, plural, single) {
         if (Array.isArray(rule[plural]) && rule[plural].length) return rule[plural];
@@ -599,7 +827,11 @@
         const mode = document.getElementById('br-match') && document.getElementById('br-match').value === 'any' ? 'any' : 'all';
         const carText = !(carMode && carMode.value === 'cars')
             ? 'all cars'
-            : (cars.length ? cars.join(', ') : 'no car selected yet');
+            : (cars.length ? cars.join(', ') : 'the selected car');
+        if (onReportSheet()) {
+            box.textContent = `Flags ${carText} orders where ${describeConditions(readConditions(), mode)}. Each employee sees only their own.`;
+            return;
+        }
         box.innerHTML = `<b>This condition applies only when</b><ul><li>Car is ${esc(carText)}.</li><li>${mode === 'any' ? 'Any condition matches' : 'Every condition matches'}: ${esc(describeConditions(readConditions(), mode))}.</li><li>Each employee receives only their own matching orders.</li></ul>`;
     }
     function nextChoiceHtml(enabled) {
@@ -624,6 +856,17 @@
         const enabled = !!(data && data.orderCount);
         const errBtn = document.getElementById('br-as-error');
         const msgBtn = document.getElementById('br-as-message');
+        const need = document.getElementById('bon-need-test');
+        if (onReportSheet()) {
+            if (need) need.hidden = !!data;
+            const note = document.getElementById('br-next-note');
+            if (!note) return;
+            if (nextBusy) return;
+            if (!data) note.textContent = 'Not tested yet';
+            else if (!enabled) note.textContent = 'Tested · 0 orders';
+            else note.textContent = `✓ Tested · ${data.orderCount} orders`;
+            return;
+        }
         if (errBtn) errBtn.disabled = !enabled || nextBusy;
         if (msgBtn) msgBtn.disabled = !enabled || nextBusy;
         const note = document.getElementById('br-next-note');
@@ -652,6 +895,25 @@
         const send = document.getElementById('br-push');
         if (send) send.disabled = !!(data && data.orderCount === 0);
         paintNext(data);
+        if (onReportSheet() && data) {
+            const o = document.getElementById('bon-o');
+            const e = document.getElementById('bon-e');
+            const mini = document.getElementById('bon-mini');
+            const view = document.getElementById('bon-view-orders');
+            const sub = document.getElementById('bon-sub');
+            if (o) o.textContent = Number(data.orderCount || 0).toLocaleString('en-US');
+            if (e) e.textContent = Number(data.employeeCount || 0).toLocaleString('en-US');
+            if (sub) sub.textContent = data.conditionText || '';
+            if (view) view.hidden = !(data.orderCount);
+            const people = (data.previews || []).slice().sort((a, b) => (Number(b.orderCount) || (b.orders && b.orders.length) || 0) - (Number(a.orderCount) || (a.orders && a.orders.length) || 0)).slice(0, 5);
+            const extra = Math.max(0, (Number(data.employeeCount) || 0) - people.length);
+            if (mini) {
+                mini.innerHTML = people.map((p) => {
+                    const n = p.orderCount != null ? p.orderCount : ((p.orders && p.orders.length) || 1);
+                    return `<div><b>${esc(p.salesmanName || p.name || 'Employee')}</b><span>${n}</span></div>`;
+                }).join('') + (extra ? `<p class="bec-more">+${extra} more</p>` : '');
+            }
+        }
         if (!box || !data) return;
         const matched = (data.matchedSample || []).map((row) => `<tr><td>${esc(row.salesmanName)}</td><td>${esc(row.boNumber)}</td><td>${esc(row.orderDate || 'Date unavailable')}</td><td>${esc(row.incorrectValue || row.values)}</td><td>${esc(row.product)}</td></tr>`).join('');
         const excluded = (data.excludedSample || []).map((row) => `<tr><td>${esc(row.boNumber)}</td><td>${esc(row.salesmanName)}</td><td>${esc(row.product)}</td><td>${esc(row.reason)}</td></tr>`).join('');
@@ -715,15 +977,12 @@
             if (field) field.addEventListener('change', () => {
                 if (id.indexOf('br-map') === 0) lastTest = null;
                 paintPreview();
+                if (id === 'br-match') scheduleAutoTest();
             });
         });
         const dateSourceField = document.getElementById('br-date-source');
-        if (dateSourceField) dateSourceField.addEventListener('change', () => {
-            const columnWrap = document.getElementById('br-date-column-wrap');
-            const fixedWrap = document.getElementById('br-date-fixed-wrap');
-            if (columnWrap) columnWrap.hidden = dateSourceField.value !== 'column';
-            if (fixedWrap) fixedWrap.hidden = dateSourceField.value !== 'fixed';
-        });
+        if (dateSourceField) dateSourceField.addEventListener('change', syncDeadlineFields);
+        syncDeadlineFields();
         const carMode = document.getElementById('br-car-mode');
         const carBox = document.getElementById('br-cars');
         const carAdd = document.getElementById('br-car-add-btn');
@@ -733,6 +992,7 @@
                 paintCarHelp();
                 lastTest = null;
                 paintPreview();
+                scheduleAutoTest();
             });
         }
         if (carBox) {
@@ -740,6 +1000,7 @@
                 paintCarHelp();
                 lastTest = null;
                 paintPreview();
+                scheduleAutoTest();
             });
         }
         document.querySelectorAll('.br-car-check').forEach((box) => {
@@ -749,6 +1010,7 @@
                 paintCarHelp();
                 lastTest = null;
                 paintPreview();
+                scheduleAutoTest();
             });
         });
         if (carAdd && carBox) {
@@ -773,6 +1035,7 @@
                             paintCarHelp();
                             lastTest = null;
                             paintPreview();
+                            scheduleAutoTest();
                         });
                         chips.appendChild(label);
                     }
@@ -789,12 +1052,26 @@
                 paintCarHelp();
                 lastTest = null;
                 paintPreview();
+                scheduleAutoTest();
             });
         }
         document.getElementById('br-search').addEventListener('input', (event) => { q = event.target.value.trim().toLowerCase(); render(); });
+        const rulePick = document.getElementById('bec-rule-pick');
+        if (rulePick) rulePick.addEventListener('change', () => {
+            if (rulePick.value) openRule(rulePick.value);
+            else { editing = null; detail = null; previewKey = ''; lastTest = null; notice = ''; render(); }
+        });
+        root.querySelectorAll('[data-new-rule]').forEach((button) => button.addEventListener('click', () => { editing = null; detail = null; previewKey = ''; lastTest = null; notice = ''; render(); }));
+        const viewOrders = document.getElementById('bon-view-orders');
+        if (viewOrders) viewOrders.addEventListener('click', () => {
+            const wrap = document.getElementById('br-test-wrap');
+            if (wrap) wrap.open = true;
+            const box = document.getElementById('br-test-out');
+            if (box) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
         const condBox = document.getElementById('br-conditions');
         if (condBox) {
-            condBox.addEventListener('input', () => { lastTest = null; paintPreview(); });
+            condBox.addEventListener('input', () => { lastTest = null; paintPreview(); scheduleAutoTest(); });
             condBox.addEventListener('change', (event) => {
                 const row = event.target.closest('.br-cond');
                 if (row && event.target.classList.contains('br-cond-op')) {
@@ -807,6 +1084,7 @@
                 const send = document.getElementById('br-push');
                 if (send) send.disabled = false;
                 paintPreview();
+                scheduleAutoTest();
             });
             condBox.addEventListener('click', (event) => {
                 const button = event.target.closest('.br-cond-remove');
@@ -816,6 +1094,7 @@
                 button.closest('.br-cond').remove();
                 lastTest = null;
                 paintPreview();
+                scheduleAutoTest();
             });
         }
         const addCond = document.getElementById('br-add-cond');
@@ -824,6 +1103,7 @@
             if (!box) return;
             box.insertAdjacentHTML('beforeend', conditionRow({ column: '', operator: 'equals', values: [] }));
             lastTest = null;
+            scheduleAutoTest();
         });
         const testBtn = document.getElementById('br-test');
         if (testBtn) testBtn.addEventListener('click', () => testConditions());
@@ -1010,19 +1290,34 @@
             paintNext(lastTest);
         }
     }
-    async function testConditions() {
+    function scheduleAutoTest() {
+        if (!onReportSheet()) return;
+        clearTimeout(autoTestTimer);
+        autoTestTimer = setTimeout(() => { testConditions(true); }, 400);
+    }
+    function syncDeadlineFields() {
+        const dateSourceField = document.getElementById('br-date-source');
+        if (!dateSourceField) return;
+        const columnWrap = document.getElementById('br-date-column-wrap');
+        const fixedWrap = document.getElementById('br-date-fixed-wrap');
+        const daysWrap = document.getElementById('br-deadline-wrap');
+        if (columnWrap) columnWrap.hidden = dateSourceField.value !== 'column';
+        if (fixedWrap) fixedWrap.hidden = dateSourceField.value !== 'fixed';
+        if (daysWrap) daysWrap.hidden = dateSourceField.value === 'fixed';
+    }
+    async function testConditions(quiet) {
         const error = document.getElementById('br-error');
-        if (error) error.textContent = '';
+        if (error && !quiet) error.textContent = '';
         const mode = document.getElementById('br-car-mode');
         if (mode && mode.value === 'cars' && !selectedCars().length) {
-            if (error) error.textContent = 'Select at least one car, or switch to All cars.';
+            if (!quiet && error) error.textContent = 'Select at least one car, or switch to All cars.';
             return;
         }
         const rule = formRule();
         const hasCond = (rule.conditions || []).some((c) => c && c.column && (c.operator === 'empty' || c.operator === 'not_empty' || (c.values && String(c.values).trim())));
         const hasCars = Array.isArray(rule.products) && rule.products.length > 0;
         if (!hasCond && !hasCars) {
-            if (error) error.textContent = 'Select at least one car (e.g. 86), or choose a BO column + value, then press Test conditions.';
+            if (!quiet && error) error.textContent = 'Select at least one car (e.g. 86), or choose a BO column + value, then press Test conditions.';
             return;
         }
         try {
