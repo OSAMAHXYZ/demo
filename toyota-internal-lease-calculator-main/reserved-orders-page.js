@@ -3,6 +3,15 @@
     const STATUSES = ['Payment', 'In progress', 'Cancelled'];
     const NOT_UPDATED = '__none__'; // filter value for orders that have no status yet
     const MINE = '__mine__';
+    // Built from code points so file encoding can never turn this label into mojibake.
+    const MARKETING_LABEL = String.fromCharCode(0x0637, 0x0644, 0x0628, 0x0627, 0x062A, 0x20, 0x0627, 0x0644, 0x062A, 0x0633, 0x0648, 0x064A, 0x0642);
+    function fixMarketingArabicLabels() {
+        document.querySelectorAll('[data-view="marketing"] span, #marketing-board h1').forEach((node) => {
+            node.setAttribute('dir', 'rtl');
+            node.setAttribute('lang', 'ar');
+            node.textContent = MARKETING_LABEL;
+        });
+    }
     const CARS = [
         ['Camry', 'images/cars/camry.png'], ['Corolla', 'images/cars/corolla.png'], ['Crown', 'images/cars/crown.png'],
         ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux double cab.png'],
@@ -38,20 +47,36 @@
     let searchTimer = null;
     let clock = null;
     let sheetLayout = { order: [], hidden: [] };
-    const EMP_DEFAULT_COLS = ['Queue 2', 'Queue 1', 'Salesman name', 'Queue 3', 'Model year', 'Customer name', 'Status', 'Note', 'Updated by', 'Order number', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
+    let personalLayout = null; // per-user column order/hidden (this browser only — not admin global)
+    let pickedKey = ''; // first click selects the row; second click opens the details drawer
+    const EMP_DEFAULT_COLS = ['Salesman name', 'Model year', 'Customer name', 'Status', 'Note', 'Leader note', 'Updated by', 'Order number', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level', 'Queue 1', 'Queue 2', 'Queue 3'];
     const EMP_HEAD_SHORT = {
         'Queue 1': 'Q1', 'Queue 2': 'Q2', 'Queue 3': 'Q3',
         'Salesman name': 'Salesman', Salesman: 'Salesman', 'Customer name': 'Customer', Customer: 'Customer',
         'Updated by': 'Updated', Updated: 'Updated', 'Order number': 'Order #',
         'Model year': 'Year', 'ALJ suffix': 'Suffix', 'Exterior color': 'Ext', 'Interior color': 'Int',
-        'Expiry date': 'Expiry', Expiry: 'Expiry', 'Allocation age': 'Age'
+        'Expiry date': 'Expiry', Expiry: 'Expiry', 'Allocation age': 'Age', 'Leader note': 'Leader'
     };
     const EMP_WIDTHS = {
-        'Queue 2': 28, 'Queue 1': 28, 'Salesman name': 132, Salesman: 132, 'Queue 3': 28, 'Model year': 44,
-        'Customer name': 160, Customer: 160, Status: 100, Note: 40, 'Updated by': 56, Updated: 56,
-        'Order number': 92, Product: 88, 'ALJ suffix': 44, 'Exterior color': 44, 'Interior color': 36, VIN: 148,
-        'Expiry date': 128, Expiry: 128, Usage: 44, 'Allocation age': 44, Area: 72, 'Share level': 110
+        'Queue 2': 96, 'Queue 1': 96, 'Salesman name': 168, Salesman: 168, 'Queue 3': 96, 'Model year': 56,
+        'Customer name': 168, Customer: 168, Status: 110, Note: 140, 'Leader note': 140, 'Updated by': 64, Updated: 64,
+        'Order number': 92, Product: 96, 'ALJ suffix': 52, 'Exterior color': 44, 'Interior color': 40, VIN: 148,
+        'Expiry date': 128, Expiry: 128, Usage: 56, 'Allocation age': 44, Area: 72, 'Share level': 110
     };
+    const EMP_MIN_WIDTHS = {
+        'Queue 1': 84, 'Queue 2': 84, 'Queue 3': 84, 'Model year': 56, Year: 56,
+        'Salesman name': 96, Salesman: 96, 'Customer name': 96, Customer: 96,
+        Status: 108, Note: 88, 'Leader note': 88, Product: 72, VIN: 132, 'Order number': 84,
+        'Expiry date': 120, Expiry: 120, Area: 64, 'Share level': 96, 'ALJ suffix': 52
+    };
+    const EMP_MAX_WIDTHS = {
+        'Salesman name': 280, Salesman: 280, 'Customer name': 300, Customer: 300,
+        Note: 240, Product: 200, 'Share level': 180, Area: 160
+    };
+    const EMP_FIT_LABELS = new Set(['Salesman name', 'Salesman', 'Customer name', 'Customer', 'Note', 'Leader note', 'Product', 'Status']);
+    const EMP_PAD_N = 14;
+    const EMP_PAD_W = 64;
+    const EMP_RN_W = 36;
     const EMP_MONO = new Set(['Order number', 'VIN', 'ALJ suffix', 'Exterior color', 'Interior color', 'Area', 'Model year', 'Queue 1', 'Queue 2', 'Queue 3']);
     let empXlWidths = {};
     try { empXlWidths = JSON.parse(localStorage.getItem('ro-sheet-colwidths') || '{}') || {}; } catch (e) { empXlWidths = {}; }
@@ -64,9 +89,9 @@
     let empXlZoom = 100;
     const empHist = [];
     let empHistI = -1;
-    const EMP_SKIP_COLS = new Set(['Leader note']);
+    const EMP_SKIP_COLS = new Set();
     const EMP_KNOWN_COLS = new Set([
-        'Queue 1', 'Queue 2', 'Queue 3', 'Queue', 'Status', 'Note', 'Updated by', 'Updated',
+        'Queue 1', 'Queue 2', 'Queue 3', 'Queue', 'Status', 'Note', 'Leader note', 'Updated by', 'Updated',
         'Salesman name', 'Salesman', 'Customer name', 'Customer', 'Order number', 'Order · VIN',
         'Model year', 'Product', 'Car', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN',
         'Expiry date', 'Expiry', 'Usage', 'Allocation age', 'Area', 'Share level'
@@ -365,10 +390,14 @@
     async function loadNames() {
         const data = await fetch('/api/reserved-orders/staff-names').then((res) => res.json()).catch(() => ({ people: [] }));
         const people = data.people || [];
-        const options = ['<option value="__admin__">Shared admin login</option>'].concat(
+        const options = [
+            '<option value="" disabled selected>Select your name…</option>',
+            '<option value="__admin__">Shared admin login</option>'
+        ].concat(
             people.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}${person.role === 'admin' ? ' · Admin' : ''}</option>`)
         );
-        $('employee-name').innerHTML = options.join('');
+        const select = $('employee-name');
+        if (select) select.innerHTML = options.join('');
     }
     function chosen(id) {
         const value = String($(id).value || '').trim();
@@ -402,7 +431,14 @@
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
         if (data.sheetLayout) sheetLayout = data.sheetLayout;
-        const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|'), JSON.stringify(sheetLayout || {})].join('|');
+        // Fingerprint every order's status/note so peer edits appear immediately without a page refresh.
+        let liveSig = 0;
+        for (let i = 0; i < next.length; i += 1) {
+            const o = next[i] || {};
+            const chunk = `${o.key}|${o.status}|${o.statusNote || ''}|${o.statusChangedAt || ''}|${o.leaderNote || ''}`;
+            for (let j = 0; j < chunk.length; j += 1) liveSig = ((liveSig << 5) - liveSig + chunk.charCodeAt(j)) | 0;
+        }
+        const payload = [data.updatedAt || '', next.length, liveSig, STATUSES.join('|'), JSON.stringify(sheetLayout || {})].join('|');
         if (payload === loadLive.last && document.querySelector('#cards .rc-tile, #emp-sheet table')) {
             if (first) hideDataLoad();
             return tickTimers();
@@ -459,13 +495,14 @@
         return sortOrders(list, sort);
     }
     function sortOrders(list, sort) {
-        const pos = (order) => (order.boQueuePosition == null ? 9e9 : Number(order.boQueuePosition));
+        const queuePos = (order) => (order.queueNumber == null ? 9e9 : Number(order.queueNumber));
+        const boPos = (order) => (order.boQueuePosition == null ? 9e9 : Number(order.boQueuePosition));
         const mine = new Map(list.map((order) => [order, canUpdateOrder(order)]));
         return list.sort((a, b) => {
             if (mine.get(a) !== mine.get(b)) return mine.get(a) ? -1 : 1;
-            if (sort === 'queue-desc') return (b.boQueuePosition == null ? -1 : Number(b.boQueuePosition)) - (a.boQueuePosition == null ? -1 : Number(a.boQueuePosition));
+            if (sort === 'queue-desc') return queuePos(b) - queuePos(a) || boPos(b) - boPos(a);
             if (sort === 'remaining') return (remainingMs(a) ?? 9e15) - (remainingMs(b) ?? 9e15);
-            return pos(a) - pos(b) || (a.queueNumber || 0) - (b.queueNumber || 0);
+            return queuePos(a) - queuePos(b) || boPos(a) - boPos(b);
         });
     }
     function pendingMine() {
@@ -687,15 +724,24 @@
     function orderNumberStartsWith5(order) {
         return String(order && order.orderNumber || '').trim().startsWith('5');
     }
+    function isMohammedAlFadel(name) {
+        const key = personKey(name);
+        return key === 'mohammed al fadel' || key === 'mohammed al fadul';
+    }
     function isOrder5Editor(session) {
         if (!session) return false;
         if (session.canEditOrdersStartingWith5) return true;
-        const key = personKey(session.name);
-        return key === 'reda salah' || key === 'mohammed al fadul';
+        return personKey(session.name) === 'reda salah' || isMohammedAlFadel(session.name);
+    }
+    function isFiveOnlyEditor(session) {
+        if (!session) return false;
+        if (session.editFiveOnly) return true;
+        return isMohammedAlFadel(session.name);
     }
     function canUpdateOrder(order) {
         const session = readSession();
         if (!session || !order) return false;
+        if (isFiveOnlyEditor(session)) return orderNumberStartsWith5(order);
         if (isOrder5Editor(session) && orderNumberStartsWith5(order)) return true;
         // The row belongs to the "Salesman name" shown in the sheet (column A of the Reserved Order File).
         const pools = [order.reservedFields, order.fromReservedFile ? order.fields : null];
@@ -706,10 +752,11 @@
             columnA = hit ? realText(hit.value) : '';
         });
         const fallback = isReservedFileOrder(order) ? order.salesAdvisor : (columnText(order, 'T') || order.salesAdvisor);
-        const advisor = personKey(columnA && !/^(unassigned|salesman name)$/i.test(columnA) ? columnA : fallback);
-        if (!advisor || advisor === 'unassigned') return false;
-        if (samePerson(session.name, advisor)) return true;
-        return personKey(session.employeeNumber) === advisor;
+        const advisor = columnA && !/^(unassigned|salesman name)$/i.test(columnA) ? columnA : fallback;
+        if (!advisor || personKey(advisor) === 'unassigned') return false;
+        const names = [session.name, session.matchedSalesman].concat(Array.isArray(session.editFor) ? session.editFor : []);
+        if (names.some((name) => name && samePerson(name, advisor))) return true;
+        return personKey(session.employeeNumber) === personKey(advisor);
     }
     // Same name ignoring case, dots, extra spaces and word order (the server uses the same rule).
     function samePerson(a, b) {
@@ -845,25 +892,102 @@
         const self = who && samePerson(who, (readSession() || {}).name);
         return `<div class="upd"><span>${esc(self || (mine && !who) ? 'You' : who || '—')}</span>${at ? `<small title="${esc(statusWhen(order.statusChangedAt))}">${esc(timeAgo(at))}</small>` : ''}</div>`;
     }
+    function personalLayoutStorageKey() {
+        const session = readSession();
+        return 'ro-emp-layout-v1:' + (session && session.recordId ? session.recordId : 'anon');
+    }
+    function loadPersonalLayout() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(personalLayoutStorageKey()) || 'null');
+            if (raw && Array.isArray(raw.order) && raw.order.length) {
+                personalLayout = {
+                    order: raw.order.filter(Boolean),
+                    hidden: Array.isArray(raw.hidden) ? raw.hidden.filter(Boolean) : []
+                };
+                return personalLayout;
+            }
+        } catch (e) { /* ignore */ }
+        personalLayout = null;
+        return null;
+    }
+    function savePersonalLayout(next) {
+        personalLayout = {
+            order: Array.isArray(next && next.order) ? next.order.filter(Boolean) : publishedSheetCols(),
+            hidden: Array.isArray(next && next.hidden) ? next.hidden.filter(Boolean) : []
+        };
+        try { localStorage.setItem(personalLayoutStorageKey(), JSON.stringify(personalLayout)); } catch (e) { /* blocked */ }
+    }
     function publishedSheetCols() {
-        const hidden = new Set((sheetLayout.hidden || []).concat(['Leader note']));
-        const published = (sheetLayout.order && sheetLayout.order.length)
-            || (sheetLayout.hidden && sheetLayout.hidden.length)
-            || sheetLayout.updatedAt;
-        if (!published) return EMP_DEFAULT_COLS.slice();
+        const mine = personalLayout || loadPersonalLayout();
+        const hidden = new Set((mine && mine.hidden && mine.hidden.length ? mine.hidden : sheetLayout.hidden) || []);
+        hidden.delete('Queue 1');
+        hidden.delete('Queue 2');
+        hidden.delete('Queue 3');
+        hidden.delete('Queue position');
+        hidden.delete('Leader note');
+        hidden.delete('Status');
+        hidden.delete('Note');
         const fallback = EMP_DEFAULT_COLS.slice();
-        const base = (sheetLayout.order && sheetLayout.order.length) ? sheetLayout.order : fallback;
-        const cols = base.filter((label) => EMP_KNOWN_COLS.has(label) && !hidden.has(label) && !EMP_SKIP_COLS.has(label));
+        const personalOrder = mine && Array.isArray(mine.order) ? mine.order.filter(Boolean) : [];
+        const saved = personalOrder.length >= 5
+            ? personalOrder
+            : (Array.isArray(sheetLayout.order) ? sheetLayout.order.filter(Boolean) : []);
+        // Incomplete saved layouts (e.g. only Q1/Q2) must not hide the rest of the sheet.
+        const base = saved.length >= 5 ? saved : fallback;
+        const queueTail = ['Queue 1', 'Queue 2', 'Queue 3'];
+        const rest = base.filter((label) => !queueTail.includes(label));
+        // Keep Status / Note / Leader note visible for the employee update flow.
+        ['Status', 'Note', 'Leader note'].forEach((label) => {
+            if (!rest.includes(label) && !queueTail.includes(label)) rest.push(label);
+        });
+        const ordered = rest.concat(queueTail.filter((label) => !rest.includes(label)));
+        // Keep any known columns the user hasn't listed yet (append, do not drop data columns).
+        fallback.forEach((label) => {
+            if (!ordered.includes(label) && !hidden.has(label)) ordered.push(label);
+        });
+        const cols = ordered.filter((label) => EMP_KNOWN_COLS.has(label) && !hidden.has(label) && !EMP_SKIP_COLS.has(label));
         return cols.length ? cols : fallback.filter((label) => !hidden.has(label));
+    }
+    function paintPickedRow() {
+        const box = $('emp-sheet');
+        if (!box) return;
+        box.querySelectorAll('tbody tr.is-picked').forEach((tr) => tr.classList.remove('is-picked'));
+        if (!pickedKey) return;
+        const row = box.querySelector(`tbody tr[data-key="${CSS.escape(pickedKey)}"]`);
+        if (row) row.classList.add('is-picked');
+    }
+    function reorderPersonalCol(fromLabel, toLabel) {
+        if (!fromLabel || !toLabel || fromLabel === toLabel) return;
+        const cols = publishedSheetCols().slice();
+        const from = cols.indexOf(fromLabel);
+        const to = cols.indexOf(toLabel);
+        if (from < 0 || to < 0) return;
+        cols.splice(from, 1);
+        cols.splice(to, 0, fromLabel);
+        const mine = personalLayout || loadPersonalLayout() || { order: cols.slice(), hidden: [] };
+        savePersonalLayout({ order: cols, hidden: mine.hidden || [] });
+        render();
     }
     function sheetHeadLabel(label) {
         return EMP_HEAD_SHORT[label] || (label === 'Updated by' ? 'Updated' : label);
     }
+    function queueOrderAt(order, tier) {
+        const list = Array.isArray(order.queueOrders) && order.queueOrders.length
+            ? order.queueOrders
+            : (Array.isArray(order.ahead) ? order.ahead : []);
+        return list[tier - 1] || null;
+    }
+    // Queue 1 / 2 / 3 = first three BO order numbers for this vehicle (product + suffix + exterior + interior).
     function queueTierHtml(order, n) {
-        const q = (order.boTierQueues || [])[n - 1];
-        if (!q) return '<span class="muted-text">—</span>';
-        const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-        return `<div class="q" title="Colour choice ${n}${pair ? ' (' + esc(pair) + ')' : ''}: position ${esc(String(q.position))} of ${esc(String(q.size))}"><b>${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div>`;
+        const item = queueOrderAt(order, n);
+        const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
+        if (!orderNo) {
+            return `<div class="q q-box is-empty" title="No matching back order #${n} for this vehicle (product + suffix + exterior + interior)"><b class="num">—</b></div>`;
+        }
+        const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : '';
+        const size = order.boQueueSize != null ? String(order.boQueueSize) : '';
+        const title = `Queue #${n} · order ${orderNo}` + (who ? ` · ${who}` : '') + (size ? ` · ${size} matched` : '') + ' (product + suffix + exterior + interior)';
+        return `<div class="q q-box" title="${esc(title)}"><b class="num">${esc(orderNo)}</b></div>`;
     }
     function sheetCellHtml(order, label, values, mine) {
         const pill = statusPillHtml(statusKey(order.status));
@@ -891,10 +1015,16 @@
             const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
             return deadline ? expiryCompactHtml(order, values['Expiry date']) : '<span class="muted-text">—</span>';
         }
-        if (label === 'Status') return mine ? `<span class="edit">${pill}${icon('chevron', 'chev')}</span>` : pill;
+        if (label === 'Status') return mine ? `<span class="edit" data-open-order="1">${pill}${icon('chevron', 'chev')}</span>` : pill;
         if (label === 'Note') {
             const note = String(order.statusNote || '').trim();
-            return `<div class="note" title="${esc(note)}" dir="auto">${note ? esc(note) : '—'}</div>`;
+            return `<div class="note${mine ? ' edit' : ''}" data-open-order="${mine ? '1' : ''}" title="${esc(note)}" dir="auto">${note ? esc(note) : (mine ? 'Click to add note' : '—')}</div>`;
+        }
+        if (label === 'Leader note') {
+            const leader = String(order.leaderNote || '').trim();
+            const who = order.leaderNoteBy || 'Admin';
+            const title = leader ? (who + (order.leaderNoteDisplay ? ' · ' + order.leaderNoteDisplay : '')) : 'No leader note yet';
+            return `<div class="note leader-note" title="${esc(title)}" dir="auto">${leader ? esc(leader) : '—'}</div>`;
         }
         if (label === 'Updated' || label === 'Updated by') return updatedHtml(order, mine);
         if (label === 'Usage') return values.Usage ? `<span class="tag${retailMatch(values.Usage) ? ' good' : ''}">${esc(values.Usage)}</span>` : '<span class="muted-text">—</span>';
@@ -903,15 +1033,74 @@
         if (label === 'Share level') return `<span dir="auto">${esc(values['Share level'] || '—')}</span>`;
         return esc(values[label] || '—');
     }
-    function empWidth(label) { return Number(empXlWidths[label]) || EMP_WIDTHS[label] || 88; }
-    function empFreezeClass(label) {
-        if (!empFreezeOn) return '';
-        if (label === 'Queue 2') return ' xl-fz1';
-        if (label === 'Queue 1') return ' xl-fz2';
-        if (label === 'Salesman name' || label === 'Salesman') return ' xl-fz3';
-        return '';
+    let empAutoWidths = {};
+    function empMeasurePx(text, font) {
+        if (!empMeasurePx.c) empMeasurePx.c = document.createElement('canvas').getContext('2d');
+        empMeasurePx.c.font = font || '13px Inter,"IBM Plex Sans Arabic",system-ui,sans-serif';
+        return Math.ceil(empMeasurePx.c.measureText(String(text || '')).width);
     }
-    function sheetRowHtml(order, cols, rowNum) {
+    function empWidthBounds(label) {
+        return { min: EMP_MIN_WIDTHS[label] || 40, max: EMP_MAX_WIDTHS[label] || 200 };
+    }
+    function empWidth(label) {
+        const { min, max } = empWidthBounds(label);
+        const saved = Number(empXlWidths[label]);
+        if (Number.isFinite(saved) && saved >= min && saved <= max) return Math.round(saved);
+        if (empAutoWidths[label]) return empAutoWidths[label];
+        return Math.max(min, EMP_WIDTHS[label] || 88);
+    }
+    function empAutofitCols(cols, rows) {
+        const out = {};
+        cols.forEach((label) => {
+            const { min, max } = empWidthBounds(label);
+            const saved = Number(empXlWidths[label]);
+            if (Number.isFinite(saved) && saved >= min && saved <= max) {
+                out[label] = Math.round(saved);
+                return;
+            }
+            let w = empMeasurePx(sheetHeadLabel(label), '600 11.5px Inter,system-ui,sans-serif') + 28;
+            const font = '13px Inter,"IBM Plex Sans Arabic",system-ui,sans-serif';
+            const scan = EMP_FIT_LABELS.has(label) ? rows.length : Math.min(rows.length, 80);
+            for (let i = 0; i < scan; i += 1) {
+                const raw = String(empCellValue(rows[i], label) || '').replace(/\s+/g, ' ').trim();
+                if (!raw || raw === '—') continue;
+                w = Math.max(w, empMeasurePx(raw.length > 42 ? raw.slice(0, 42) : raw, font) + 18);
+                if (w >= max) { w = max; break; }
+            }
+            out[label] = Math.max(min, Math.min(max, w));
+        });
+        empAutoWidths = out;
+        return out;
+    }
+    function empFreezeMeta(cols) {
+        if (!empFreezeOn) return { cls() { return ''; }, left() { return ''; } };
+        const frozen = cols.slice(0, 3);
+        const lefts = {};
+        let x = EMP_RN_W;
+        frozen.forEach((label) => {
+            lefts[label] = x;
+            x += empWidth(label);
+        });
+        const last = frozen[frozen.length - 1] || '';
+        return {
+            cls(label) {
+                const i = frozen.indexOf(label);
+                if (i < 0) return '';
+                return ` xl-fz${i + 1}${label === last ? ' xl-fz-last' : ''}`;
+            },
+            left(label) {
+                return lefts[label] == null ? '' : `;left:${lefts[label]}px`;
+            }
+        };
+    }
+    function empColStyle(label, freeze) {
+        const w = empWidth(label);
+        return `width:${w}px;min-width:${w}px;max-width:${w}px${freeze ? freeze.left(label) : ''}`;
+    }
+    function empFreezeClass(label, cols) {
+        return empFreezeMeta(cols || publishedSheetCols()).cls(label);
+    }
+    function sheetRowHtml(order, cols, rowNum, freeze) {
         const mine = canUpdateOrder(order);
         const values = sheetValues(order);
         const key = statusKey(order.status);
@@ -919,14 +1108,23 @@
         const end = parseLocal(expiryDeadline(order));
         const expired = end && end.getTime() <= Date.now();
         const none = !key || (key === 'محجوز' && !order.statusChangedAt && !order.statusChangedBy);
-        const classes = ['rowlink', mine ? 'mine' : '', cancelled ? 'row-cancelled' : '', expired ? 'is-expired' : '', none ? 'is-none' : '', key === 'Payment' ? 'is-ok' : ''].filter(Boolean).join(' ');
+        const classes = [
+            'rowlink',
+            mine ? 'mine' : '',
+            cancelled ? 'row-cancelled' : '',
+            expired ? 'is-expired' : '',
+            none ? 'is-none' : '',
+            key === 'Payment' ? 'is-ok' : '',
+            pickedKey && order.key === pickedKey ? 'is-picked' : ''
+        ].filter(Boolean).join(' ');
+        const pad = `<td class="xl-pad" style="width:${EMP_PAD_W}px;min-width:${EMP_PAD_W}px;max-width:${EMP_PAD_W}px"></td>`.repeat(EMP_PAD_N);
         return `<tr class="${classes}" data-key="${esc(order.key)}" tabindex="0"><th class="xl-rn" scope="row">${rowNum}</th>${cols.map((label) => {
             const html = sheetCellHtml(order, label, values, mine);
             const title = String(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-            const cls = [empFreezeClass(label).trim(), EMP_MONO.has(label) ? 'xl-mono' : ''].filter(Boolean).join(' ');
-            const w = empWidth(label);
-            return `<td class="${esc(cls)}" style="width:${w}px;min-width:${w}px;max-width:${w}px" title="${esc(title)}">${html}</td>`;
-        }).join('')}</tr>`;
+            const isQueue = label === 'Queue 1' || label === 'Queue 2' || label === 'Queue 3';
+            const cls = [freeze.cls(label).trim(), EMP_MONO.has(label) ? 'xl-mono' : '', isQueue ? 'col-q col-tier col-queue' : ''].filter(Boolean).join(' ');
+            return `<td class="${esc(cls)}" style="${empColStyle(label, freeze)}" title="${esc(title)}">${html}</td>`;
+        }).join('')}${pad}</tr>`;
     }
     function empXlLetter(index) {
         let n = index + 1;
@@ -970,12 +1168,12 @@
     function empCellValue(order, label) {
         const values = sheetValues(order);
         if (label === 'Queue 1' || label === 'Queue 2' || label === 'Queue 3') {
-            const n = Number(label.slice(-1));
-            const q = (order.boTierQueues || [])[n - 1];
-            return q ? String(q.position) : '';
+            const item = queueOrderAt(order, Number(label.slice(-1)));
+            return item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
         }
         if (label === 'Status') return order.status || '';
         if (label === 'Note') return order.statusNote || '';
+        if (label === 'Leader note') return order.leaderNote || '';
         if (label === 'Updated' || label === 'Updated by') return order.statusChangedBy || '';
         return String(values[label] || values['Salesman name'] && (label === 'Salesman') && values['Salesman name'] || '').trim();
     }
@@ -1047,8 +1245,8 @@
         }
         if (head) for (let cc = cMin; cc <= cMax; cc += 1) if (head.cells[cc + 1]) head.cells[cc + 1].classList.add('xl-active');
         const name = $('emp-xl-name');
-        const a1 = empXlLetter(cMin) + (rMin + 2);
-        const a2 = empXlLetter(cMax) + (rMax + 2);
+        const a1 = empXlLetter(cMin) + (rMin + 1);
+        const a2 = empXlLetter(cMax) + (rMax + 1);
         if (name) name.textContent = (rMin === rMax && cMin === cMax) ? a1 : `${a1}:${a2}`;
         const td = body.rows[r] && body.rows[r].cells[c + 1];
         empSetFormula(empXlCellText(td));
@@ -1068,18 +1266,25 @@
             const dir = empSheetSort.dir === 'za' ? -1 : 1;
             rows.sort((a, b) => String(empCellValue(a, empSheetSort.label)).localeCompare(String(empCellValue(b, empSheetSort.label)), undefined, { numeric: true, sensitivity: 'base' }) * dir);
         }
+        empAutofitCols(cols, rows);
+        const freeze = empFreezeMeta(cols);
+        let padHead = '';
+        for (let i = 0; i < EMP_PAD_N; i += 1) {
+            padHead += `<th class="xl-h xl-pad" data-c="${cols.length + i}" style="width:${EMP_PAD_W}px;min-width:${EMP_PAD_W}px;max-width:${EMP_PAD_W}px"><small class="xl-let">${esc(empXlLetter(cols.length + i))}</small><b></b></th>`;
+        }
         const heads = `<tr class="xl-heads"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => {
-            const w = empWidth(label);
             const sortCls = empSheetSort.label === label ? (empSheetSort.dir === 'za' ? ' is-desc' : ' is-asc') : '';
-            return `<th class="xl-h${empFreezeClass(label)}${sortCls}" data-label="${esc(label)}" data-c="${i}" style="width:${w}px;min-width:${w}px;max-width:${w}px" title="${esc(sheetHeadLabel(label))}"><small class="xl-let">${esc(empXlLetter(i))}</small><b>${esc(sheetHeadLabel(label))}</b><i class="xl-caret" data-sort="${esc(label)}"></i><span class="xl-resize" data-resize="${esc(label)}"></span></th>`;
-        }).join('')}</tr>`;
-        const colgroup = `<colgroup><col style="width:36px">${cols.map((label) => `<col style="width:${empWidth(label)}px">`).join('')}</colgroup>`;
+            const qCls = (label === 'Queue 1' || label === 'Queue 2' || label === 'Queue 3') ? ' col-q col-tier' : '';
+            return `<th class="xl-h${freeze.cls(label)}${sortCls}${qCls}" draggable="true" data-label="${esc(label)}" data-c="${i}" style="${empColStyle(label, freeze)}" title="${esc(sheetHeadLabel(label))} · drag to reorder (your view only)"><small class="xl-let">${esc(empXlLetter(i))}</small><b>${esc(sheetHeadLabel(label))}</b><i class="xl-caret" data-sort="${esc(label)}"></i><span class="xl-resize" data-resize="${esc(label)}"></span></th>`;
+        }).join('')}${padHead}</tr>`;
+        const colgroup = `<colgroup><col style="width:${EMP_RN_W}px">${cols.map((label) => `<col data-label="${esc(label)}" style="width:${empWidth(label)}px">`).join('')}${`<col class="xl-pad" style="width:${EMP_PAD_W}px">`.repeat(EMP_PAD_N)}</colgroup>`;
         box.innerHTML = rows.length
-            ? `<table class="xl-grid sheet-table${empFreezeOn ? '' : ' is-unfrozen'}${empCfOn ? ' is-cf' : ''}">${colgroup}<thead>${heads}</thead><tbody>${rows.map((order, i) => sheetRowHtml(order, cols, i + 2)).join('')}</tbody></table>`
+            ? `<table class="xl-grid sheet-table${empFreezeOn ? '' : ' is-unfrozen'}${empCfOn ? ' is-cf' : ''}">${colgroup}<thead>${heads}</thead><tbody>${rows.map((order, i) => sheetRowHtml(order, cols, i + 1, freeze)).join('')}</tbody></table>`
             : '<div class="empty">No orders match this view. Clear the search or pick another filter.</div>';
         const grid = box.querySelector('.xl-grid');
         if (grid) grid.style.zoom = String(empXlZoom / 100);
         empXlSelect(box, empXlSel.r, empXlSel.c, false, empXlSel.r2, empXlSel.c2);
+        paintPickedRow();
         scheduleFitSheet(box);
         const stat = $('emp-xl-stat');
         if (stat) stat.textContent = `${rows.length.toLocaleString('en-GB')} rows × ${cols.length} cols · ${mineCount} yours`;
@@ -1192,7 +1397,12 @@
     async function saveDrawer() {
         const order = orders.find((item) => item.key === openOrderKey);
         const button = $('dr-save');
-        if (!order || !drawerPick || !button || button.disabled) return;
+        if (!order || !button || button.disabled) return;
+        if (!drawerPick) {
+            if ($('dr-note-err')) $('dr-note-err').textContent = 'Choose a status first, then write the note.';
+            toast('Choose a status', 'Pick Payment, In progress or Cancelled before saving.', 'd-warn');
+            return;
+        }
         const text = $('dr-note').value.trim();
         if (!text) {
             $('dr-note-err').textContent = 'Write a note first. It is required with every status.';
@@ -1227,17 +1437,26 @@
         const deadline = values['Expiry date'] ? expiryDeadline(order) : '';
         const fact = (label, value, extra) => `<div><span>${esc(label)}</span><b dir="auto"${extra === 'mono' ? ' class="mono"' : ''}>${isBlankValue(value) ? '—' : esc(value)}${extra && extra !== 'mono' ? extra : ''}</b></div>`;
         const tierLine = (i) => {
-            const q = (order.boTierQueues || [])[i];
-            if (!q) return `<div class="tierline"><span>Choice ${i + 1}</span><span class="muted-text">No colour choice</span><b></b></div>`;
-            const pct = q.size ? Math.max(0, Math.min(100, (Number(q.position) / Number(q.size)) * 100)) : 0;
-            const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-            return `<div class="tierline" title="${esc(pair)}"><span>Choice ${i + 1}</span><span class="rail2"><em data-l="${pct.toFixed(1)}" style="width:0"></em><i data-l="${pct.toFixed(1)}" style="left:0"></i></span><b>#${esc(String(q.position))} / ${esc(String(q.size))}</b></div>`;
+            const item = queueOrderAt(order, i + 1);
+            const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
+            if (!orderNo) return `<div class="tierline"><span>Q${i + 1}</span><span class="muted-text">No match</span><b></b></div>`;
+            const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : '';
+            const size = order.boQueueSize || 0;
+            const pct = size ? Math.max(0, Math.min(100, ((i + 1) / Number(size)) * 100)) : 0;
+            return `<div class="tierline" title="${esc(who || orderNo)}"><span>Q${i + 1}</span><span class="rail2"><em data-l="${pct.toFixed(1)}" style="width:0"></em><i data-l="${pct.toFixed(1)}" style="left:0"></i></span><b class="num">${esc(orderNo)}</b></div>`;
         };
+        const leaderSec = `<section class="sec">
+            <h3>Leader note</h3>
+            ${leader
+                ? `<div class="cur-note" dir="auto">${esc(leader)}<small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small></div>`
+                : '<p class="hint">No leader note on this order yet. When admin writes one, it appears here and in the live sheet.</p>'}
+        </section>`;
         const statusSec = `<section class="sec">
             <h3>Status</h3>
             <div class="cur-status">${statusPillHtml(key)}${key && (who || at) ? `<small>by ${esc(who || '—')}${at ? ' · ' + esc(timeAgo(at)) : ''}</small>` : ''}</div>
             ${note ? `<div class="cur-note" dir="auto">${esc(note)}${at ? `<small>${esc(statusWhen(order.statusChangedAt))}</small>` : ''}</div>` : ''}
-            ${mine ? `<div class="status-picks">${PICKS.map(([name, cls, dot, hint]) => `<button type="button" class="pick ${cls}" data-pick="${esc(name)}" aria-pressed="false"><b><span class="dot ${dot}"></span>${esc(name)}</b><small>${esc(hint)}</small></button>`).join('')}</div>
+            ${mine ? `<p class="hint">Choose a status first, then write the required note. Both appear on the live sheet for everyone.</p>
+            <div class="status-picks">${PICKS.map(([name, cls, dot, hint]) => `<button type="button" class="pick ${cls}" data-pick="${esc(name)}" aria-pressed="false"><b><span class="dot ${dot}"></span>${esc(name)}</b><small>${esc(hint)}</small></button>`).join('')}</div>
             <div class="notebox" id="dr-notebox"><div><div class="inner">
                 <label for="dr-note">Note for <b id="dr-pick-name"></b> (required, everyone sees it)</label>
                 <textarea id="dr-note" maxlength="500" dir="auto" placeholder="Why is it Payment / In progress / Cancelled?"></textarea>
@@ -1252,10 +1471,10 @@
                 <button type="button" class="x rc-close" aria-label="Close">${icon('close')}</button>
             </div>
             <div class="dr-body">
+                ${leaderSec}
                 ${statusSec}
-                ${leader ? `<section class="sec"><h3>Leader note</h3><div class="cur-note" dir="auto">${esc(leader)}<small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small></div></section>` : ''}
                 <section class="sec"><h3>Expiry</h3>${deadline ? expHtml(deadline, `Reserved Order File column J · ${esc(values['Expiry date'])}`, true) : '<span class="muted-text">No expiry date</span>'}</section>
-                <section class="sec"><h3>Back Order queue</h3>${[0, 1, 2].map(tierLine).join('')}<p class="hint">Position among orders for the same product, suffix and colours. Lower is sooner.</p></section>
+                <section class="sec"><h3>Back Order queue</h3>${[0, 1, 2].map(tierLine).join('')}<p class="hint">First three matching back-order numbers for the same product, suffix and colours (BO Order Lookup ranking).</p></section>
                 <section class="sec"><h3>Car</h3><div class="facts">
                     ${fact('VIN', values.VIN, 'mono')}
                     ${fact('Model year', values['Model year'])}
@@ -1329,7 +1548,7 @@
             <textarea data-admin-msg="${esc(item.ruleId)}" rows="3" dir="auto">${esc(item.message)}</textarea>
             ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" class="btn sm" data-shift="-1" data-rule="${esc(item.ruleId)}">−1 day</button><button type="button" class="btn sm" data-shift="1" data-rule="${esc(item.ruleId)}">+1 day</button></div>` : ''}
             <div class="row-end">
-                <button type="button" class="btn wa-btn" data-open-wa="${esc(item.ruleId)}">Open WhatsApp</button>
+                <button type="button" class="btn wa-btn" data-open-wa="${esc(item.ruleId)}">Send to WhatsApp</button>
                 <button type="button" class="btn primary" data-confirm-sent="${esc(item.ruleId)}">${item.sentAt ? 'Sent again' : 'Mark as sent'}</button>
             </div>
         </article>`;
@@ -1584,8 +1803,18 @@
         if (name === 'inbox') paintMyAlerts();
         if (name === 'errors') paintMyAlerts();
         if (name === 'marketing') loadMyMarketing();
+        fixMarketingArabicLabels();
         paintRail();
         document.body.classList.toggle('orders-on', name === 'orders');
+        document.body.classList.toggle('marketing-on', name === 'marketing');
+        if (name === 'marketing') {
+            // Ensure the marketing page can scroll from the top on every open.
+            requestAnimationFrame(() => {
+                const board = $('marketing-board');
+                if (board) board.scrollTop = 0;
+                try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+            });
+        }
         if (shown) replayView(shown);
         if (name === 'orders') requestAnimationFrame(() => {
             slideIndicator($('kpis').querySelector('.ind'), $('kpis').querySelector('[aria-pressed="true"]'));
@@ -1603,7 +1832,9 @@
     function paintOrderErrorBadge() {
         const badge = $('oe-badge');
         if (!badge) return;
-        const open = boAlerts.reduce((sum, item) => sum + (item.orders || []).filter((order) => (order.status || 'new') === 'new').length, 0);
+        const open = (boAlerts || [])
+            .filter((item) => (item.kind || 'error') !== 'message')
+            .reduce((sum, item) => sum + (item.orders || []).filter((order) => (order.status || 'new') === 'new').length, 0);
         badge.hidden = !open;
         badge.textContent = open ? String(open) : '';
     }
@@ -1612,7 +1843,7 @@
         const summary = $('oe-summary');
         if (!list) return;
         paintOrderErrorBadge();
-        const items = boAlerts || [];
+        const items = (boAlerts || []).filter((item) => (item.kind || 'error') !== 'message');
         const totalOrders = items.reduce((sum, item) => sum + (item.orders || []).length, 0);
         const openOrders = items.reduce((sum, item) => sum + (item.orders || []).filter((order) => (order.status || 'new') !== 'completed').length, 0);
         paintKpis(summary, [['Error types', items.length, 'd-warn', 'Pushed to you'], ['Orders with errors', totalOrders, '', 'Under your name'], ['Still open', openOrders, 'd-bad', 'Not done yet']]);
@@ -1623,6 +1854,7 @@
         list.innerHTML = items.map((item) => {
             const orders = item.orders || [];
             const allDone = orders.length > 0 && orders.every((order) => (order.status || 'new') === 'completed');
+            const condition = item.conditionText || item.column || 'BO file';
             const rows = orders.map((order) => {
                 const state = oeStatusLabel(order);
                 const wrong = order.incorrectValue || order.currentValue || 'blank';
@@ -1639,6 +1871,7 @@
                     <h2 dir="auto">${esc(item.errorLabel || item.name || 'Order error')}</h2>
                     <span class="pill ${allDone ? 'p-ok' : 'p-bad'}"><span class="dot"></span>${orders.length} order${orders.length === 1 ? '' : 's'}</span>
                 </div>
+                <p class="muted-line" dir="auto"><b>Condition:</b> ${esc(condition)}</p>
                 <div class="fixline"><span class="muted-text">${esc(item.column || 'BO file')}</span><span class="from">${esc(item.incorrectValue || 'blank')}</span>${item.correctValue ? `${icon('chevron')}<span class="to">${esc(item.correctValue)}</span>` : ''}${item.product ? `<span class="muted-text">· ${esc(item.product)}</span>` : ''}</div>
                 ${item.message && item.messageMode !== 'perOrder' ? `<div class="cur-note" dir="auto">${esc(item.message)}</div>` : ''}
                 <div class="tbl-wrap"><table class="oe-table"><thead><tr><th>Order number</th><th>Car</th><th>Order date</th><th>What is wrong</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No orders listed.</td></tr>'}</tbody></table></div>
@@ -1720,11 +1953,17 @@
             ? rows.map((item) => {
                 const fields = (item.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b title="${esc(field.value)}">${esc(field.value)}</b></div>`).join('');
                 const cancelled = item.cancelled === true;
-                return `<article class="marketing-card card pane${cancelled ? ' is-cancelled' : ''}">
-                    <div class="mdetail-head"><h2>Order ${esc(item.orderNumber)}</h2>${cancelled ? `<span class="pill p-bad"><span class="dot"></span>Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>` : ''}</div>
+                const done = item.done === true;
+                const stamp = cancelled
+                    ? `<span class="pill p-bad"><span class="dot"></span>Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>`
+                    : done
+                        ? `<span class="pill p-ok"><span class="dot"></span>Done${item.doneBy ? ' · ' + esc(item.doneBy) : ''}${item.doneDisplay ? ' · ' + esc(item.doneDisplay) : ''}</span>`
+                        : '';
+                return `<article class="marketing-card card pane${cancelled ? ' is-cancelled' : ''}${done ? ' is-done' : ''}">
+                    <div class="mdetail-head"><h2>Order ${esc(item.orderNumber)}</h2>${stamp}</div>
                     <p class="muted-line">Sent ${esc(item.display || item.at || '—')}${item.product ? ' · ' + esc(item.product) : ''}</p>
                     <div class="facts marketing-fields">${fields || '<div><span>BO file</span><b>No other values saved for this order</b></div>'}</div>
-                    ${cancelled ? '' : `<div class="row-end"><button class="btn" type="button" data-cancel="${esc(item.id)}" data-order="${esc(item.orderNumber)}">Cancel</button></div>`}
+                    ${cancelled || done ? '' : `<div class="row-end"><button class="btn" type="button" data-cancel="${esc(item.id)}" data-order="${esc(item.orderNumber)}">Cancel</button></div>`}
                 </article>`;
             }).join('')
             : '<p class="empty card">You have not sent any orders yet.</p>';
@@ -1779,6 +2018,10 @@
         $('login-error').textContent = '';
         const select = $('employee-name');
         const password = $('employee-id').value;
+        if (!select.value) {
+            $('login-error').textContent = 'Select your name first.';
+            return;
+        }
         if (select.value === '__admin__') {
             sessionStorage.removeItem(sessionKey);
             $('employee-id').value = '';
@@ -1808,6 +2051,9 @@
             recordId: data.recordId,
             role: data.role || 'employee',
             canEditOrdersStartingWith5: !!data.canEditOrdersStartingWith5,
+            editFiveOnly: !!data.editFiveOnly || isMohammedAlFadel(data.name),
+            matchedSalesman: (!!data.editFiveOnly || isMohammedAlFadel(data.name)) ? '' : (data.matchedSalesman || ''),
+            editFor: (!!data.editFiveOnly || isMohammedAlFadel(data.name)) ? [] : (Array.isArray(data.editFor) ? data.editFor : []),
             last: Date.now()
         });
         $('employee-id').value = '';
@@ -1852,13 +2098,72 @@
                 const tr = td.parentElement;
                 if (event.shiftKey) empXlSelect(box, empXlSel.r, empXlSel.c, false, tr.sectionRowIndex, td.cellIndex - 1);
                 else empXlSelect(box, tr.sectionRowIndex, td.cellIndex - 1, false);
-                if (!event.target.closest('select, textarea, input, button, a')) box.focus({ preventScroll: true });
+                const cols = publishedSheetCols();
+                const label = cols[td.cellIndex - 1] || '';
+                const order = orders.find((item) => item.key === tr.dataset.key);
+                const openCell = label === 'Status' || label === 'Note' || event.target.closest('[data-open-order="1"]');
+                if (openCell && order && canUpdateOrder(order)) {
+                    pickedKey = tr.dataset.key || '';
+                    paintPickedRow();
+                    openOrderModal(tr.dataset.key, label === 'Status' || label === 'Note' ? statusKey(order.status) : '');
+                    return;
+                }
+                // First click anywhere on the row selects it; second click opens the details bar.
+                if (tr.dataset.key && !event.target.closest('select, textarea, input, button, a')) {
+                    if (pickedKey && pickedKey === tr.dataset.key) {
+                        openOrderModal(tr.dataset.key);
+                    } else {
+                        pickedKey = tr.dataset.key;
+                        paintPickedRow();
+                    }
+                    box.focus({ preventScroll: true });
+                }
                 return;
             }
             const rn = event.target.closest('.xl-grid tbody th.xl-rn');
-            if (rn) empXlSelect(box, rn.parentElement.sectionRowIndex, empXlSel.c, false);
+            if (rn) {
+                const tr = rn.parentElement;
+                empXlSelect(box, tr.sectionRowIndex, empXlSel.c, false);
+                if (tr.dataset.key) {
+                    if (pickedKey && pickedKey === tr.dataset.key) openOrderModal(tr.dataset.key);
+                    else {
+                        pickedKey = tr.dataset.key;
+                        paintPickedRow();
+                    }
+                }
+                return;
+            }
             const col = event.target.closest('.xl-grid thead th[data-c]');
             if (col) empXlSelect(box, empXlSel.r, Number(col.dataset.c) || 0, false);
+        });
+        $('emp-sheet').addEventListener('dragstart', (event) => {
+            const th = event.target.closest('thead th.xl-h[data-label]');
+            if (!th || event.target.closest('[data-resize], .xl-caret')) return;
+            event.dataTransfer.setData('text/plain', th.getAttribute('data-label') || '');
+            event.dataTransfer.effectAllowed = 'move';
+            th.classList.add('is-drag');
+        });
+        $('emp-sheet').addEventListener('dragend', (event) => {
+            const th = event.target.closest('thead th.xl-h');
+            if (th) th.classList.remove('is-drag');
+            $('emp-sheet').querySelectorAll('thead th.is-drop').forEach((el) => el.classList.remove('is-drop'));
+        });
+        $('emp-sheet').addEventListener('dragover', (event) => {
+            const th = event.target.closest('thead th.xl-h[data-label]');
+            if (!th) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            $('emp-sheet').querySelectorAll('thead th.is-drop').forEach((el) => el.classList.remove('is-drop'));
+            th.classList.add('is-drop');
+        });
+        $('emp-sheet').addEventListener('drop', (event) => {
+            const th = event.target.closest('thead th.xl-h[data-label]');
+            if (!th) return;
+            event.preventDefault();
+            const from = event.dataTransfer.getData('text/plain');
+            const to = th.getAttribute('data-label') || '';
+            th.classList.remove('is-drop');
+            reorderPersonalCol(from, to);
         });
         $('emp-sheet').addEventListener('mousedown', (event) => {
             if (event.button !== 0) return;
@@ -1869,8 +2174,9 @@
                 const label = handle.getAttribute('data-resize');
                 const startX = event.clientX;
                 const startW = empWidth(label);
+                const { min, max } = empWidthBounds(label);
                 const move = (ev) => {
-                    empXlWidths[label] = Math.max(28, Math.min(420, startW + (ev.clientX - startX)));
+                    empXlWidths[label] = Math.max(min, Math.min(Math.max(max, 420), startW + (ev.clientX - startX)));
                     box.querySelectorAll(`[data-label="${CSS.escape(label)}"]`).forEach((el) => {
                         el.style.width = empXlWidths[label] + 'px';
                         el.style.minWidth = empXlWidths[label] + 'px';
@@ -1881,6 +2187,7 @@
                     document.removeEventListener('mousemove', move);
                     document.removeEventListener('mouseup', up);
                     try { localStorage.setItem('ro-sheet-colwidths', JSON.stringify(empXlWidths)); } catch (e) { /* blocked */ }
+                    render();
                 };
                 document.addEventListener('mousemove', move);
                 document.addEventListener('mouseup', up);
@@ -2003,8 +2310,20 @@
         s.onerror = () => toast('Export failed', 'Could not load the Excel library.', 'd-bad');
         document.head.appendChild(s);
     });
-    if ($('emp-xl-zoom-out')) $('emp-xl-zoom-out').addEventListener('click', () => { empXlZoom = Math.max(60, empXlZoom - 10); const g = document.querySelector('#emp-sheet .xl-grid'); if (g) g.style.zoom = String(empXlZoom / 100); if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`; });
-    if ($('emp-xl-zoom-in')) $('emp-xl-zoom-in').addEventListener('click', () => { empXlZoom = Math.min(150, empXlZoom + 10); const g = document.querySelector('#emp-sheet .xl-grid'); if (g) g.style.zoom = String(empXlZoom / 100); if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`; });
+    if ($('emp-xl-zoom-out')) $('emp-xl-zoom-out').addEventListener('click', () => {
+        empXlZoom = Math.max(40, empXlZoom - 10);
+        try { localStorage.setItem('ro-emp-zoom', String(empXlZoom)); } catch (e) { /* blocked */ }
+        const g = document.querySelector('#emp-sheet .xl-grid');
+        if (g) g.style.zoom = String(empXlZoom / 100);
+        if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`;
+    });
+    if ($('emp-xl-zoom-in')) $('emp-xl-zoom-in').addEventListener('click', () => {
+        empXlZoom = Math.min(200, empXlZoom + 10);
+        try { localStorage.setItem('ro-emp-zoom', String(empXlZoom)); } catch (e) { /* blocked */ }
+        const g = document.querySelector('#emp-sheet .xl-grid');
+        if (g) g.style.zoom = String(empXlZoom / 100);
+        if ($('emp-xl-zoom-val')) $('emp-xl-zoom-val').textContent = `${empXlZoom}%`;
+    });
     if ($('emp-xl-formula')) {
         $('emp-xl-formula').addEventListener('focus', () => { try { $('emp-xl-formula').select(); } catch (e) { /* ignore */ } });
         $('emp-xl-formula').addEventListener('click', () => { try { $('emp-xl-formula').select(); } catch (e) { /* ignore */ } });
@@ -2093,7 +2412,7 @@
 
     function mcRows() {
         const rows = [];
-        boAlerts.forEach((item) => {
+        (boAlerts || []).forEach((item) => {
             (item.orders || []).forEach((order) => {
                 const reserved = dataOrders().find((row) => String(row.orderNumber) === String(order.boNumber));
                 rows.push({
@@ -2186,6 +2505,7 @@
                 <span class="pill ${pill}"><span class="dot"></span>${state.label}</span>
             </div>
             <p class="muted-line" dir="auto">${[row.order.product, row.order.boNumber ? 'order ' + row.order.boNumber : '', row.alert.column, row.vin ? 'VIN ' + row.vin : ''].filter(Boolean).map(esc).join(' · ')}</p>
+            ${row.alert.conditionText ? `<p class="muted-line" dir="auto"><b>Condition:</b> ${esc(row.alert.conditionText)}</p>` : ''}
             <div class="fixline"><span class="from">${esc(row.order.incorrectValue || row.alert.incorrectValue || 'blank')}</span>${icon('chevron')}<span class="to">${esc(row.order.correctValue || row.alert.correctValue || '—')}</span></div>
             <div class="facts">
                 <div><span>BO date</span><b>${esc(mcOrderDate(row.order) || '—')}</b></div>
@@ -2198,10 +2518,10 @@
             <div class="wa"><div class="bubble" id="mc-preview" dir="auto"></div></div>
             <div class="row-end">
                 <button type="button" class="btn" id="mc-copy">Copy message</button>
-                <button type="button" class="btn wa-btn" id="mc-wa">Open WhatsApp</button>
+                <button type="button" class="btn wa-btn" id="mc-wa">Send to WhatsApp</button>
                 <button type="button" class="btn primary" id="mc-sent">${state.cls === 'is-sent' ? 'Confirm sent again' : 'Mark as sent'}</button>
             </div>
-            <p class="muted-line" id="mc-note">${esc(mcNotice || 'Opening WhatsApp does not mark the message as sent.')}</p>`;
+            <p class="muted-line" id="mc-note">${esc(mcNotice || 'Send to WhatsApp opens the order phone from column X. Mark as sent only after you press Send there.')}</p>`;
         const field = $('mc-message');
         const paint = () => {
             mcDrafts[row.key] = field.value;
@@ -2482,6 +2802,11 @@
         $('who-av').textContent = initials(session.name);
         showView('inbox');
         $('msg-advisor').value = session.name;
+        try {
+            const z = Number(localStorage.getItem('ro-emp-zoom'));
+            if (z >= 40 && z <= 200) empXlZoom = z;
+        } catch (e) { /* keep */ }
+        loadPersonalLayout();
         loadLive({ first: true });
         loadVehicles();
         paintMyAlerts();
@@ -2498,7 +2823,8 @@
             if (msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') { loadLive(); paintMyAlerts(); }
         });
     } catch (e) { /* polling remains */ }
-    setInterval(() => { if (readSession()) loadLive(); }, 20000);
+    // Keep the sheet live without a full page refresh (socket first, short poll as backup).
+    setInterval(() => { if (readSession()) loadLive(); }, 3000);
     // Safety net when the live socket is down: re-check admin messages every 30 s, repaint only if something changed.
     let lastMessagesStamp = '';
     setInterval(async () => {
@@ -2516,6 +2842,7 @@
     }, 15000);
     if ($('notif-toggle')) $('notif-toggle').addEventListener('click', toggleDesktopAlerts);
     paintDesktopButton();
+    fixMarketingArabicLabels();
     loadNames();
     loadCars();
     if (readSession()) openApp();

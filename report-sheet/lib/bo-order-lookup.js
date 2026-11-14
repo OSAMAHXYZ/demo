@@ -1,11 +1,11 @@
 /**
- * BO Order Lookup ΓÇö queue algorithm used by bo-order-lookup.html
+ * BO Order Lookup — queue algorithm used by bo-order-lookup.html
  *
  * Order-number queue (buildQueueAnalysis):
  * 1. Find by Back Order Number column; else Order Not Found.
- * 2. Reference pairs: Ext1ΓåöInt1, Ext2ΓåöInt2, Ext3ΓåöInt3 (skip blank tiers).
+ * 2. Reference pairs: Ext1↔Int1, Ext2↔Int2, Ext3↔Int3 (skip blank tiers).
  * 3. Filter all orders by same Product + ALJ Suffix; match if any pair matches (* = any color).
- *    A ref pair like DMG/* is expanded into each concrete queue (DMG/20, DMG/30, ΓÇª).
+ *    A ref pair like DMG/* is expanded into each concrete queue (DMG/20, DMG/30, …).
  * 4. Dedupe by back order number (oldest date; merge unique pairs).
  * 5. Sort by reservation date asc, then back order number; return position.
  *
@@ -70,20 +70,9 @@ class BoOrderLookup {
     return prioritized.length > 0 ? prioritized : headers;
 }
 
-  normalizeOrderNeedle(orderNumber) {
-    let s = String(orderNumber ?? '').trim();
-    if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');
-    return this.normalizeText(s);
-  }
-
   findOrderRow(rows, orderNumber, headers) {
-    const needle = this.normalizeOrderNeedle(orderNumber);
+    const needle = this.normalizeText(orderNumber);
     if (!needle) return null;
-
-    const rowMatches = (raw) => {
-      const n = this.normalizeOrderNeedle(raw);
-      return n && (n === needle || n.replace(/^0+/, '') === needle.replace(/^0+/, ''));
-    };
 
     const backOrderCol = this.resolveColumn(headers, [
         /^back\s*order\s*number$/i,
@@ -93,7 +82,7 @@ class BoOrderLookup {
 
     if (backOrderCol) {
         for (const row of rows) {
-            if (rowMatches(row[backOrderCol])) {
+            if (this.normalizeText(row[backOrderCol]) === needle) {
                 return { row, matchedColumn: backOrderCol };
             }
         }
@@ -103,7 +92,7 @@ class BoOrderLookup {
     const candidateColumns = this.resolveOrderColumns(headers);
     for (const row of rows) {
         for (const columnName of candidateColumns) {
-            if (rowMatches(row[columnName])) {
+            if (this.normalizeText(row[columnName]) === needle) {
                 return { row, matchedColumn: columnName };
             }
         }
@@ -143,7 +132,7 @@ class BoOrderLookup {
     for (const col of [col1, col2, col3].filter(Boolean)) {
         const n = this.normalizeText(row[col]);
         if (!n || n === '-') continue;
-        // * on the BO row means "any" ΓÇö counts in every concrete color queue
+        // * on the BO row means "any" — counts in every concrete color queue
         if (n === '*' || n === target) return true;
     }
     return false;
@@ -331,8 +320,96 @@ class BoOrderLookup {
     return entryPairs.some((candPair) => this.colorPairMatches(refPair, candPair));
 }
 
-  sortQueueEntries(entries) {
-    return [...entries].sort((a, b) => {
+  /** Products where Confirm Flag = confirmed jumps ahead of older unconfirmed orders. */
+  confirmPriorityProduct(product) {
+    const n = this.normalizeText(product).replace(/[\s/_-]+/g, '');
+    if (!n) return false;
+    return (
+      n.includes('camry')
+      || n.includes('rav4')
+      || n.includes('lc300')
+      || n.includes('landcruiser300')
+      || n.includes('lc70')
+      || n.includes('landcruiser70')
+      || n.includes('hiluxsc')
+      || n.includes('hiluxdc')
+      || (n.includes('hilux') && (n.includes('sc') || n.includes('dc') || n.includes('single') || n.includes('double')))
+    );
+  }
+
+  isConfirmedFlagValue(value) {
+    const s = this.normalizeText(value);
+    if (!s) return false;
+    if (/^(n|no|nc|0|false)$/i.test(s)) return false;
+    if (/(not[\s_-]*conf|un[\s_-]*conf|non[\s_-]*conf|pending|waiting|open|unalloc|not alloc)/i.test(s)) return false;
+    if (/^(y|yes|c|1|true|confirmed|confirm|allocated|alloc)$/i.test(s)) return true;
+    if (/^conf(irmed)?$/i.test(s)) return true;
+    if (/\b(confirmed|allocated)\b/.test(s)) return true;
+    return false;
+  }
+
+  looksLikeConfirmFlagValue(value) {
+    const s = this.normalizeText(value);
+    if (!s) return false;
+    if (/^(y|yes|n|no|nc|c|0|1|true|false)$/i.test(s)) return true;
+    return /conf|alloc|pending|waiting|open/.test(s);
+  }
+
+  resolveConfirmFlagColumn(headers) {
+    return this.resolveColumn(headers || this.headers || [], [
+      /^confirm\s*flag$/i,
+      /^confirm(ation)?$/i,
+      /confirm\s*flag/i,
+      /\bconfirm(ation)?\b/i,
+      /allocation\s*status/i,
+      /^allocated$/i
+    ]);
+  }
+
+  entryIsConfirmed(entry, confirmColumn) {
+    if (entry && typeof entry.confirmed === 'boolean') return entry.confirmed;
+    const row = entry && entry.row;
+    if (!row) return false;
+    if (confirmColumn && row[confirmColumn] != null && String(row[confirmColumn]).trim() !== '') {
+      return this.isConfirmedFlagValue(row[confirmColumn]);
+    }
+    const headers = Object.keys(row);
+    const col = confirmColumn || this.resolveConfirmFlagColumn(headers);
+    if (col && row[col] != null && String(row[col]).trim() !== '') {
+      return this.isConfirmedFlagValue(row[col]);
+    }
+    // Some BO files put confirm in column H — only when the value looks like a confirm flag.
+    const colH = headers.find((h) => /^h$/i.test(String(h)) || this.normalizeText(h) === 'h')
+      || (row.H != null ? 'H' : null);
+    if (colH && this.looksLikeConfirmFlagValue(row[colH])) {
+      return this.isConfirmedFlagValue(row[colH]);
+    }
+    return false;
+  }
+
+  /**
+   * Default sort = reservation date, then order number (BO Order Lookup).
+   * Reserved-orders sets lookup.preferConfirmSort = true (or passes
+   * { preferConfirm: true }) so Camry / RAV4 / Hilux SC·DC / LC300 / LC70
+   * confirmed rows jump ahead. BO hub never enables this.
+   */
+  sortQueueEntries(entries, opts) {
+    const list = Array.isArray(entries) ? entries : [];
+    const preferConfirm = !!(this.preferConfirmSort) || !!(opts && opts.preferConfirm);
+    const sample = list.find((entry) => entry && entry.row) || null;
+    const headers = sample && sample.row ? Object.keys(sample.row) : (this.headers || []);
+    const confirmColumn = preferConfirm ? this.resolveConfirmFlagColumn(headers) : null;
+    const useConfirm = preferConfirm && list.some((entry) => this.confirmPriorityProduct(entry && entry.product));
+    return [...list].sort((a, b) => {
+        if (useConfirm) {
+          const aPri = this.confirmPriorityProduct(a && a.product);
+          const bPri = this.confirmPriorityProduct(b && b.product);
+          if (aPri || bPri) {
+            const aConf = aPri && this.entryIsConfirmed(a, confirmColumn) ? 1 : 0;
+            const bConf = bPri && this.entryIsConfirmed(b, confirmColumn) ? 1 : 0;
+            if (aConf !== bConf) return bConf - aConf;
+          }
+        }
         const da = a.reservationDate ?? Number.POSITIVE_INFINITY;
         const db = b.reservationDate ?? Number.POSITIVE_INFINITY;
         if (da !== db) return da - db;
@@ -349,30 +426,20 @@ class BoOrderLookup {
     const queue = this.sortQueueEntries(filtered);
     const posIdx = queue.findIndex((e) => e.orderNorm === refOrderNorm);
     const position = posIdx >= 0 ? posIdx + 1 : null;
-    const mapNext = (e, i) => ({
-        orderNumber: e.orderNumber,
-        reservationDate: e.reservationDateRaw,
-        product: e.product,
-        suffix: e.suffix,
-        salesman: e.salesman || this.salesmanFromRow(e.row, this._salesmanColumn || null) || '',
-        queuePosition: posIdx >= 0 ? posIdx + 2 + i : null,
-        pairs: (e.pairs || []).map((p) => ({ exterior: p.exterior, interior: p.interior }))
-    });
     return {
         tier: refPair.tier,
         exterior: refPair.exterior,
         interior: refPair.interior,
         position,
         ordersAhead: position != null ? position - 1 : null,
-        totalQueueSize: queue.length,
-        nextInQueue: (posIdx >= 0 ? queue.slice(posIdx + 1, posIdx + 4) : []).map(mapNext)
+        totalQueueSize: queue.length
     };
 }
 
   /**
    * When a ref pair uses * (any), expand into ALL concrete Ext/Int queues
    * for the same Product + Suffix.
-   * Example: 202/* with Crown interiors 00 and 20 ΓåÆ 202/00 and 202/20
+   * Example: 202/* with Crown interiors 00 and 20 → 202/00 and 202/20
    * (not only interiors already paired with 202 in the file).
    */
   buildPairQueuesForRefPair(allEntries, refPair, productNorm, suffixNorm, productColumn, suffixColumn, refOrderNorm) {
@@ -498,7 +565,6 @@ class BoOrderLookup {
             orderNorm,
             product: productColumn ? anchorRow[productColumn] : '',
             suffix: suffixColumn ? anchorRow[suffixColumn] : '',
-            salesman: '',
             reservationDate: bestDate,
             reservationDateRaw: bestDateRaw || (dateColumn ? anchorRow[dateColumn] : ''),
             pairs: Array.from(pairMap.values()),
@@ -508,41 +574,11 @@ class BoOrderLookup {
     return entries;
 }
 
-  salesmanFromRow(row, salesmanColumn) {
-    if (!row) return '';
-    if (salesmanColumn && row[salesmanColumn] != null && String(row[salesmanColumn]).trim()) {
-      return String(row[salesmanColumn]).trim();
-    }
-    const headers = Array.isArray(row.__headers) ? row.__headers : Object.keys(row).filter((k) => !String(k).startsWith('__'));
-    const col = this.resolveColumn(headers, [
-      /^salesman\s*name$/i,
-      /^sales\s*employee$/i,
-      /^salesman$/i,
-      /sales\s*employee/i,
-      /advisor/i,
-      /consultant/i
-    ]);
-    return col ? String(row[col] ?? '').trim() : '';
-  }
-
-  resolveSalesmanColumn(headers) {
-    return this.resolveColumn(headers, [
-      /^salesman\s*name$/i,
-      /^sales\s*employee$/i,
-      /^salesman$/i,
-      /sales\s*employee/i,
-      /advisor/i,
-      /consultant/i
-    ]);
-  }
-
   buildQueueAnalysis(rows, matchedOrder, headers, orderMatchedColumn) {
     const productColumn = this.resolveColumn(headers, [/^product$/i, /product/i, /model/i, /description/i]);
     const suffixColumn = this.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
     const dateColumn = this.resolveReservationCreatedDateColumn(headers);
     const orderColumn = this.resolveBackOrderColumn(headers, orderMatchedColumn);
-    const salesmanColumn = this.resolveSalesmanColumn(headers);
-    this._salesmanColumn = salesmanColumn;
 
     const ext1 = this.resolvePriorityColumn(headers, 'ext', 1);
     const int1 = this.resolvePriorityColumn(headers, 'int', 1);
@@ -562,10 +598,6 @@ class BoOrderLookup {
         extCols,
         intCols
     );
-    // Attach salesman onto entries (column resolved above)
-    allEntries.forEach((e) => {
-      if (!e.salesman) e.salesman = this.salesmanFromRow(e.row, salesmanColumn);
-    });
 
     const refOrderNorm = this.normalizeText(orderColumn ? matchedOrder[orderColumn] : '');
     let refEntry = allEntries.find((e) => e.orderNorm === refOrderNorm);
@@ -649,22 +681,11 @@ class BoOrderLookup {
             product: refEntry.product,
             suffix: refEntry.suffix
         },
-        /** Orders immediately behind this one in the ranked queue (next 3). */
-        nextInQueue: (posIdx >= 0 ? queue.slice(posIdx + 1, posIdx + 4) : []).map((e, i) => ({
-            orderNumber: e.orderNumber,
-            reservationDate: e.reservationDateRaw,
-            product: e.product,
-            suffix: e.suffix,
-            salesman: e.salesman || this.salesmanFromRow(e.row, salesmanColumn) || '',
-            queuePosition: posIdx + 2 + i,
-            pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
-        })),
         queuePreview: queue.slice(0, 100).map((e) => ({
             orderNumber: e.orderNumber,
             reservationDate: e.reservationDateRaw,
             product: e.product,
             suffix: e.suffix,
-            salesman: e.salesman || this.salesmanFromRow(e.row, salesmanColumn) || '',
             pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
         })),
         queueRule:
@@ -806,7 +827,7 @@ class BoOrderLookup {
   }
 
   /**
-   * All Product ├ù Suffix ├ù Exterior ├ù Interior queue sizes from the BO file.
+   * All Product × Suffix × Exterior × Interior queue sizes from the BO file.
    * Queue = unique back-order count matching that combo (same rules as new-customer queue).
    */
   buildAllQueueCombinations() {
@@ -1026,7 +1047,7 @@ class BoOrderLookup {
               }
             : null
         },
-        rule: 'Wildcard: Product+Suffix fixed; each combination shows how many reservations match (Exterior Color 1ΓÇô3, Interior Color 1ΓÇô3). A * on a BO row means any ΓÇö e.g. DMG/* counts in every DMG/concrete-interior queue.'
+        rule: 'Wildcard: Product+Suffix fixed; each combination shows how many reservations match (Exterior Color 1–3, Interior Color 1–3). A * on a BO row means any — e.g. DMG/* counts in every DMG/concrete-interior queue.'
       };
     }
     const exact = computeForPair(targetExt, targetInt, extInput, intInput);
@@ -1040,265 +1061,7 @@ class BoOrderLookup {
       matchingTotal: exact.matchingTotal,
       queueSizeBeforeAdding: exact.matchingTotal,
       matchedRequirements: productInput + ' + ' + suffixInput + ' + ' + extInput + '/' + intInput,
-      rule: 'Same Product+Suffix; exterior may appear in Exterior Color 1ΓÇô3; interior may appear in Interior Color 1ΓÇô3. * on a BO row matches any concrete color on that side (DMG/* counts in DMG/20 and DMG/30). Response is matching reservation count (not a rank).'
-    };
-  }
-
-  productKeyLoose(value) {
-    return this.normalizeText(value).replace(/^toyota\s+/, '').replace(/[^a-z0-9]/g, '');
-  }
-
-  suffixKeyLoose(value) {
-    return this.normalizeText(value).replace(/[^a-z0-9]/g, '');
-  }
-
-  colorKeyLoose(value) {
-    return this.normalizeText(value).replace(/[^a-z0-9*]/g, '');
-  }
-
-  extractVinFromRow(row, headers) {
-    const vinCol = this.resolveColumn(headers, [
-      /^vin$/i,
-      /^vin\s*(no|number|#)?$/i,
-      /vehicle\s*identification/i,
-      /chassis/i
-    ]);
-    const candidates = [];
-    if (vinCol) candidates.push(row[vinCol]);
-    if (Array.isArray(row.__cells)) {
-      row.__cells.forEach((c) => candidates.push(c));
-    }
-    Object.keys(row || {}).forEach((k) => {
-      if (String(k).startsWith('__')) return;
-      candidates.push(row[k]);
-    });
-    for (const c of candidates) {
-      const cleaned = String(c ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (cleaned.length >= 17) return cleaned.slice(0, 17);
-      if (cleaned.length >= 8 && cleaned.length <= 17) return cleaned;
-    }
-    return '';
-  }
-
-  vinsMatch(a, b) {
-    const x = String(a || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const y = String(b || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (!x || !y) return false;
-    if (x === y) return true;
-    if (x.length >= 8 && y.length >= 8 && (x.endsWith(y) || y.endsWith(x) || x.slice(-8) === y.slice(-8))) {
-      return true;
-    }
-    return false;
-  }
-
-  findOrderRowByVin(vin) {
-    const needle = String(vin || '').trim();
-    if (!needle) return null;
-    const headers = this.headers;
-    const rows = this.rows;
-    for (const row of rows) {
-      const rowVin = this.extractVinFromRow(row, headers);
-      if (rowVin && this.vinsMatch(needle, rowVin)) {
-        const orderCol = this.resolveBackOrderColumn(headers, null)
-          || this.resolveColumn(headers, [/^back\s*order\s*number$/i, /order\s*number/i, /order\s*no/i]);
-        return { row, matchedColumn: orderCol || null, vin: rowVin };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Build queue analysis from reserved vehicle attributes (product + suffix + ext/int),
-   * same rules as order-number lookup in bo-order-lookup.html.
-   */
-  buildQueueFromVehicleSpec({ product, suffix, exteriorColor, interiorColor, orderNumber }) {
-    const productInput = String(product || '').trim();
-    const suffixInput = String(suffix || '').trim();
-    const extInput = String(exteriorColor || '').trim();
-    const intInput = String(interiorColor || '').trim();
-    if (!productInput || !suffixInput || !extInput || !intInput) return null;
-
-    const headers = this.headers;
-    const rows = this.rows;
-    const productColumn = this.resolveColumn(headers, [/^product$/i, /product/i, /model/i, /description/i]);
-    const suffixColumn = this.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
-    const dateColumn = this.resolveReservationCreatedDateColumn(headers);
-    const orderColumn = this.resolveBackOrderColumn(headers, null);
-    const ext1 = this.resolvePriorityColumn(headers, 'ext', 1);
-    const int1 = this.resolvePriorityColumn(headers, 'int', 1);
-    const ext2 = this.resolvePriorityColumn(headers, 'ext', 2);
-    const int2 = this.resolvePriorityColumn(headers, 'int', 2);
-    const ext3 = this.resolvePriorityColumn(headers, 'ext', 3);
-    const int3 = this.resolvePriorityColumn(headers, 'int', 3);
-    if (!productColumn || !suffixColumn || !ext1 || !int1) return null;
-
-    const extCols = [ext1, ext2, ext3];
-    const intCols = [int1, int2, int3];
-    const allEntries = this.mergeOrderEntries(
-      rows, orderColumn, dateColumn, productColumn, suffixColumn, extCols, intCols
-    );
-
-    const salesmanColumn = this.resolveSalesmanColumn(headers);
-    this._salesmanColumn = salesmanColumn;
-    allEntries.forEach((e) => {
-      e.salesman = this.salesmanFromRow(e.row, salesmanColumn);
-    });
-
-    const productNorm = this.productKeyLoose(productInput);
-    const suffixNorm = this.suffixKeyLoose(suffixInput);
-    const refPair = {
-      tier: 1,
-      exterior: extInput,
-      interior: intInput,
-      extNorm: this.normalizeText(extInput),
-      intNorm: this.normalizeText(intInput)
-    };
-
-    const queue = this.sortQueueEntries(
-      allEntries.filter((entry) => {
-        if (this.productKeyLoose(entry.product) !== productNorm) return false;
-        if (this.suffixKeyLoose(entry.suffix) !== suffixNorm) return false;
-        return this.entryMatchesRefPair(entry.pairs, refPair);
-      })
-    );
-
-    const orderNorm = this.normalizeOrderNeedle(orderNumber);
-    const posIdx = orderNorm
-      ? queue.findIndex((e) => e.orderNorm === orderNorm || this.normalizeOrderNeedle(e.orderNumber) === orderNorm)
-      : -1;
-    const position = posIdx >= 0 ? posIdx + 1 : null;
-
-    const pairQueues = this.buildPairQueuesForRefPair(
-      allEntries,
-      refPair,
-      this.normalizeText(productInput),
-      this.normalizeText(suffixInput),
-      productColumn,
-      suffixColumn,
-      orderNorm || ''
-    );
-
-    // When reserved order is not in BO, still surface the matching product/suffix/color queue
-    // (first 3 peers) so the tracker mirrors bo-order-lookup.html combo checks.
-    const nextFrom = position != null ? posIdx + 1 : 0;
-    const nextInQueue = queue.slice(nextFrom, nextFrom + 3).map((e, i) => ({
-      orderNumber: e.orderNumber,
-      reservationDate: e.reservationDateRaw,
-      product: e.product,
-      suffix: e.suffix,
-      salesman: e.salesman || '',
-      queuePosition: (position != null ? posIdx + 2 + i : i + 1),
-      pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
-    }));
-
-    return {
-      columns: {
-        orderColumn,
-        productColumn,
-        suffixColumn,
-        dateColumn,
-        extColorPriority1: ext1,
-        interiorColorPriority1: int1,
-        extColorPriority2: ext2,
-        interiorColorPriority2: int2,
-        extColorPriority3: ext3,
-        interiorColorPriority3: int3
-      },
-      values: {
-        orderNumber: orderNumber || '',
-        product: productInput,
-        suffix: suffixInput,
-        reservationDate: '',
-        extColor1: extInput,
-        intColor1: intInput,
-        extColor2: '',
-        intColor2: '',
-        extColor3: '',
-        intColor3: ''
-      },
-      referencePairs: [{ exterior: extInput, interior: intInput, tier: 1 }],
-      pairQueues,
-      queueResult: {
-        position,
-        ordersAhead: position != null ? position - 1 : queue.length,
-        totalQueueSize: queue.length,
-        reservationDate: posIdx >= 0 ? queue[posIdx].reservationDateRaw : '',
-        product: productInput,
-        suffix: suffixInput
-      },
-      nextInQueue,
-      queuePreview: queue.slice(0, 100).map((e) => ({
-        orderNumber: e.orderNumber,
-        reservationDate: e.reservationDateRaw,
-        product: e.product,
-        suffix: e.suffix,
-        salesman: e.salesman || '',
-        pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
-      })),
-      queueRule:
-        'Spec match: same Product + Suffix; Ext/Int from reserved Col M/N matched against BO Ext/Int 1–3 (* = any). Sorted by reservation date, then back order number.',
-      specMatched: true,
-      inBoFile: position != null
-    };
-  }
-
-  /**
-   * Reserved Vehicles Tracker lookup:
-   * 1) Back Order Number · 2) VIN · 3) Product + Suffix + Ext/Int (bo-order-lookup rules)
-   */
-  lookupReservedVehicle({ orderNumber, product, suffix, exteriorColor, interiorColor, vin } = {}) {
-    const headers = this.headers;
-    const rows = this.rows;
-
-    if (orderNumber) {
-      const byOrder = this.lookupOrder(orderNumber);
-      if (byOrder) return { ...byOrder, matchMethod: 'order' };
-    }
-
-    if (vin) {
-      const vinHit = this.findOrderRowByVin(vin);
-      if (vinHit && vinHit.row) {
-        const orderCol = vinHit.matchedColumn
-          || this.resolveBackOrderColumn(headers, null);
-        const on = orderCol ? String(vinHit.row[orderCol] ?? '').trim() : '';
-        if (on) {
-          const byVinOrder = this.lookupOrder(on);
-          if (byVinOrder) return { ...byVinOrder, matchMethod: 'vin', matchedVin: vinHit.vin };
-        }
-        const queueAnalysis = this.buildQueueAnalysis(rows, vinHit.row, headers, orderCol);
-        return {
-          found: true,
-          orderNumber: on || String(orderNumber || '').trim(),
-          matchedColumn: orderCol,
-          details: vinHit.row,
-          orderUnits: [],
-          orderUnitCount: 0,
-          queue: queueAnalysis,
-          matchMethod: 'vin',
-          matchedVin: vinHit.vin
-        };
-      }
-    }
-
-    const specQueue = this.buildQueueFromVehicleSpec({
-      product,
-      suffix,
-      exteriorColor,
-      interiorColor,
-      orderNumber
-    });
-    if (!specQueue) return null;
-
-    return {
-      found: !!specQueue.inBoFile,
-      orderNumber: String(orderNumber || '').trim(),
-      matchedColumn: null,
-      details: null,
-      orderUnits: [],
-      orderUnitCount: 0,
-      queue: specQueue,
-      matchMethod: specQueue.inBoFile ? 'spec-order' : 'spec',
-      specMatched: true
+      rule: 'Same Product+Suffix; exterior may appear in Exterior Color 1–3; interior may appear in Interior Color 1–3. * on a BO row matches any concrete color on that side (DMG/* counts in DMG/20 and DMG/30). Response is matching reservation count (not a rank).'
     };
   }
 
@@ -1322,5 +1085,4 @@ class BoOrderLookup {
 
 }
 
-if (typeof window !== "undefined") window.BoOrderLookup = BoOrderLookup;
-if (typeof module !== "undefined" && module.exports) module.exports = { BoOrderLookup };
+module.exports = { BoOrderLookup };

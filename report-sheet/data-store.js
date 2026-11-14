@@ -20,10 +20,12 @@
   const GEC_SLA_KEY = "toyota_admin_gec_sla_minutes_v1";
   const GEC_SLA_DEFAULT = 5;
   const GEC_CONTROL_KEY = "toyota_admin_gec_control_v1";
+  const BO_ERROR_RULES_KEY = "toyota_admin_bo_error_rules_v1";
   const CHANNEL = "toyota_targets_live";
   const API_META = "/api/report-sheet/meta";
   const API_PUSH = "/api/report-sheet/push";
   const API_GEC_CONTROL = "/api/report-sheet/gec-control";
+  const API_BO_ERROR_RULES = "/api/report-sheet/bo-error-rules";
   const API_CLEAR = "/api/report-sheet/clear";
   const API_FILE = "/api/report-sheet/file";
 
@@ -148,9 +150,53 @@
     localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at }));
     localStorage.setItem(GEC_SLA_KEY, JSON.stringify({ minutes: normGecSla(meta.gecSlaMinutes), at }));
     applyGecControlFromMeta(meta);
+    applyBoErrorRulesFromMeta(meta);
     if (meta.viewerAccess != null && global.ReportSheetAuth && typeof global.ReportSheetAuth.applyAccessFromMeta === "function") {
       global.ReportSheetAuth.applyAccessFromMeta(meta);
     }
+  }
+
+  function readBoErrorRulesEntry() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(BO_ERROR_RULES_KEY) || "null");
+      return raw && Array.isArray(raw.rules) ? raw : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readBoErrorRules() {
+    const entry = readBoErrorRulesEntry();
+    return entry ? entry.rules : [];
+  }
+
+  function writeBoErrorRules(rules, at) {
+    localStorage.setItem(BO_ERROR_RULES_KEY, JSON.stringify({
+      rules: Array.isArray(rules) ? rules : [],
+      at: Number(at) || Date.now(),
+    }));
+  }
+
+  function applyBoErrorRulesFromMeta(meta) {
+    if (!meta || !Array.isArray(meta.boErrorRules)) return false;
+    const serverAt = Number(meta.boErrorRulesAt) || 0;
+    const local = readBoErrorRulesEntry();
+    if (local && Number(local.at) > serverAt) return false;
+    if (local && JSON.stringify(local.rules) === JSON.stringify(meta.boErrorRules)) return false;
+    writeBoErrorRules(meta.boErrorRules, serverAt || Date.now());
+    return true;
+  }
+
+  async function saveBoErrorRulesToServer(rules) {
+    const res = await fetch(API_BO_ERROR_RULES, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: Array.isArray(rules) ? rules : [] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);
+    writeBoErrorRules(data.rules || rules, data.at || Date.now());
+    return data;
   }
 
   // ---------- GEC CONTROL (visitor / lead / conversion status rules) ----------
@@ -534,6 +580,10 @@
     writeGecControl,
     saveGecControlToServer,
     notifyGecControl,
+    BO_ERROR_RULES_KEY,
+    readBoErrorRules,
+    writeBoErrorRules,
+    saveBoErrorRulesToServer,
     CHANNEL,
     saveWorkbookFiles,
     loadWorkbookFiles,

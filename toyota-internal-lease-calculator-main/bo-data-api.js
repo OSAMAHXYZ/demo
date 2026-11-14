@@ -155,8 +155,14 @@ function attachBoDataApi(app, options) {
             const parsed = payloadFromWorkbook(XLSX, XLSX.read(buffer, { type: 'buffer' }), filename, brand === 'lexus' ? 'lexus-bo.xlsx' : 'bo-data.xlsx');
             fs.writeFileSync(dataPath(brand), JSON.stringify(parsed.payload, null, 2), 'utf8');
             if (brand !== 'lexus' && typeof options.onToyotaUploaded === 'function') {
-                try { options.onToyotaUploaded(req); } catch (error) {
-                    console.error('BO error rules were not re-analyzed:', error.message);
+                try {
+                    options.onToyotaUploaded(req, {
+                        buffer,
+                        filename: parsed.payload.filename || filename || 'Back Order.xlsx',
+                        payload: parsed.payload
+                    });
+                } catch (error) {
+                    console.error('BO upload side effects failed:', error.message);
                 }
             }
             const label = brand === 'lexus' ? 'Lexus BO' : 'BO';

@@ -462,6 +462,8 @@ function defaultReportSheetMeta() {
     gecSlaMinutes: 5,
     gecControl: null,
     gecControlAt: 0,
+    boErrorRules: [],
+    boErrorRulesAt: 0,
     fileNames: {},
     viewerAccess: sanitizeViewerAccess(null),
     viewerAccessAt: 0
@@ -1086,6 +1088,20 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
   };
 }
 
+/** Prefer the full-text "Sharing Level" column (capital L). Never use "Sharing level" codes (AE/RA/RC). */
+function rtlSharingLevelFromDetails(detailsIn) {
+  if (!detailsIn || typeof detailsIn !== 'object') return '';
+  const exact = detailsIn['Sharing Level'];
+  if (exact != null && String(exact).trim()) return String(exact).trim();
+  for (const [k, v] of Object.entries(detailsIn)) {
+    if (String(k || '').trim() === 'Sharing Level') {
+      const val = String(v ?? '').trim();
+      if (val) return val;
+    }
+  }
+  return '';
+}
+
 function sanitizeRtlVehicle(raw) {
   const vin = String(raw?.vin || '')
     .trim()
@@ -1094,16 +1110,44 @@ function sanitizeRtlVehicle(raw) {
   if (!vin || vin.length < 11) return null;
   const detailsIn = raw?.details && typeof raw.details === 'object' ? raw.details : null;
   const details = {};
+  const keepName = (key) => {
+    const n = String(key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_\-./\\]+/g, ' ');
+    return (
+      n.includes('sharing')
+      || n.includes('share level')
+      || n.includes('search area')
+      || n.includes('vehicle search')
+      || n.includes('secondary status')
+      || n.includes('allocation date')
+      || n.includes('supplier model')
+      || n === 'current location'
+      || n === 'usage'
+      || n.includes('usage desc')
+    );
+  };
   if (detailsIn) {
+    // Always keep share / search / status columns first so Plan Tracker swapped-in can see them.
     for (const [k, v] of Object.entries(detailsIn)) {
       const key = String(k || '').trim();
-      if (!key || key.length > 80) continue;
+      if (!key || key.length > 80 || !keepName(key)) continue;
       const val = String(v ?? '').trim();
       if (!val) continue;
       details[key] = val.slice(0, 240);
-      if (Object.keys(details).length >= 40) break;
+    }
+    for (const [k, v] of Object.entries(detailsIn)) {
+      const key = String(k || '').trim();
+      if (!key || key.length > 80 || details[key]) continue;
+      const val = String(v ?? '').trim();
+      if (!val) continue;
+      details[key] = val.slice(0, 240);
+      if (Object.keys(details).length >= 80) break;
     }
   }
+  const shareFromDetails = rtlSharingLevelFromDetails(detailsIn) || rtlSharingLevelFromDetails(details);
+  const sharingLevel = String(raw?.sharingLevel || raw?.shareLevel || shareFromDetails || '').trim();
   return {
     vin,
     product: String(raw?.product || '').trim(),
@@ -1117,8 +1161,58 @@ function sanitizeRtlVehicle(raw) {
     secondaryStatus: String(raw?.secondaryStatus || '').trim(),
     location: String(raw?.location || '').trim(),
     vehicleSearchArea: String(raw?.vehicleSearchArea || raw?.searchAreaDesc || '').trim(),
+    sharingLevel,
+    shareLevel: sharingLevel,
     details
   };
+}
+
+/** Sort key from RTL_<day>.<month>[_seq].xlsx — never upload/mtime order. */
+function rtlFileChronology(fileName, dateKey, at) {
+  const name = String(fileName || '');
+  let day = 0;
+  let month = 0;
+  let seq = 1;
+  const m = name.match(/(?:^|[^0-9])(\d{1,2})[.\-/](\d{1,2})(?:_(\d+))?(?=[^0-9]|$)/i)
+    || name.match(/(\d{1,2})[.\-/](\d{1,2})(?:_(\d+))?/i);
+  if (m) {
+    day = Number(m[1]) || 0;
+    month = Number(m[2]) || 0;
+    seq = m[3] ? (Number(m[3]) || 1) : 1;
+  } else {
+    const dk = normalizeDateKey(dateKey);
+    if (dk) {
+      month = Number(dk.slice(5, 7)) || 0;
+      day = Number(dk.slice(8, 10)) || 0;
+    }
+  }
+  return {
+    month,
+    day,
+    seq: Math.max(1, seq || 1),
+    at: Number(at) || 0,
+    name: name.toLowerCase()
+  };
+}
+
+function compareRtlFileChronology(a, b) {
+  const ca = rtlFileChronology(a && a.fileName, a && a.date, a && a.at);
+  const cb = rtlFileChronology(b && b.fileName, b && b.date, b && b.at);
+  if (ca.month !== cb.month) return ca.month - cb.month;
+  if (ca.day !== cb.day) return ca.day - cb.day;
+  if (ca.seq !== cb.seq) return ca.seq - cb.seq;
+  if (ca.at !== cb.at) return ca.at - cb.at;
+  return ca.name.localeCompare(cb.name);
+}
+
+function rtlDisplayDayMonth(fileName, dateKey) {
+  const c = rtlFileChronology(fileName, dateKey, 0);
+  if (c.day && c.month) {
+    return c.seq > 1 ? `${c.day}.${c.month}_${c.seq}` : `${c.day}.${c.month}`;
+  }
+  const dk = normalizeDateKey(dateKey);
+  if (dk) return `${Number(dk.slice(8, 10))}.${Number(dk.slice(5, 7))}`;
+  return String(dateKey || fileName || '');
 }
 
 function rtlNormHeader(value) {
@@ -1167,14 +1261,14 @@ function scanRtlStockBuffer(buffer, opts) {
   }
   const names = wb.SheetNames || [];
   if (!names.length) return [];
-  // Daily RTL files: first worksheet only (ignore Format / Header / Pivot / RawHeader).
-  // Stock workbooks may still prefer a named RTL sheet.
+  // Prefer RawData (same rows as Format). Fall back to Format / first sheet.
   const firstOnly = !!(opts && opts.firstSheetOnly);
-  const sheetName = firstOnly
-    ? names[0]
-    : (names.find((n) => /rtl/i.test(String(n || '')))
-      || names.find((n) => /stock|مخزون|retail/i.test(String(n || '')))
-      || names[0]);
+  const sheetName = names.find((n) => /^rawdata$/i.test(String(n || '').replace(/\s+/g, '')))
+    || names.find((n) => /raw\s*data/i.test(String(n || '')))
+    || (!firstOnly && names.find((n) => /rtl/i.test(String(n || ''))))
+    || (!firstOnly && names.find((n) => /stock|مخزون|retail/i.test(String(n || ''))))
+    || names.find((n) => /^format$/i.test(String(n || '')))
+    || names[0];
   const sheet = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (!matrix.length) return [];
@@ -1190,6 +1284,7 @@ function scanRtlStockBuffer(buffer, opts) {
       if (n === 'vin' || n.includes('vin') || n.includes('chassis')) hits += 2;
       if (n === 'product' || n.includes('product')) hits += 1;
       if (n === 'suffix' || n.includes('suffix') || n.includes('sfx')) hits += 1;
+      if (n === 'sharing level' || n.includes('sharing level')) hits += 2;
       if (n.includes('search area') || n.includes('vehicle search')) hits += 1;
       if (n.includes('location') || n.includes('allocated')) hits += 1;
     }
@@ -1201,48 +1296,57 @@ function scanRtlStockBuffer(buffer, opts) {
   }
 
   const headerRow = matrix[headerIdx] || [];
-  const width = Math.max(headerRow.length, rtlColLetterToIndex('Q') + 1, 12);
+  const width = Math.max(headerRow.length, rtlColLetterToIndex('AI') + 1, 12);
   const headers = [];
   for (let i = 0; i < width; i += 1) {
     headers.push(rtlCellToString(headerRow[i]) || `Column ${i + 1}`);
   }
 
+  // Exact "Sharing Level" (capital L) — not "Sharing level" code column.
+  let idxSharingLevel = headers.findIndex((h) => String(h || '').trim() === 'Sharing Level');
+  if (idxSharingLevel < 0) {
+    idxSharingLevel = headers.findIndex((h) => rtlNormHeader(h) === 'sharing level' && String(h || '').includes('L'));
+  }
+  const idxSupplier = headers.findIndex((h) => {
+    const n = rtlNormHeader(h);
+    return n === 'supplier model code description' || n === 'supplier model' || n.includes('supplier model');
+  });
   const idxProduct = rtlResolveCol(headers, [
     (n) => n === 'product' || n === 'model' || n === 'vehicle model',
     (n) => n.includes('product')
-  ], 'B');
+  ], 'A');
   const idxVin = rtlResolveCol(headers, [
     (n) => n === 'vin' || n === 'chassis' || n === 'chassis no' || n === 'chassis number',
     (n) => n.includes('vin')
-  ], 'E');
-  const idxSuffix = rtlResolveCol(headers, [
-    (n) => n === 'suffix' || n === 'sfx' || n === 'alj suffix' || n === 'grade',
-    (n) => n.includes('suffix') || n.includes('sfx')
-  ], 'G');
-  const idxYear = rtlResolveCol(headers, [
-    (n) => n === 'year' || n === 'model year' || n === 'my',
-    (n) => n.includes('year')
   ], 'F');
-  const idxExt = rtlResolveCol(headers, [
-    (n) => n === 'ext' || n === 'exterior' || n === 'exterior color' || n === 'ext color',
-    (n) => n.includes('exterior') || n === 'ext'
+  const idxSuffix = rtlResolveCol(headers, [
+    (n) => n === 'alj suffix' || n === 'suffix' || n === 'sfx' || n === 'grade',
+    (n) => n.includes('suffix') || n.includes('sfx')
   ], 'H');
-  const idxInt = rtlResolveCol(headers, [
-    (n) => n === 'int' || n === 'interior' || n === 'interior color' || n === 'int color',
-    (n) => n.includes('interior') || n === 'int'
+  const idxYear = rtlResolveCol(headers, [
+    (n) => n === 'model year' || n === 'year' || n === 'my',
+    (n) => n.includes('year')
+  ], 'G');
+  const idxExt = rtlResolveCol(headers, [
+    (n) => n === 'exterior color' || n === 'ext' || n === 'exterior' || n === 'ext color',
+    (n) => n.includes('exterior') || n === 'ext'
   ], 'I');
-  const idxAge = rtlResolveCol(headers, [
-    (n) => n === 'age' || n === 'ageing' || n === 'aging' || n === 'stock age',
-    (n) => n.includes('age')
+  const idxInt = rtlResolveCol(headers, [
+    (n) => n === 'interior color' || n === 'int' || n === 'interior' || n === 'int color',
+    (n) => n.includes('interior') || n === 'int'
   ], 'J');
+  const idxAge = rtlResolveCol(headers, [
+    (n) => n === 'allocation ageing' || n === 'age' || n === 'ageing' || n === 'aging' || n === 'stock age',
+    (n) => n.includes('age')
+  ], 'K');
   const idxUsage = rtlResolveCol(headers, [
     (n) => n === 'usage' || n === 'usage desc' || n === 'usage description',
     (n) => n.includes('usage')
-  ], 'K');
+  ], 'L');
   const idxStatus = rtlResolveCol(headers, [
-    (n) => n === 'status' || n === 'primary status' || n === 'vehicle status',
+    (n) => n === 'status' || n === 'primary status' || n === 'vehicle status' || n === 'primary status description',
     (n) => n === 'status' || n.includes('primary status')
-  ], 'D');
+  ], 'E');
   const secondaryDescIdx = headers.findIndex((h) => {
     const n = rtlNormHeader(h);
     return n.includes('secondary status') && (n.includes('desc') || n.includes('description'));
@@ -1252,22 +1356,27 @@ function scanRtlStockBuffer(buffer, opts) {
     : rtlResolveCol(headers, [
       (n) => n === 'secondary status' || n === 'sec status',
       (n) => n.includes('secondary status')
-    ], 'L');
+    ], 'E');
   const idxLocation = rtlResolveCol(headers, [
+    (n) => n === 'current location',
     (n) => n === 'allocated location' || n === 'location' || n === 'loc',
-    (n) => n.includes('allocated location') || (n.includes('location') && !n.includes('search'))
-  ], 'Q');
+    (n) => n.includes('current location') || n.includes('allocated location') || (n.includes('location') && !n.includes('search'))
+  ], 'O');
   const idxSearch = rtlResolveCol(headers, [
-    (n) => n === 'vehicle search area' || n === 'search area desc' || n === 'search area',
-    (n) => n.includes('vehicle search') || n.includes('search area')
-  ], 'P');
+    (n) => n === 'search area desc' || n === 'vehicle search area' || n === 'search area',
+    (n) => n.includes('search area') || n.includes('vehicle search')
+  ], 'N');
 
   const seen = new Set();
   const vehicles = [];
   for (let r = headerIdx + 1; r < matrix.length; r += 1) {
     const line = matrix[r] || [];
     const vin = rtlExtractVin(line[idxVin]);
-    if (!vin || seen.has(vin)) continue;
+    if (!vin) continue;
+    if (seen.has(vin)) {
+      console.warn(`[rtl-daily] duplicate VIN ${vin} in sheet ${sheetName} row ${r + 1} — keeping first`);
+      continue;
+    }
     seen.add(vin);
     const details = {};
     headers.forEach((h, i) => {
@@ -1275,9 +1384,14 @@ function scanRtlStockBuffer(buffer, opts) {
       if (!val) return;
       details[h] = val;
     });
+    const sharingLevel = idxSharingLevel >= 0
+      ? rtlCellToString(line[idxSharingLevel])
+      : rtlSharingLevelFromDetails(details);
+    const model = (idxSupplier != null && idxSupplier >= 0 ? rtlCellToString(line[idxSupplier]) : '')
+      || rtlCellToString(line[idxProduct]);
     const v = sanitizeRtlVehicle({
       vin,
-      product: rtlCellToString(line[idxProduct]),
+      product: model,
       suffix: rtlCellToString(line[idxSuffix]),
       year: rtlCellToString(line[idxYear]),
       ext: rtlCellToString(line[idxExt]),
@@ -1288,6 +1402,8 @@ function scanRtlStockBuffer(buffer, opts) {
       secondaryStatus: rtlCellToString(line[idxSecondary]),
       location: rtlCellToString(line[idxLocation]),
       vehicleSearchArea: rtlCellToString(line[idxSearch]),
+      sharingLevel,
+      shareLevel: sharingLevel,
       details
     });
     if (v) vehicles.push(v);
@@ -1386,47 +1502,10 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
 
 /** Data Uploader keeps the current Riyadh month only. Last month and older day files are removed. */
 function pruneRtlDailyOutsideCurrentMonth() {
-  const month = todayIsoRiyadh().slice(0, 7);
-  const inMonth = (dateKey) => String(dateKey || '').slice(0, 7) === month;
-  ensureRtlDailyDirs();
-  const index = loadRtlDailyIndex();
-  const keep = [];
-  let removed = 0;
-  for (const s of index.snapshots || []) {
-    if (inMonth(s.date)) {
-      keep.push(s);
-      continue;
-    }
-    removed += 1;
-    try {
-      const fp = rtlDailySnapshotPath(s.id);
-      if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
-    } catch { /* ignore one file */ }
-    try {
-      const xfp = rtlDailyExcelPath(s.id);
-      if (xfp && fs.existsSync(xfp)) fs.unlinkSync(xfp);
-    } catch { /* ignore one file */ }
-  }
-  const activeByDay = {};
-  Object.entries(index.activeByDay || {}).forEach(([date, id]) => {
-    if (inMonth(date)) activeByDay[date] = id;
-  });
-  const activeChanged = Object.keys(activeByDay).length !== Object.keys(index.activeByDay || {}).length;
-  if (removed || activeChanged) saveRtlDailyIndex({ snapshots: keep, activeByDay });
-  const dropNamed = (dir, re) => {
-    if (!dir || !fs.existsSync(dir)) return;
-    let names = [];
-    try { names = fs.readdirSync(dir); } catch { return; }
-    names.forEach((name) => {
-      const m = re.exec(name);
-      if (!m || inMonth(m[1])) return;
-      try { fs.unlinkSync(path.join(dir, name)); removed += 1; } catch { /* ignore */ }
-    });
-  };
-  dropNamed(path.join(RTL_DAILY_DIR, 'by-day'), /^(\d{4}-\d{2}-\d{2})\.(?:xlsx|json)$/i);
-  dropNamed(RTL_DAILY_DIR, /^(\d{4}-\d{2}-\d{2})(?:T[^.]*)?\.json$/i);
-  dropNamed(RTL_DAILY_FILES_DIR, /^(\d{4}-\d{2}-\d{2})(?:T[^.]*)?\.xlsx$/i);
-  return { month, removed };
+  // Append-only archive: never delete prior-month RTL day files or snapshots.
+  // Plan Tracker "Swapped in" needs multi-day Sharing Level history; wiping other
+  // months on every /active-month refresh zeroed those transitions.
+  return { month: todayIsoRiyadh().slice(0, 7), removed: 0 };
 }
 
 function loadRtlDailySnapshot(idOrDate) {
@@ -1471,6 +1550,8 @@ function isValidRtlDateKey(dateKey) {
  * Active RTL snapshot per calendar day for a YYYY-MM month (vehicles included).
  * Schedule day N uses only the active file for that calendar day
  * (last push/save that day, or the file pinned with Use date).
+ * Also returns `timeline`: every snapshot in the month sorted by filename
+ * chronology (RTL_9.11 before RTL_9.11_2) for Swapped-In VIN history.
  */
 function loadRtlActiveMonth(monthKey) {
   const mk = String(monthKey || '').trim();
@@ -1506,7 +1587,104 @@ function loadRtlActiveMonth(monthKey) {
       vehicles: snap.vehicles || []
     };
   }
-  return { month: mk, days, activeByDay };
+
+  // Full month timeline (all uploads) — Swapped-In needs every file, including same-day _2/_3.
+  // Prefer re-scanning the archived Excel so Sharing Level (capital L) is correct.
+  function vehiclesForTimeline(snap, dateKey) {
+    const tryPaths = [];
+    if (snap && snap.id) {
+      const xfp = rtlDailyExcelPath(snap.id);
+      if (xfp) tryPaths.push(xfp);
+    }
+    const byDay = rtlDailyByDayExcelPath(dateKey);
+    if (byDay) tryPaths.push(byDay);
+    for (const fp of tryPaths) {
+      try {
+        if (!fp || !fs.existsSync(fp)) continue;
+        const buf = fs.readFileSync(fp);
+        const scanned = scanRtlStockBuffer(buf, { firstSheetOnly: true });
+        if (scanned && scanned.length) return scanned;
+      } catch (err) {
+        console.warn('[rtl-daily] timeline rescan failed', fp, err && err.message);
+      }
+    }
+    return (snap && snap.vehicles) || [];
+  }
+
+  const monthSnaps = (index.snapshots || [])
+    .filter((s) => String(s.date || '').slice(0, 7) === mk)
+    .slice()
+    .sort(compareRtlFileChronology);
+  const timeline = [];
+  const seenIds = new Set();
+  monthSnaps.forEach((entry) => {
+    const id = entry.id || entry.date;
+    if (!id || seenIds.has(id)) return;
+    const snap = readRtlSnapshotFile(rtlDailySnapshotPath(id), id);
+    if (!snap) return;
+    seenIds.add(snap.id || id);
+    const dateKey = normalizeDateKey(snap.date) || normalizeDateKey(entry.date) || '';
+    const fileName = snap.fileName || entry.fileName || '';
+    const chrono = rtlFileChronology(fileName, dateKey, snap.at || entry.at);
+    const vehicles = vehiclesForTimeline(snap, dateKey);
+    timeline.push({
+      id: snap.id || id,
+      date: dateKey,
+      dateKey,
+      asOfDate: snap.asOfDate || dateKey,
+      at: snap.at || entry.at,
+      seq: chrono.seq,
+      label: rtlDisplayDayMonth(fileName, dateKey),
+      fileName,
+      source: snap.source || entry.source || '',
+      count: vehicles.length || snap.count || 0,
+      vehicles
+    });
+  });
+
+  // Also pull any by-day Excel mirrors not yet represented in the snapshot index.
+  const byDayDir = path.join(RTL_DAILY_DIR, 'by-day');
+  if (fs.existsSync(byDayDir)) {
+    let names = [];
+    try { names = fs.readdirSync(byDayDir); } catch { names = []; }
+    names.forEach((name) => {
+      const m = /^(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(String(name || ''));
+      if (!m || m[1].slice(0, 7) !== mk) return;
+      const dateKey = m[1];
+      if (timeline.some((t) => t.dateKey === dateKey)) return;
+      const xfp = path.join(byDayDir, name);
+      try {
+        const buf = fs.readFileSync(xfp);
+        const vehicles = scanRtlStockBuffer(buf, { firstSheetOnly: true });
+        if (!vehicles.length) return;
+        let meta = null;
+        const metaFp = rtlDailyByDayMetaPath(dateKey);
+        if (metaFp && fs.existsSync(metaFp)) {
+          try { meta = JSON.parse(fs.readFileSync(metaFp, 'utf8')); } catch { meta = null; }
+        }
+        const fileName = (meta && meta.fileName) || name;
+        const chrono = rtlFileChronology(fileName, dateKey, (meta && meta.at) || 0);
+        timeline.push({
+          id: `by-day-${dateKey}`,
+          date: dateKey,
+          dateKey,
+          asOfDate: dateKey,
+          at: (meta && meta.at) || 0,
+          seq: chrono.seq,
+          label: rtlDisplayDayMonth(fileName, dateKey),
+          fileName,
+          source: (meta && meta.source) || 'by-day',
+          count: vehicles.length,
+          vehicles
+        });
+      } catch (err) {
+        console.warn('[rtl-daily] by-day timeline failed', dateKey, err && err.message);
+      }
+    });
+    timeline.sort(compareRtlFileChronology);
+  }
+
+  return { month: mk, days, activeByDay, timeline };
 }
 
 function listRtlSnapshotsNewestFirst() {
@@ -4818,6 +4996,13 @@ const deliveryTransformation = createDeliveryTransformationRouter({
   password: DELIVERY_TEAM_PASSWORD,
 });
 app.use('/api/delivery-transformation', deliveryTransformation.router);
+// Legacy alias used by older BO hub pages — same Live Sheet as employee.html / vin-finder.
+app.get('/api/vin-finder', (req, res) => {
+  const q = new URLSearchParams({
+    q: String((req.query && (req.query.q || req.query.vin || req.query.order)) || '')
+  }).toString();
+  res.redirect(307, `/api/delivery-transformation/vin-finder?${q}`);
+});
 
 /** Shared Sales Report push — same snapshot for every laptop on this server. */
 app.get('/api/report-sheet/meta', (_req, res) => {
@@ -4840,6 +5025,8 @@ app.get('/api/report-sheet/meta', (_req, res) => {
     gecSlaMinutes: positiveOr(meta.gecSlaMinutes, 5),
     gecControl: sanitizeGecControl(meta.gecControl),
     gecControlAt: Number(meta.gecControlAt) || 0,
+    boErrorRules: Array.isArray(meta.boErrorRules) ? meta.boErrorRules : [],
+    boErrorRulesAt: Number(meta.boErrorRulesAt) || 0,
     fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {},
     viewerAccess: sanitizeViewerAccess(meta.viewerAccess),
     viewerAccessAt: Number(meta.viewerAccessAt) || 0
@@ -4919,6 +5106,87 @@ app.post('/api/report-sheet/gec-control', (req, res) => {
   } catch (err) {
     console.error('[report-sheet/gec-control]', err);
     return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
+const BoeConditions = require('./report-sheet/bo-error-conditions');
+
+function reportSheetBoFileInfo() {
+  const fp = reportSheetFilePath('backorder');
+  const meta = loadReportSheetMeta();
+  const fileName = (meta.fileNames && meta.fileNames.backorder) || 'Back Order';
+  if (!fp || !fs.existsSync(fp)) {
+    return { headers: [], products: [], rowCount: 0, fileName, rows: [] };
+  }
+  try {
+    const XLSX = require('xlsx');
+    const wb = XLSX.readFile(fp, { cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+    const parsed = BoeConditions.parseMatrix(matrix);
+    return {
+      headers: parsed.headers || [],
+      products: BoeConditions.productsFrom(parsed.headers, parsed.rows),
+      rowCount: (parsed.rows || []).length,
+      fileName,
+      rows: parsed.rows || [],
+    };
+  } catch (err) {
+    return { headers: [], products: [], rowCount: 0, fileName, rows: [], error: err.message || 'Could not read Back Order file' };
+  }
+}
+
+app.get('/api/report-sheet/bo-error-rules', (_req, res) => {
+  try {
+    const meta = loadReportSheetMeta();
+    const file = reportSheetBoFileInfo();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      rules: Array.isArray(meta.boErrorRules) ? meta.boErrorRules : [],
+      at: Number(meta.boErrorRulesAt) || 0,
+      file: {
+        headers: file.headers,
+        products: file.products,
+        rowCount: file.rowCount,
+        fileName: file.fileName,
+      },
+    });
+  } catch (err) {
+    console.error('[report-sheet/bo-error-rules]', err);
+    return res.status(500).json({ error: err.message || 'Load failed' });
+  }
+});
+
+app.post('/api/report-sheet/bo-error-rules', (req, res) => {
+  try {
+    const body = req.body || {};
+    const rules = BoeConditions.sanitizeRules(body.rules);
+    const meta = loadReportSheetMeta();
+    const at = Date.now();
+    meta.boErrorRules = rules;
+    meta.boErrorRulesAt = at;
+    saveReportSheetMeta(meta);
+    broadcastReportSheetUpdate(at);
+    return res.json({ ok: true, at, rules });
+  } catch (err) {
+    console.error('[report-sheet/bo-error-rules]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
+app.post('/api/report-sheet/bo-error-rules/test', (req, res) => {
+  try {
+    const rule = (req.body && req.body.rule) || {};
+    const file = reportSheetBoFileInfo();
+    const result = BoeConditions.testTable({ headers: file.headers, rows: file.rows }, rule);
+    return res.json({
+      ...result,
+      fileName: file.fileName,
+      ok: true,
+    });
+  } catch (err) {
+    console.error('[report-sheet/bo-error-rules/test]', err);
+    return res.status(500).json({ error: err.message || 'Test failed' });
   }
 });
 
@@ -5544,8 +5812,9 @@ function writeLexusB2c(parsed, headerRow, lines) {
 }
 
 /**
- * New Lexus B2C file + the one already on the server → one file:
- * orders in both take the new values, orders only in the old file stay, new orders are added.
+ * New Lexus/Toyota B2C file + the one already on the server → one file:
+ * matching orders take the new values, new orders are added, orders missing from the
+ * new file are removed. Tracker edits/notes stay in JSON overlays (not the workbook).
  * Orders closed at End of month are not brought back while the new file still shows them delivered / cancelled.
  */
 function mergeLexusB2c(prevBuf, nextBuf, archived, label = 'Lexus') {
@@ -5569,7 +5838,7 @@ function mergeLexusB2c(prevBuf, nextBuf, archived, label = 'Lexus') {
 
   const out = [];
   const used = new Set();
-  const summary = { added: 0, updated: 0, kept: 0, skipped: 0, total: 0 };
+  const summary = { added: 0, updated: 0, kept: 0, removed: 0, skipped: 0, total: 0 };
   next.rows.forEach((row) => {
     const old = prevByKey.get(row.key);
     const status = next.statusCol >= 0 ? row.line[next.statusCol] : '';
@@ -5587,10 +5856,8 @@ function mergeLexusB2c(prevBuf, nextBuf, archived, label = 'Lexus') {
   if (prev) {
     prev.rows.forEach((row) => {
       if (used.has(row.key)) return;
-      const line = new Array(width).fill('');
-      fillFromPrev(row, line);
-      out.push(line);
-      summary.kept += 1;
+      // Dropped from the new Admin Push file — remove from the live workbook.
+      summary.removed += 1;
     });
   }
   summary.total = out.length;
@@ -5782,9 +6049,47 @@ app.post('/api/report-sheet/push', async (req, res) => {
     };
     saveReportSheetMeta(meta);
     broadcastReportSheetUpdate(at);
-    // The Reserved Orders Live sheet (reserved-orders-admin.html) is fed ONLY by its own
-    // "Push live" (POST /api/reserved-orders/push). The Report Sheet admin push must not
-    // rebuild it, so refreshReservedOrdersFromAdminPush() is intentionally not called here.
+    // Do NOT rebuild reserved live VIN rows here (that would wipe statuses/notes).
+    // When Back Order is pushed, notify reserved clients so Q1–Q3 recompute from the new BO file.
+    if (slots.includes('backorder')) {
+      try {
+        const boPath = reportSheetFilePath('backorder');
+        if (boPath && fs.existsSync(boPath)) {
+          const hubDir = path.join(PERSISTENT_ROOT, 'bo-data');
+          fs.mkdirSync(hubDir, { recursive: true });
+          const hubFile = path.join(hubDir, 'bo-data.json');
+          const wb = XLSX.read(fs.readFileSync(boPath), { type: 'buffer' });
+          const sheetName = (wb.SheetNames || [])[0] || '';
+          const sheet = sheetName ? wb.Sheets[sheetName] : null;
+          const matrix = sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) : [];
+          const headers = (matrix[0] || []).map((h) => String(h == null ? '' : h).trim());
+          const rows = [];
+          for (let r = 1; r < matrix.length; r += 1) {
+            const line = matrix[r] || [];
+            if (!line.some((cell) => String(cell == null ? '' : cell).trim())) continue;
+            const obj = {};
+            headers.forEach((h, i) => {
+              if (!h) return;
+              obj[h] = line[i] == null ? '' : line[i];
+            });
+            rows.push(obj);
+          }
+          const payload = {
+            filename: fileNames.backorder || 'Back Order.xlsx',
+            sheetName,
+            sheets: wb.SheetNames || [],
+            rowCount: rows.length,
+            uploadedAt: new Date(at).toISOString(),
+            headers,
+            rows
+          };
+          fs.writeFileSync(hubFile, JSON.stringify(payload, null, 2), 'utf8');
+        }
+      } catch (hubErr) {
+        console.error('[report-sheet/push] hub BO mirror failed', hubErr.message || hubErr);
+      }
+      broadcastReservedOrdersUpdate(at);
+    }
     return res.json({
       ok: true,
       at,
@@ -8708,9 +9013,18 @@ function readBoHubToyota() {
   }
 }
 
+// Seed persistent report-sheet / reserved-orders files BEFORE attaching the reserved-orders
+// API so ensureStaff never boots against an empty volume and then overwrites real rights.
+try {
+  seedReportSheetFromGitBackup();
+} catch (err) {
+  console.error('[report-sheet] early git seed failed', err);
+}
+
 reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
   storeDir: REPORT_SHEET_DIR,
-  adminPassword: END_OF_MONTH_PASSWORD,
+  // Reserved Orders admin gate password (shared "admin" user). Staff admins still use name + employee ID.
+  adminPassword: process.env.RESERVED_ORDERS_ADMIN_PASSWORD || 'osama1234',
   broadcast: broadcastReservedOrdersUpdate,
   readStoredBackOrder() {
     const hub = readBoHubToyota();
@@ -8718,6 +9032,15 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
     return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+  },
+  readReportSheetBackOrder() {
+    const boPath = reportSheetFilePath('backorder');
+    if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
+    try {
+      return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+    } catch {
+      return { headers: [], rows: [] };
+    }
   },
   readStoredReserved() {
     const reservedPath = reportSheetFilePath('reserved');
@@ -8763,10 +9086,21 @@ require('./toyota-internal-lease-calculator-main/bo-data-api').attachBoDataApi(a
   express,
   dir: path.join(PERSISTENT_ROOT, 'bo-data'),
   password: END_OF_MONTH_PASSWORD,
-  onToyotaUploaded(req) {
+  onToyotaUploaded(req, extra) {
+    // Keep report-sheet Back Order in sync so reserved Q1–Q3 refresh from the same file.
+    try {
+      const buf = extra && Buffer.isBuffer(extra.buffer) ? extra.buffer : null;
+      const name = (extra && extra.filename) || 'Back Order.xlsx';
+      if (buf && buf.length) {
+        saveReservedFilesToReportSheet({ boBuffer: buf, boName: name });
+      }
+    } catch (syncErr) {
+      console.error('[bo-hub] report-sheet BO sync failed', syncErr.message || syncErr);
+    }
     if (reservedOrdersHub && typeof reservedOrdersHub.reanalyzeActive === 'function') {
       reservedOrdersHub.reanalyzeActive(req);
     }
+    broadcastReservedOrdersUpdate(Date.now());
   }
 });
 
@@ -8794,7 +9128,173 @@ wss.on('connection', (socket) => {
   socket.on('error', () => wsClients.delete(socket));
 });
 
+function copyFileIfMissing(src, dest) {
+  if (!src || !dest || !fs.existsSync(src) || fs.existsSync(dest)) return false;
+  try {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function copyDirFilesIfMissing(srcDir, destDir) {
+  if (!srcDir || !destDir || !fs.existsSync(srcDir)) return 0;
+  let n = 0;
+  let names = [];
+  try {
+    names = fs.readdirSync(srcDir);
+  } catch {
+    return 0;
+  }
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const name of names) {
+    if (!name || name.startsWith('.')) continue;
+    const src = path.join(srcDir, name);
+    let st;
+    try {
+      st = fs.statSync(src);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) {
+      n += copyDirFilesIfMissing(src, path.join(destDir, name));
+      continue;
+    }
+    if (!st.isFile()) continue;
+    if (copyFileIfMissing(src, path.join(destDir, name))) n++;
+  }
+  return n;
+}
+
+/** Git snapshot of Admin Push + Data Uploader files. Copies only when the volume is empty. */
+function seedReportSheetFromGitBackup() {
+  ensureReportSheetDirs();
+  ensureRtlDailyDirs();
+  const seedRoot = path.join(ROOT, 'data-backups', 'applied-now');
+  let copied = 0;
+  const seedFiles = path.join(seedRoot, 'files');
+  if (fs.existsSync(seedFiles)) {
+    for (const id of REPORT_SLOT_IDS) {
+      const dest = reportSheetFilePath(id);
+      const candidates = [
+        path.join(seedFiles, id),
+        path.join(seedFiles, `${id}.xlsx`),
+        path.join(seedFiles, `${id}.xlsm`),
+        path.join(seedFiles, `${id}.xls`),
+        path.join(seedFiles, `${id}.bin`),
+        path.join(seedFiles, `${id}.csv`)
+      ];
+      const src = candidates.find((p) => fs.existsSync(p));
+      if (src && copyFileIfMissing(src, dest)) copied++;
+    }
+  }
+  const seedMeta = path.join(seedRoot, 'api', 'report-sheet-meta.json');
+  if (fs.existsSync(seedMeta) && !fs.existsSync(REPORT_SHEET_META)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(seedMeta, 'utf8'));
+      saveReportSheetMeta({ ...defaultReportSheetMeta(), ...(parsed && typeof parsed === 'object' ? parsed : {}) });
+      copied++;
+    } catch {
+      /* ignore corrupt seed meta */
+    }
+  }
+  const ytdPairs = [
+    [path.join(seedRoot, 'api', 'report-sheet-ytd-targets.json'), YTD_TARGETS_FILE],
+    [path.join(seedRoot, 'api', 'report-sheet-ytd-history.json'), YTD_HISTORY_FILE],
+    [path.join(seedRoot, 'api', 'report-sheet-ytd-months.json'), YTD_MONTHS_FILE]
+  ];
+  for (const [src, dest] of ytdPairs) {
+    if (copyFileIfMissing(src, dest)) copied++;
+  }
+  const snapSeed = path.join(seedRoot, 'api', 'report-sheet-ytd-snapshots.json');
+  if (fs.existsSync(snapSeed) && !fs.existsSync(YTD_SNAPSHOT_INDEX)) {
+    try {
+      fs.mkdirSync(YTD_SNAPSHOT_DIR, { recursive: true });
+      fs.copyFileSync(snapSeed, YTD_SNAPSHOT_INDEX);
+      copied++;
+    } catch {
+      /* ignore */
+    }
+  }
+  copied += copyDirFilesIfMissing(
+    path.join(seedRoot, 'rtl-daily', 'by-day'),
+    path.join(RTL_DAILY_DIR, 'by-day')
+  );
+  copied += copyDirFilesIfMissing(
+    path.join(ROOT, 'rtl-daily-seed', 'by-day'),
+    path.join(RTL_DAILY_DIR, 'by-day')
+  );
+  const trackerPairs = [
+    [path.join(seedRoot, 'api', 'toyota-b2c-tracker.json'), path.join(PERSISTENT_ROOT, 'toyota-b2c-tracker-data.json')],
+    [path.join(seedRoot, 'api', 'lexus-tracker.json'), path.join(PERSISTENT_ROOT, 'lexus-tracker-data.json')]
+  ];
+  for (const [src, dest] of trackerPairs) {
+    if (copyFileIfMissing(src, dest)) copied++;
+  }
+  const reservedPairs = [
+    [path.join(seedRoot, 'api', 'reserved-orders-live.json'), path.join(REPORT_SHEET_DIR, 'reserved-orders-live.json')],
+    [path.join(seedRoot, 'api', 'reserved-orders-staff.json'), path.join(REPORT_SHEET_DIR, 'reserved-orders-staff.json')],
+    [path.join(seedRoot, 'api', 'reserved-orders-sheet-layout.json'), path.join(REPORT_SHEET_DIR, 'reserved-orders-sheet-layout.json')],
+    [path.join(seedRoot, 'api', 'reserved-orders-statuses.json'), path.join(REPORT_SHEET_DIR, 'reserved-orders-statuses.json')],
+    [path.join(seedRoot, 'api', 'reserved-orders-alerts.json'), path.join(REPORT_SHEET_DIR, 'reserved-orders-alerts.json')],
+    [path.join(seedRoot, 'api', 'reserved-orders-marketing.json'), path.join(REPORT_SHEET_DIR, 'reserved-orders-marketing.json')]
+  ];
+  for (const [src, dest] of reservedPairs) {
+    if (copyFileIfMissing(src, dest)) copied++;
+  }
+  // If staff exists but has no edit rights, merge non-empty editFor/matchedSalesman from the git seed
+  // without wiping anything the live file already has.
+  try {
+    const liveStaffPath = path.join(REPORT_SHEET_DIR, 'reserved-orders-staff.json');
+    const seedStaffPath = path.join(seedRoot, 'api', 'reserved-orders-staff.json');
+    if (fs.existsSync(liveStaffPath) && fs.existsSync(seedStaffPath)) {
+      const liveStaff = JSON.parse(fs.readFileSync(liveStaffPath, 'utf8'));
+      const seedStaff = JSON.parse(fs.readFileSync(seedStaffPath, 'utf8'));
+      if (Array.isArray(liveStaff) && Array.isArray(seedStaff) && seedStaff.length) {
+        const byId = new Map(liveStaff.map((person) => [person && person.recordId, person]));
+        let mergedRights = 0;
+        seedStaff.forEach((seed) => {
+          if (!seed || !seed.recordId) return;
+          const cur = byId.get(seed.recordId);
+          if (!cur) return;
+          const curEdit = Array.isArray(cur.editFor) ? cur.editFor.filter(Boolean) : [];
+          const seedEdit = Array.isArray(seed.editFor) ? seed.editFor.filter(Boolean) : [];
+          if (!curEdit.length && seedEdit.length) {
+            cur.editFor = seedEdit;
+            mergedRights += 1;
+          }
+          if (!String(cur.matchedSalesman || '').trim() && String(seed.matchedSalesman || '').trim()) {
+            cur.matchedSalesman = seed.matchedSalesman;
+            mergedRights += 1;
+          }
+          if (seed.canEditOrdersStartingWith5 && !cur.canEditOrdersStartingWith5) {
+            cur.canEditOrdersStartingWith5 = true;
+            mergedRights += 1;
+          }
+        });
+        if (mergedRights) {
+          fs.writeFileSync(liveStaffPath, JSON.stringify(Array.from(byId.values()), null, 2), 'utf8');
+          copied += 1;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[report-sheet] staff rights seed merge failed', err);
+  }
+  return { seeded: copied > 0, copied };
+}
+
 server.listen(PORT, () => {
+  try {
+    const seeded = seedReportSheetFromGitBackup();
+    if (seeded && seeded.copied) {
+      console.log(`[report-sheet] seeded ${seeded.copied} missing file(s) from data-backups/applied-now`);
+    }
+  } catch (err) {
+    console.error('[report-sheet] git seed failed', err);
+  }
   migrateLegacyRtlDailyDir();
   try {
     loadRtlDailyIndex();

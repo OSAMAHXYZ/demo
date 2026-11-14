@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.4, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
     <meta name="color-scheme" content="dark light">
     <title>Reserved Orders</title>
     <script>(function(){try{var t=localStorage.getItem('ro-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}}catch(e){}})();</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109live1">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261112mkt1">
 </head>
 <body>
     <button class="btn theme-toggle theme-dock" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
@@ -19,7 +19,7 @@
                 <span class="dl-car"><svg viewBox="0 0 120 48" fill="none"><path d="M10 33v-6l12-3 9-11h38l16 11 17 3v6" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M32 16h36l12 9H22l10-9z" fill="currentColor" opacity=".16" stroke="currentColor" stroke-width="1.7"/><circle cx="34" cy="35" r="7" stroke="currentColor" stroke-width="2.2"/><circle cx="90" cy="35" r="7" stroke="currentColor" stroke-width="2.2"/><circle cx="34" cy="35" r="2.6" fill="currentColor"/><circle cx="90" cy="35" r="2.6" fill="currentColor"/><path d="M8 33h16M50 33h24M98 33h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
             </div>
             <h2 id="data-load-title">Downloading data</h2>
-            <p id="data-load-hint">Getting the live reserved cars…</p>
+            <p id="data-load-hint">Getting the live reserved carsâ€¦</p>
             <div class="dl-bar"><i id="data-load-bar"></i></div>
             <small id="data-load-pct">0%</small>
         </div>
@@ -37,16 +37,16 @@
                 <h1>Reserved Orders</h1>
                 <p>Track assigned vehicles, reservation timers, and back-order matching for the showroom team.</p>
             </div>
-            <div>Abdul Latif Jameel Motors · Internal</div>
+            <div>Abdul Latif Jameel Motors Â· Internal</div>
         </div>
         <div class="login-panel">
             <form class="login-card" id="login-form">
                 <h2>Sign in</h2>
-                <p class="sub">Choose your name, then enter your employee number.</p>
+                <p class="sub">Choose your name, then enter your password (employee number).</p>
                 <label class="field" for="employee-name"><span>Your name</span><select id="employee-name" required></select></label>
-                <label class="field" for="employee-id"><span>Employee number</span>
+                <label class="field" for="employee-id"><span>Password</span>
                     <span class="pass-row">
-                        <input id="employee-id" type="password" autocomplete="current-password" placeholder="Employee ID" required>
+                        <input id="employee-id" type="password" autocomplete="current-password" placeholder="Employee number / password" required>
                         <button type="button" class="btn login-ghost" id="toggle-pass">Show</button>
                     </span>
                 </label>
@@ -61,7 +61,7 @@
         <header class="top" id="top">
             <div class="brand">
                 <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
-                <span><b>Reserved Orders</b><small>Sales CRM · ALJ</small></span>
+                <span><b>Reserved Orders</b><small>Sales CRM Â· ALJ</small></span>
             </div>
             <span class="spacer"></span>
             <button class="btn notif-toggle" id="notif-toggle" type="button" hidden>Enable laptop alerts</button>
@@ -79,7 +79,7 @@
                     <button type="button" class="nav-on" data-view="inbox"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Messages</span></button>
                     <button type="button" data-view="errors"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><span>Order Errors</span><span id="oe-badge" class="count" hidden></span></button>
                     <button type="button" data-view="orders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg><span>Reserved Orders</span></button>
-                    <button type="button" data-view="marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l15-6v14L3 13z"/><path d="M7 13v5h3"/></svg><span dir="rtl">طلبات التسويق</span></button>
+                    <button type="button" data-view="marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l15-6v14L3 13z"/><path d="M7 13v5h3"/></svg><span dir="rtl" lang="ar">&#1591;&#1604;&#1576;&#1575;&#1578; &#1575;&#1604;&#1578;&#1587;&#1608;&#1610;&#1602;</span></button>
                     <button type="button" data-view="message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg><span>Message Builder</span></button>
                     <div class="rlabel rlabel-tools">Tools</div>
                     <a href="bo-order-lookup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg><span>BO Lookup</span></a>
@@ -109,7 +109,7 @@
                 <section id="order-errors" class="order-errors view hidden">
                     <div class="head"><div><h1>Order Errors</h1><p>Errors admin pushed for your orders: which order, what is wrong, and what it should be.</p></div></div>
                     <section class="kpis kpis-3" id="oe-summary" aria-label="Order error summary"></section>
-                    <div id="oe-list" class="oe-list"><p class="empty">Loading your order errors…</p></div>
+                    <div id="oe-list" class="oe-list"><p class="empty">Loading your order errorsâ€¦</p></div>
                 </section>
 
                 <section id="my-bo-alerts" class="my-alerts" hidden></section>
@@ -118,7 +118,7 @@
                     <div class="head">
                         <div>
                             <h1>Reserved orders</h1>
-                            <p id="emp-sheet-msg">Everyone sees the same live sheet. Your cars are highlighted in blue. Click a cell to copy it. Double-click a row or open a card to set its status and write the note.</p>
+                            <p id="emp-sheet-msg">Everyone sees the same live sheet. Your cars are highlighted in blue. Click Status or Note on your row to choose a status, then write the required note. Leader notes from admin also show here.</p>
                         </div>
                         <button class="btn primary" id="next-pending" type="button" hidden>Update next car <span class="mono" id="next-pending-count"></span></button>
                     </div>
@@ -168,10 +168,10 @@
                                 <div class="sheet-foot">
                                     <section class="chips sheet-tabs" id="kpis" aria-label="Filter by status"></section>
                                     <div class="xl-status">
-                                        <span id="emp-xl-agg">Count — · Sum — · Avg —</span>
+                                        <span id="emp-xl-agg">Count â€” Â· Sum â€” Â· Avg â€”</span>
                                         <span id="emp-xl-stat"></span>
                                         <span class="xl-zoom">
-                                            <button type="button" id="emp-xl-zoom-out" aria-label="Zoom out">−</button>
+                                            <button type="button" id="emp-xl-zoom-out" aria-label="Zoom out">âˆ’</button>
                                             <b id="emp-xl-zoom-val">100%</b>
                                             <button type="button" id="emp-xl-zoom-in" aria-label="Zoom in">+</button>
                                         </span>
@@ -190,7 +190,7 @@
                 </div>
 
                 <section id="marketing-board" class="marketing-board view hidden">
-                    <div class="head"><div><h1 dir="rtl">طلبات التسويق</h1><p>Enter an order number from the Back Order file and send it to admin.</p></div></div>
+                    <div class="head"><div><h1 dir="rtl" lang="ar">&#1591;&#1604;&#1576;&#1575;&#1578; &#1575;&#1604;&#1578;&#1587;&#1608;&#1610;&#1602;</h1><p>Enter an order number from the Back Order file and send it to admin.</p></div></div>
                     <form id="marketing-form" class="marketing-form card pane">
                         <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="marketing-order" inputmode="numeric" placeholder="Order number from the BO file" aria-label="Order number" required></label>
                         <button class="btn primary" type="submit">Check BO file</button>
@@ -237,7 +237,7 @@
                         <div class="form-row">
                             <label class="field"><span>Message type</span>
                                 <select id="msg-type">
-                                    <option value="followup">After call — follow-up</option>
+                                    <option value="followup">After call â€” follow-up</option>
                                     <option value="quote">Price quote</option>
                                     <option value="showroom">Showroom visit</option>
                                     <option value="finance">Financing and lease</option>
@@ -272,5 +272,19 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-page.js?v=20261109live1"></script>
+    <script src="reserved-orders-page.js?v=20261112mkt1"></script>
+    <script>
+      /* Force a one-time hard refresh for all employees so the new marketing scroll CSS loads. No data writes. */
+      (function () {
+        var KEY = 'ro-asset-refresh-v=20261112mkt1';
+        try {
+          if (sessionStorage.getItem(KEY)) return;
+          sessionStorage.setItem(KEY, '1');
+          var u = new URL(location.href);
+          u.searchParams.set('_ro', '20261112mkt1');
+          location.replace(u.toString());
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
 </body></html>
+

@@ -98,7 +98,7 @@ main{padding-block:22px 48px;padding-left:16px;padding-right:max(16px,env(safe-a
 #panel-sheet.xlw .xl-formula{flex:none}
 #panel-sheet.xlw .sheet-stage > .card{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 #panel-sheet.xlw .sheet-wrap{flex:1;min-height:0;overflow:auto}
-#panel-sheet.xlw table{min-width:100%;width:max-content}
+#panel-sheet.xlw table{min-width:0;width:max-content}
 #panel-sheet.xlw .legend{flex:none;margin:0}
 #sheet-filter-bar{position:relative;z-index:6}
 #sheet-filter-bar .chips{flex:1 1 320px}
@@ -582,8 +582,11 @@ table{font-size:16px}
 .modal.open{pointer-events:auto}
 .drop{position:relative;cursor:pointer}
 .drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
-#xl-cols-pop.colpop{position:absolute;z-index:40;right:0;top:calc(100% + 6px);opacity:1}
-#xl-ctx.colpop{position:fixed;z-index:40}
+#xl-cols-pop.colpop,#xl-filter-pop.colpop,#xl-ctx.colpop{
+  position:fixed; z-index:90; opacity:1; pointer-events:auto; transform:none;
+  max-height:min(70vh,560px); overflow:auto;
+}
+#xl-cols-pop.colpop{width:min(380px,calc(100vw - 24px))}
 .xl-cols-list{list-style:none;margin:0;padding:0;max-height:320px;overflow:auto}
 .staff-row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
 .staff-row:last-child{border-bottom:0}
@@ -609,11 +612,13 @@ table{font-size:16px}
 .xl-fxval{flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;font:500 13px var(--f-body);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;outline:0;cursor:text;user-select:text}
 .xl-formula .btn{flex:none;margin:3px 6px;height:26px;padding:0 10px}
 .xl-grid tbody td{user-select:text;-webkit-user-select:text}
-.xl-grid{border-collapse:separate;border-spacing:0;font-size:16px;min-width:100%;width:max-content}
+.xl-grid{border-collapse:separate;border-spacing:0;font-size:16px;min-width:0;width:max-content}
 .xl-grid th,.xl-grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 12px;background:var(--surface);vertical-align:middle}
 .xl-grid thead th{position:sticky;z-index:3;background:var(--raise);font:600 13px var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
 .xl-grid thead tr.xl-letters th{top:0;height:24px;padding:0 8px;text-align:center;font:600 13px var(--f-mono);letter-spacing:0;text-transform:none;color:var(--ink-2)}
-.xl-grid thead tr.xl-heads th{top:24px;font-weight:700;color:var(--ink);text-transform:none;letter-spacing:0;border-bottom:2px solid var(--line-2)}
+/* Letters sit inside the heads row now — keep sticky at top:0 so row 1 is not covered */
+.xl-grid thead tr.xl-heads th{top:0;font-weight:700;color:var(--ink);text-transform:none;letter-spacing:0;border-bottom:2px solid var(--line-2)}
+.xl-grid:has(tr.xl-letters) thead tr.xl-heads th{top:24px}
 .xl-grid .xl-corner,.xl-grid .xl-rn{position:sticky;left:0;z-index:2;background:var(--raise);color:var(--muted);text-align:center;min-width:46px;width:46px;padding:6px 4px;font:600 13px var(--f-mono)}
 .xl-grid thead .xl-corner{z-index:5}
 .xl-grid tbody .xl-rn{background:var(--sunk);color:var(--muted);font-weight:600}
@@ -829,7 +834,7 @@ body.dash.orders-on #app.tower-app{
 }
 .top-nav::-webkit-scrollbar{display:none}
 .top-nav .rail-ind{display:none}
-.top-nav button{
+.top-nav button{font-family:var(--f-body);
   flex:none; border:0; background:transparent; color:var(--xl-muted);
   font:500 12.5px/1 var(--xl-ui); padding:6px 9px; border-radius:7px; white-space:nowrap;
 }
@@ -937,7 +942,7 @@ body.dash.orders-on #emp-sheet.sheet-wrap{
 .xl-grid{
   border-collapse:separate; border-spacing:0;
   font:13px/1.25 var(--xl-ui); color:var(--xl-ink);
-  table-layout:fixed; width:max-content; min-width:100%;
+  table-layout:fixed; width:max-content; min-width:0; max-width:none;
   background:var(--xl-sheet);
 }
 .xl-grid th, .xl-grid td{
@@ -945,6 +950,7 @@ body.dash.orders-on #emp-sheet.sheet-wrap{
   padding:0 6px; height:var(--xl-row); max-height:var(--xl-row);
   background:var(--xl-sheet); vertical-align:middle;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  box-sizing:border-box;
 }
 .xl-grid thead th{
   position:sticky; top:0; z-index:4; height:38px; max-height:38px;
@@ -986,14 +992,59 @@ body.dash.orders-on #emp-sheet.sheet-wrap{
 }
 .xl-grid td.xl-mono{text-align:left}
 .xl-grid .pill{height:22px; max-height:22px; padding:0 8px; font-size:11.5px; gap:5px; overflow:hidden}
-.xl-grid .col-queue .q{gap:0; justify-content:center}
+.xl-grid .col-queue .q,
+.xl-grid .col-tier .q,
+.xl-grid td.col-q .q{
+  gap:0; justify-content:center;
+}
 .xl-grid .col-queue .q small, .xl-grid .col-queue .q-pair, .xl-grid .person .av{display:none}
+/* Q1 / Q2 / Q3 order numbers as separate boxes */
+.xl-grid td.col-tier,
+.xl-grid td.col-q{
+  text-align:center; padding:3px 4px;
+  background:color-mix(in srgb,var(--xl-head) 70%,var(--xl-sheet));
+}
+.xl-grid tbody tr:nth-child(even) td.col-tier,
+.xl-grid tbody tr:nth-child(even) td.col-q{
+  background:color-mix(in srgb,var(--xl-head) 55%,var(--xl-zebra));
+}
+.xl-grid thead th.col-tier,
+.xl-grid thead th.col-q{
+  text-align:center;
+}
+.xl-grid .q.q-box{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:100%; max-width:100%; height:24px; padding:0 6px;
+  border:1px solid var(--xl-line); border-radius:4px;
+  background:var(--xl-sheet); box-sizing:border-box;
+}
+.xl-grid .q.q-box b,
+.xl-grid .q.q-box .num{
+  font:600 11.5px var(--f-mono); font-variant-numeric:tabular-nums;
+  color:var(--xl-ink); overflow:hidden; text-overflow:ellipsis;
+}
+.xl-grid .q.q-box.is-empty{
+  border-style:dashed; color:var(--xl-muted); background:transparent;
+}
 .xl-grid .person{font-size:13px}
 .xl-grid .upd small{display:none}
-.xl-grid .col-note .note{max-width:100%; overflow:hidden; text-overflow:ellipsis}
-.xl-grid .sheet-leader-note{min-height:22px; height:22px; padding:2px 4px; font-size:12px; resize:none}
-.xl-grid .sheet-leader-save{padding:0 6px; height:22px; font-size:11px}
+.xl-grid .col-note .note{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.xl-grid .person{min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.xl-grid .sheet-leader-note{
+  min-height:22px; height:22px; max-height:22px; padding:2px 4px; font-size:12px;
+  resize:none; width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; line-height:1.25;
+  border:0; background:transparent; color:inherit;
+}
+.xl-grid .col-leader-note:focus-within .sheet-leader-note{
+  white-space:pre-wrap; height:auto; max-height:64px; overflow:auto;
+}
+.xl-grid .sheet-leader-save{display:none; padding:0 6px; height:22px; font-size:11px; margin-top:4px}
+.xl-grid .col-leader-note:hover .sheet-leader-save,
+.xl-grid .col-leader-note:focus-within .sheet-leader-save{display:inline-flex}
 .xl-grid .col-leader-note small{display:none}
+.xl-grid th.xl-pad, .xl-grid td.xl-pad{background:var(--xl-sheet); cursor:default}
+.xl-grid thead th.xl-pad{background:var(--xl-head)}
+.xl-grid tbody tr:nth-child(even) td.xl-pad{background:var(--xl-zebra)}
 .xl-grid .sw{width:8px;height:8px}
 .xl-grid .exp, .xl-grid .track{display:none}
 .exp-line{display:inline-flex; align-items:center; gap:6px; max-width:100%}
@@ -1003,10 +1054,11 @@ body.dash.orders-on #emp-sheet.sheet-wrap{
 .exp-pill.is-ok{background:var(--xl-ok-bg); color:var(--xl-ok-ink)}
 .exp-date{font:500 11px var(--f-mono); font-variant-numeric:tabular-nums; color:var(--xl-muted)}
 
-/* Freeze #, Q2, Q1, Salesman */
-.xl-grid .xl-fz1{position:sticky; left:36px; z-index:3; background:var(--xl-sheet)}
-.xl-grid .xl-fz2{position:sticky; left:64px; z-index:3; background:var(--xl-sheet)}
-.xl-grid .xl-fz3{position:sticky; left:92px; z-index:3; background:var(--xl-sheet); box-shadow:2px 0 0 var(--xl-line)}
+/* Freeze the first visible columns, like Excel panes. `left` is set in JS from real widths. */
+.xl-grid .xl-fz1, .xl-grid .xl-fz2, .xl-grid .xl-fz3{
+  position:sticky; z-index:3; background:var(--xl-sheet);
+}
+.xl-grid .xl-fz-last{box-shadow:2px 0 0 var(--xl-line)}
 .xl-grid thead .xl-fz1, .xl-grid thead .xl-fz2, .xl-grid thead .xl-fz3{z-index:6; background:var(--xl-head)}
 .xl-grid tbody tr:nth-child(even) .xl-fz1,
 .xl-grid tbody tr:nth-child(even) .xl-fz2,
@@ -1048,4 +1100,131 @@ body.dash.orders-on.cards-on .sheet-card{display:none}
 }
 @media (prefers-reduced-motion:reduce){
   .top-nav button, .xl-tool, .sheet-tabs button{transition:none}
+}
+.rights-row{display:grid;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+.rights-who{display:flex;flex-direction:column;gap:2px}
+.rights-who small{color:var(--muted)}
+.rights-lab{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.rights-names{display:flex;flex-wrap:wrap;gap:6px}
+.rights-chip{display:flex;align-items:center;gap:6px;font-size:13px;background:var(--sunk);padding:5px 8px;border-radius:8px}
+
+/* Allow browser pinch/Ctrl zoom; keep inner panes scrollable on every workspace page */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+.tower-app:not(.hidden) #marketing-board:not(.hidden),
+.tower-app:not(.hidden) #order-errors:not(.hidden),
+.tower-app:not(.hidden) #mc-center:not(.hidden),
+.tower-app:not(.hidden) #inbox:not(.hidden),
+.tower-app:not(.hidden) .tower > .view:not(.hidden){
+  overflow:auto !important;
+  -webkit-overflow-scrolling:touch;
+}
+#emp-sheet.sheet-wrap,
+#panel-sheet .sheet-wrap,
+.oe-list,
+.mc-scroll,
+#marketing-sent-list,
+#marketing-board{
+  overflow:auto !important;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* طلبات التسويق — whole page scrolls for every employee (form + sent list) */
+body.dash.marketing-on,
+html:has(body.dash.marketing-on){
+  height:auto !important;
+  min-height:100%;
+  overflow:auto !important;
+  overflow-x:hidden !important;
+}
+body.dash.marketing-on #app.tower-app,
+body.dash.marketing-on #app.tower-app .shell,
+body.dash.marketing-on #app.tower-app .tower{
+  height:auto !important;
+  min-height:100dvh;
+  overflow:visible !important;
+}
+body.dash.marketing-on #marketing-board:not(.hidden){
+  display:flex !important;
+  flex-direction:column;
+  flex:none !important;
+  height:auto !important;
+  min-height:0;
+  max-height:none !important;
+  overflow:visible !important;
+  gap:14px;
+  padding-bottom:max(48px, env(safe-area-inset-bottom, 0px));
+}
+body.dash.marketing-on #marketing-sent,
+body.dash.marketing-on #marketing-sent-list{
+  overflow:visible !important;
+  min-height:0;
+}
+body.dash.marketing-on #marketing-sent-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding-bottom:24px;
+}
+
+/* First-click row selection (second click opens details) */
+#emp-sheet .xl-grid tbody tr.is-picked td,
+#emp-sheet .xl-grid tbody tr.is-picked .xl-rn{
+  background:color-mix(in srgb,var(--xl-sel,#4c8dff) 18%,var(--xl-sheet,var(--surface))) !important;
+}
+#emp-sheet .xl-grid tbody tr.is-picked .xl-rn{
+  box-shadow:inset 3px 0 0 var(--xl-sel,#4c8dff);
+  color:var(--xl-sel,#4c8dff);
+  font-weight:800;
+}
+#emp-sheet .xl-grid tbody tr.rowlink{cursor:pointer}
+#emp-sheet .xl-h[draggable="true"]{cursor:grab}
+#emp-sheet .xl-h.is-drag{opacity:.55;cursor:grabbing}
+#emp-sheet .xl-h.is-drop{outline:2px dashed var(--xl-sel,#4c8dff);outline-offset:-2px}
+
+/* طلبات التسويق — admin card board (entries kept) */
+.marketing-admin{display:flex;flex-direction:column;gap:14px;min-height:0;overflow:auto}
+.mkt-board-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:4px 2px}
+.mkt-board-head h2{margin:0;font:800 22px/1.15 var(--f-display,Archivo,sans-serif)}
+.mkt-board-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.mkt-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:14px;
+  padding-bottom:18px;
+}
+.mkt-card{
+  position:relative;
+  display:flex;flex-direction:column;gap:12px;
+  padding:16px 16px 14px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:
+    linear-gradient(165deg,color-mix(in srgb,#eb0a1e 10%,transparent),transparent 42%),
+    var(--surface);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.mkt-card.is-cancelled{opacity:.72;filter:grayscale(.15)}
+.mkt-ribbon{
+  position:absolute;top:12px;inset-inline-end:12px;
+  padding:4px 10px;border-radius:999px;
+  font:700 10px/1 var(--f-body);letter-spacing:.08em;text-transform:uppercase;
+  color:#fff;background:#eb0a1e;
+}
+.mkt-card.is-cancelled .mkt-ribbon{background:#64748b}
+.mkt-head{display:flex;flex-direction:column;gap:10px;padding-inline-end:96px}
+.mkt-eye{margin:0;font-size:10px;font-weight:800;letter-spacing:.16em;color:#eb0a1e}
+.mkt-head h3{margin:2px 0 0;font:800 22px/1.1 var(--f-display,Archivo,sans-serif)}
+.mkt-sub{margin:0;color:var(--muted);font-size:13px}
+.mkt-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mkt-meta span{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:12px;background:var(--sunk);border:1px solid var(--line);min-width:0}
+.mkt-meta em{font-style:normal;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.mkt-meta b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mkt-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mkt-fact{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:12px;background:var(--sunk);border:1px solid var(--line);min-width:0}
+.mkt-fact span{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.mkt-fact b{font-size:13px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+@media (max-width:640px){
+  .mkt-meta,.mkt-fields{grid-template-columns:1fr}
+  .mkt-head{padding-inline-end:0;padding-top:28px}
 }

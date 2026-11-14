@@ -320,8 +320,96 @@ class BoOrderLookup {
     return entryPairs.some((candPair) => this.colorPairMatches(refPair, candPair));
 }
 
-  sortQueueEntries(entries) {
-    return [...entries].sort((a, b) => {
+  /** Products where Confirm Flag = confirmed jumps ahead of older unconfirmed orders. */
+  confirmPriorityProduct(product) {
+    const n = this.normalizeText(product).replace(/[\s/_-]+/g, '');
+    if (!n) return false;
+    return (
+      n.includes('camry')
+      || n.includes('rav4')
+      || n.includes('lc300')
+      || n.includes('landcruiser300')
+      || n.includes('lc70')
+      || n.includes('landcruiser70')
+      || n.includes('hiluxsc')
+      || n.includes('hiluxdc')
+      || (n.includes('hilux') && (n.includes('sc') || n.includes('dc') || n.includes('single') || n.includes('double')))
+    );
+  }
+
+  isConfirmedFlagValue(value) {
+    const s = this.normalizeText(value);
+    if (!s) return false;
+    if (/^(n|no|nc|0|false)$/i.test(s)) return false;
+    if (/(not[\s_-]*conf|un[\s_-]*conf|non[\s_-]*conf|pending|waiting|open|unalloc|not alloc)/i.test(s)) return false;
+    if (/^(y|yes|c|1|true|confirmed|confirm|allocated|alloc)$/i.test(s)) return true;
+    if (/^conf(irmed)?$/i.test(s)) return true;
+    if (/\b(confirmed|allocated)\b/.test(s)) return true;
+    return false;
+  }
+
+  looksLikeConfirmFlagValue(value) {
+    const s = this.normalizeText(value);
+    if (!s) return false;
+    if (/^(y|yes|n|no|nc|c|0|1|true|false)$/i.test(s)) return true;
+    return /conf|alloc|pending|waiting|open/.test(s);
+  }
+
+  resolveConfirmFlagColumn(headers) {
+    return this.resolveColumn(headers || this.headers || [], [
+      /^confirm\s*flag$/i,
+      /^confirm(ation)?$/i,
+      /confirm\s*flag/i,
+      /\bconfirm(ation)?\b/i,
+      /allocation\s*status/i,
+      /^allocated$/i
+    ]);
+  }
+
+  entryIsConfirmed(entry, confirmColumn) {
+    if (entry && typeof entry.confirmed === 'boolean') return entry.confirmed;
+    const row = entry && entry.row;
+    if (!row) return false;
+    if (confirmColumn && row[confirmColumn] != null && String(row[confirmColumn]).trim() !== '') {
+      return this.isConfirmedFlagValue(row[confirmColumn]);
+    }
+    const headers = Object.keys(row);
+    const col = confirmColumn || this.resolveConfirmFlagColumn(headers);
+    if (col && row[col] != null && String(row[col]).trim() !== '') {
+      return this.isConfirmedFlagValue(row[col]);
+    }
+    // Some BO files put confirm in column H — only when the value looks like a confirm flag.
+    const colH = headers.find((h) => /^h$/i.test(String(h)) || this.normalizeText(h) === 'h')
+      || (row.H != null ? 'H' : null);
+    if (colH && this.looksLikeConfirmFlagValue(row[colH])) {
+      return this.isConfirmedFlagValue(row[colH]);
+    }
+    return false;
+  }
+
+  /**
+   * Default sort = reservation date, then order number (BO Order Lookup).
+   * Reserved-orders sets lookup.preferConfirmSort = true (or passes
+   * { preferConfirm: true }) so Camry / RAV4 / Hilux SC·DC / LC300 / LC70
+   * confirmed rows jump ahead. BO hub never enables this.
+   */
+  sortQueueEntries(entries, opts) {
+    const list = Array.isArray(entries) ? entries : [];
+    const preferConfirm = !!(this.preferConfirmSort) || !!(opts && opts.preferConfirm);
+    const sample = list.find((entry) => entry && entry.row) || null;
+    const headers = sample && sample.row ? Object.keys(sample.row) : (this.headers || []);
+    const confirmColumn = preferConfirm ? this.resolveConfirmFlagColumn(headers) : null;
+    const useConfirm = preferConfirm && list.some((entry) => this.confirmPriorityProduct(entry && entry.product));
+    return [...list].sort((a, b) => {
+        if (useConfirm) {
+          const aPri = this.confirmPriorityProduct(a && a.product);
+          const bPri = this.confirmPriorityProduct(b && b.product);
+          if (aPri || bPri) {
+            const aConf = aPri && this.entryIsConfirmed(a, confirmColumn) ? 1 : 0;
+            const bConf = bPri && this.entryIsConfirmed(b, confirmColumn) ? 1 : 0;
+            if (aConf !== bConf) return bConf - aConf;
+          }
+        }
         const da = a.reservationDate ?? Number.POSITIVE_INFINITY;
         const db = b.reservationDate ?? Number.POSITIVE_INFINITY;
         if (da !== db) return da - db;

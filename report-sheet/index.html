@@ -12,30 +12,31 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" /></noscript>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script>/* unified-design: default tick text + grid colour for any chart that does not set its own (no chart data / options change) */
+  <script>/* Chart defaults: shared palette from --cx-muted / --ex-blue / --ex-green / --ex-amber / --ex-red. Bar fill is blue, not red. */
+    window.__exChartPalette = ["#8d9bb0", "#2563eb", "#0f9d76", "#d97706", "#eb0a1e"];
     if (window.Chart && Chart.defaults) {
       Chart.defaults.color = "#8d9bb0";
       Chart.defaults.borderColor = "rgba(148,163,184,.10)";
-      Chart.defaults.font.family = "Manrope, IBM Plex Sans Arabic, Segoe UI, sans-serif";
+      Chart.defaults.font.family = "Manrope, 'IBM Plex Sans Arabic', 'Segoe UI', system-ui, sans-serif";
       if (Chart.defaults.datasets && Chart.defaults.datasets.bar) {
-        Chart.defaults.datasets.bar.backgroundColor = "rgba(37, 99, 235, 0.82)";
-        Chart.defaults.datasets.bar.borderColor = "rgba(37, 99, 235, 0.95)";
-        Chart.defaults.datasets.bar.borderWidth = 0;
+        Chart.defaults.datasets.bar.backgroundColor = "#2563eb";
       }
     }
   </script>
   <script src="employee-roster.js?v=20261109cons1"></script>
   <script src="auth.js?v=20261105zt1"></script>
-  <script src="data-store.js?v=20261107mod1"></script>
+  <script src="data-store.js?v=20261110boe1"></script>
+  <script src="bo-error-conditions.js?v=20261110boe1"></script>
+  <script src="bo-error-builtins.js?v=20261112boe2"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="gec-dashboard.js?v=20261023op1"></script>
-  <script src="sales-control.js?v=20261109cons1"></script>
+  <script src="sales-control.js?v=20261109b2c1"></script>
   <script src="allocation-plan-data.js?v=20261107mod1"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261019swap5"></script>
-  <script src="zone-tracker.js?v=20261105zt2"></script>
+  <script src="lib/bo-order-lookup.js?v=20261111q1"></script>
+  <script src="plan-tracker.js?v=20261111swap5"></script>
+  <script src="zone-tracker.js?v=20261111ztfs1"></script>
   <script src="contact-performance.js?v=20261106cp2"></script>
   <script src="evaluation-data.js?v=20261031ev2"></script>
   <script src="evaluation.js?v=20261031ev2"></script>
@@ -80,9 +81,10 @@
   --ex-amber-soft: rgba(217, 119, 6, 0.10);
   --ex-blue: #2563eb;
   --ex-blue-soft: rgba(37, 99, 235, 0.08);
-  --ex-slate: #8d9bb0;
+  --ex-slate: #64748b;
   --ex-teal: #0f9d76;
-  --ex-hover: color-mix(in srgb, var(--ex-blue) 42%, var(--ex-line));
+  --ex-hover: rgba(100, 116, 139, 0.45);
+  --ex-focus: 0 0 0 3px var(--ex-blue-soft);
 
   /* light surfaces (generic panels) */
   --ex-bg: #f3f5f9;
@@ -112,10 +114,11 @@
 
   --ex-radius: 14px;
   --ex-radius-sm: 10px;
-  --ex-shadow: 0 8px 22px -16px rgba(11, 19, 36, 0.28);
-  --ex-shadow-hover: 0 10px 24px -16px rgba(11, 19, 36, 0.32);
-  --cx-shadow: 0 8px 22px -16px rgba(0, 0, 0, 0.45);
+  --ex-shadow: 0 8px 24px -16px rgba(11, 19, 36, 0.22);
+  --ex-shadow-hover: 0 8px 24px -16px rgba(11, 19, 36, 0.22);
+  --cx-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.55);
   --ex-ease: cubic-bezier(.2, .7, .2, 1);
+  --ex-dur: 150ms;
 }
 
 body.theme-dark {
@@ -128,7 +131,7 @@ body.theme-dark {
   --ex-ink-2: var(--cx-ink-2);
   --ex-muted: var(--cx-muted);
   --ex-shadow: var(--cx-shadow);
-  --ex-shadow-hover: 0 10px 24px -16px rgba(0, 0, 0, 0.5);
+  --ex-shadow-hover: var(--cx-shadow);
 }
 
 /* ---------- 2. Base ---------- */
@@ -174,7 +177,7 @@ body.live-app strong {
 /* ---------- 3. Sidebar ---------- */
 body.live-app .app-sidebar {
   background:
-    radial-gradient(120% 60% at 0% 0%, rgba(235, 10, 30, 0.10), transparent 60%),
+    radial-gradient(120% 60% at 0% 0%, var(--ex-blue-soft), transparent 60%),
     var(--ex-side-bg);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--ex-side-ink);
@@ -185,7 +188,7 @@ body.live-app .sidebar-brand {
 body.live-app .sidebar-mark {
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 6px 18px -8px rgba(235, 10, 30, 0.55);
+  box-shadow: var(--ex-shadow);
 }
 body.live-app .sidebar-brand-text strong {
   color: #fff;
@@ -211,7 +214,7 @@ body.live-app .side-nav-item {
   border: 0;
   border-radius: 10px;
   font-weight: 600;
-  transition: background .18s var(--ex-ease), color .18s var(--ex-ease);
+  transition: background-color var(--ex-dur), color var(--ex-dur);
 }
 body.live-app .side-nav-item:hover {
   background: rgba(255, 255, 255, 0.05);
@@ -235,7 +238,7 @@ body.live-app .side-nav-item.active::before {
 }
 body.live-app .side-nav-icon {
   color: var(--ex-side-muted);
-  transition: color .18s;
+  transition: color var(--ex-dur);
 }
 body.live-app .side-nav-item:hover .side-nav-icon,
 body.live-app .side-nav-item.active .side-nav-icon { color: var(--ex-red); }
@@ -263,9 +266,10 @@ body.live-app .sidebar-collapse-btn {
 body.live-app .app-topbar {
   background: color-mix(in srgb, var(--ex-surface) 92%, transparent);
   border-bottom: 1px solid var(--ex-line);
+  box-shadow: none;
 }
 body.live-app .app-topbar-eyebrow {
-  color: var(--ex-red);
+  color: var(--ex-muted);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -280,11 +284,11 @@ body.live-app .app-topbar-search {
   background: var(--ex-surface-2);
   border: 1px solid var(--ex-line);
   border-radius: 12px;
-  transition: border-color 150ms ease, background-color 150ms ease;
+  transition: border-color var(--ex-dur), background-color var(--ex-dur);
 }
 body.live-app .app-topbar-search:focus-within {
-  border-color: var(--ex-hover);
-  box-shadow: 0 0 0 3px var(--ex-blue-soft);
+  border-color: var(--ex-blue);
+  box-shadow: var(--ex-focus);
 }
 body.live-app .app-topbar-search input {
   background: transparent;
@@ -319,10 +323,10 @@ body.live-app .app-topbar .status::before {
   background: currentColor;
   opacity: .85;
 }
-body.live-app .app-topbar .status.ok { color: var(--ex-green); background: var(--ex-green-soft); border-color: rgba(15, 157, 118, 0.25); }
-body.live-app .app-topbar .status.busy { color: var(--ex-amber); background: var(--ex-amber-soft); border-color: rgba(217, 119, 6, 0.25); }
-body.live-app .app-topbar .status.err { color: var(--ex-red); background: var(--ex-red-soft); border-color: rgba(235, 10, 30, 0.25); }
-body.live-app #live-badge.ok::before { box-shadow: none; }
+body.live-app .app-topbar .status.ok { color: var(--ex-green); background: var(--ex-green-soft); border-color: var(--ex-green); }
+body.live-app .app-topbar .status.busy { color: var(--ex-amber); background: var(--ex-amber-soft); border-color: var(--ex-amber); }
+body.live-app .app-topbar .status.err { color: var(--ex-red); background: var(--ex-red-soft); border-color: var(--ex-red); }
+body.live-app #live-badge.ok::before { animation: none; }
 
 /* ---------- 5. Buttons & form controls (generic panels) ---------- */
 body.live-app .btn,
@@ -333,13 +337,12 @@ body.live-app .btn-ghost {
   border: 1px solid var(--ex-line-strong);
   background: var(--ex-surface);
   color: var(--ex-ink-2);
-  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  transition: background-color var(--ex-dur), border-color var(--ex-dur), color var(--ex-dur);
 }
 body.live-app .btn:hover:not(:disabled),
 body.live-app .btn-ghost:hover:not(:disabled) {
   border-color: var(--ex-hover);
   color: var(--ex-ink);
-  background-color: var(--ex-surface-2);
 }
 body.live-app .btn-primary {
   font-family: var(--ex-font);
@@ -350,7 +353,7 @@ body.live-app .btn-primary {
   background: linear-gradient(180deg, #f2263a, var(--ex-red) 55%, var(--ex-red-deep));
   color: #fff;
   box-shadow: 0 8px 18px -10px rgba(235, 10, 30, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  transition: background-color 150ms ease, opacity 150ms ease, filter 150ms ease;
+  transition: background-color var(--ex-dur), filter var(--ex-dur);
 }
 body.live-app .btn-primary:hover:not(:disabled) {
   filter: brightness(1.04);
@@ -370,47 +373,47 @@ body.live-app #dashboard input[type="date"],
 body.live-app #dashboard input[type="number"] {
   font-family: var(--ex-font);
   border-radius: 10px;
-  transition: border-color 150ms ease, background-color 150ms ease;
+  transition: border-color var(--ex-dur), background-color var(--ex-dur);
 }
 body.live-app #dashboard select:focus,
 body.live-app #dashboard input:focus {
   outline: none;
-  border-color: var(--ex-hover);
-  box-shadow: 0 0 0 3px var(--ex-blue-soft);
+  border-color: var(--ex-blue);
+  box-shadow: var(--ex-focus);
 }
 
-/* ---------- 6. Generic cards, KPIs, tables (light panels) ---------- */
+/* ---------- 6. Generic cards, KPIs, tables (light panels) ----------
+   Card / KPI / button surfaces live in unified-design.css. Keep unique polish here. */
 body.live-app .card {
-  background: var(--ex-surface);
-  border: 1px solid var(--ex-line);
   border-radius: var(--ex-radius);
   box-shadow: var(--ex-shadow);
 }
 body.live-app .card h2,
 body.live-app .pbi-viz-head h2 {
-  color: var(--ex-ink);
   font-weight: 800;
   letter-spacing: -0.01em;
 }
+body.live-app .hint,
+body.live-app .foot { color: var(--ex-muted); }
+
+body.live-app .wait-card {
+  border-top: 3px solid var(--ex-slate);
+}
 body.live-app .wait-card h2 { font-size: 1.25rem; }
-body.live-app .banner.load { border-radius: 10px; }
 body.live-app .banner.err {
   border-radius: 10px;
   background: var(--ex-red-soft);
   color: var(--ex-red-deep);
-  border: 1px solid rgba(235, 10, 30, 0.25);
+  border: 1px solid var(--ex-red);
 }
 
-/* classic KPI tiles */
+/* classic KPI tiles — surface comes from unified-design.css; hover is slate, not red, no lift */
 body.live-app .kpi {
-  background: var(--ex-surface);
-  border: 1px solid var(--ex-line);
   border-radius: var(--ex-radius);
   box-shadow: var(--ex-shadow);
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition: background-color var(--ex-dur), border-color var(--ex-dur);
 }
 body.live-app .kpi:hover {
-  background-color: var(--ex-surface-2);
   border-color: var(--ex-hover);
 }
 body.live-app .kpi .label {
@@ -431,16 +434,6 @@ body.live-app .kpi .value {
 body.live-app .table-wrap,
 body.live-app .xl-table-wrap {
   border-radius: var(--ex-radius-sm);
-}
-body.live-app .table-wrap table thead th,
-body.live-app .xl-table-wrap table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 /* badges */
 body.live-app .badge {
@@ -470,11 +463,13 @@ body.live-app #panel-bodashboard,
 body.live-app #panel-boerrors,
 body.live-app #panel-boallocstock,
 body.live-app #panel-plantracker,
+body.live-app #panel-zonetracker,
 body.live-app #panel-reservedvehicles,
 body.live-app #bo-dash,
 body.live-app #boe-dash,
 body.live-app #bas-dash,
 body.live-app #pt-dash,
+body.live-app #zt-dash,
 body.live-app #rv-dash {
   /* the page's own colour names, so inline text and empty states turn light too */
   --ink: var(--cx-ink);
@@ -498,10 +493,11 @@ body.live-app.alloc-mode .app-content,
 body.live-app.boe-mode .app-content,
 body.live-app.ytd-mode .app-content,
 body.live-app.pt-wide-mode .app-content,
+body.live-app.zt-mode .app-content,
 body.live-app.rv-mode .app-content {
   background:
-    radial-gradient(1200px 500px at 85% -10%, rgba(235, 10, 30, 0.07), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(37, 99, 235, 0.06), transparent 60%),
+    radial-gradient(1200px 500px at 85% -10%, var(--ex-blue-soft), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, var(--ex-blue-soft), transparent 60%),
     var(--cx-bg);
 }
 
@@ -535,19 +531,18 @@ body.live-app #panel-ytdsales .ytd-trend {
   color: var(--cx-ink);
 }
 
-/* clickable cockpit tiles lift on hover */
+/* clickable cockpit tiles: no lift, slate hover */
 body.live-app #panel-salesreport .sr-tap,
 body.live-app #bo-dash .bo-tap,
 body.live-app #boe-dash .boe-kpi,
 body.live-app #panel-ytdsales .ytd-card {
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition: background-color var(--ex-dur), border-color var(--ex-dur);
 }
 body.live-app #panel-salesreport .sr-tap:hover,
 body.live-app #bo-dash .bo-tap:hover,
 body.live-app #boe-dash .boe-kpi:hover,
 body.live-app #panel-ytdsales .ytd-card:hover {
   border-color: var(--ex-hover);
-  background-color: var(--cx-raise);
 }
 
 /* cockpit card titles */
@@ -616,7 +611,7 @@ body.live-app #boe-dash .boe-kpi::after {
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.45), transparent);
+  background: linear-gradient(90deg, transparent, var(--cx-muted), transparent);
   pointer-events: none;
 }
 body.live-app #bo-dash .bo-kpi.ok::after,
@@ -635,7 +630,12 @@ body.live-app #boe-dash table thead th,
 body.live-app #bas-dash table thead th,
 body.live-app #pt-dash table thead th,
 body.live-app #rv-dash table thead th,
-body.live-app #panel-ytdsales table thead th {
+body.live-app #panel-ytdsales table thead th,
+body.live-app .table-wrap table thead th,
+body.live-app .xl-table-wrap table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--cx-surface-2);
   color: var(--cx-muted);
   border-bottom: 1px solid var(--cx-line-strong);
@@ -715,7 +715,7 @@ body.live-app #rv-dash .btn:hover:not(:disabled) {
 
 /* ---------- 8. Sales Dashboard header & toolbar ---------- */
 body.live-app #panel-salesreport .sr-eyebrow {
-  color: var(--ex-red);
+  color: var(--cx-muted);
   font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -735,13 +735,14 @@ body.live-app #panel-salesreport .sr-brand-word {
 body.live-app #panel-salesreport .sr-live-pill {
   background: var(--ex-green-soft);
   color: var(--ex-green);
-  border: 1px solid rgba(15, 157, 118, 0.3);
+  border: 1px solid var(--ex-green);
   border-radius: 999px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 body.live-app #panel-salesreport .sr-live-pill i {
   background: var(--ex-green);
+  animation: none;
 }
 body.live-app #panel-salesreport .sr-day-chip,
 body.live-app #panel-salesreport .sr-range-pills,
@@ -769,7 +770,7 @@ body.live-app #panel-salesreport .sr-icon-btn {
   border: 1px solid var(--cx-line);
   color: var(--cx-ink-2);
   border-radius: 10px;
-  transition: background .16s, color .16s, border-color .16s;
+  transition: background-color var(--ex-dur), color var(--ex-dur), border-color var(--ex-dur);
 }
 body.live-app #panel-salesreport .sr-tool-btn:hover,
 body.live-app #panel-salesreport .sr-icon-btn:hover,
@@ -815,9 +816,13 @@ body.live-app #panel-salesreport .sr-acc-progress-track {
   overflow: hidden;
 }
 body.live-app #panel-salesreport .sr-perf-progress-fill {
-  background: linear-gradient(90deg, #1d4ed8, var(--ex-blue) 60%, #7aa2ff);
+  background: linear-gradient(90deg, var(--ex-blue), var(--ex-slate));
   border-radius: 999px;
-  transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease;
+  box-shadow: none;
+  transition: none;
+}
+body.live-app #panel-salesreport .sr-kpi-card.is-over .sr-perf-progress-fill {
+  background: var(--ex-red);
 }
 
 /* Wide buttons inside cards */
@@ -827,7 +832,7 @@ body.live-app .pbi-expand {
   font-size: 0.7rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  transition: background .16s, color .16s, border-color .16s;
+  transition: background-color var(--ex-dur), color var(--ex-dur), border-color var(--ex-dur);
 }
 body.live-app #panel-salesreport .pbi-expand,
 body.live-app #bo-dash .pbi-expand,
@@ -846,12 +851,12 @@ body.live-app #bas-dash .pbi-expand:hover {
 
 /* ---------- 9. Wide modal & drawers ---------- */
 body.live-app .pbi-wide-backdrop {
-  background: rgba(3, 7, 15, 0.82);
+  background: rgba(3, 7, 15, 0.78);
 }
 body.live-app .pbi-wide-modal {
   border-radius: 18px;
   border: 1px solid var(--ex-line);
-  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.75);
+  box-shadow: var(--ex-shadow);
   overflow: hidden;
 }
 body.live-app .pbi-wide-head {
@@ -870,7 +875,7 @@ body.live-app #aa-drill-close {
   background: var(--ex-surface-2);
   color: var(--ex-ink);
   cursor: pointer;
-  transition: background .16s, color .16s, border-color .16s;
+  transition: background-color var(--ex-dur), color var(--ex-dur), border-color var(--ex-dur);
 }
 body.live-app #pbi-wide-close:hover,
 body.live-app #emp-drawer-close:hover,
@@ -880,10 +885,10 @@ body.live-app #aa-drill-close:hover {
   color: #fff;
 }
 body.live-app .drawer-backdrop {
-  background: rgba(3, 7, 15, 0.72);
+  background: rgba(3, 7, 15, 0.62);
 }
 body.live-app .emp-drawer {
-  box-shadow: -30px 0 70px -30px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--ex-shadow);
   border-left: 1px solid var(--ex-line);
 }
 body.live-app .emp-drawer-head h3 {
@@ -906,15 +911,15 @@ body.live-app #bas-dash .act-header {
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%),
     var(--cx-surface);
   border: 1px solid var(--cx-line);
-  border-top: 3px solid var(--ex-red);
+  border-top: 3px solid var(--ex-slate);
   border-radius: var(--ex-radius);
   box-shadow: var(--cx-shadow);
   color: var(--cx-ink);
 }
-body.live-app :is(#panel-bodashboard, #panel-boerrors, #panel-boallocstock, #panel-plantracker, #panel-reservedvehicles) .bo-empty a { color: #ff5a6a; }
+body.live-app :is(#panel-bodashboard, #panel-boerrors, #panel-boallocstock, #panel-plantracker, #panel-reservedvehicles) .bo-empty a { color: var(--ex-blue); }
 body.live-app #bas-dash .act-header { border-top-width: 1px; }
 body.live-app #bas-dash .act-eyebrow {
-  color: var(--ex-red);
+  color: var(--cx-muted);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -952,7 +957,7 @@ body.live-app #bas-alloc-section .bas-section-head .hint { color: var(--cx-muted
 body.live-app #bas-alloc-table table thead th { white-space: nowrap; }
 body.live-app #bas-alloc-table table tbody tr { cursor: pointer; }
 body.live-app #bas-alloc-table table tbody tr.is-selected td {
-  background: rgba(235, 10, 30, 0.10);
+  background: var(--ex-blue-soft);
 }
 body.live-app #bas-alloc-table table tbody tr.is-selected td:first-child {
   box-shadow: inset 3px 0 0 var(--ex-red);
@@ -1040,6 +1045,7 @@ body.live-app.alloc-mode .app-topbar,
 body.live-app.boe-mode .app-topbar,
 body.live-app.ytd-mode .app-topbar,
 body.live-app.pt-wide-mode .app-topbar,
+body.live-app.zt-mode .app-topbar,
 body.live-app.rv-mode .app-topbar {
   --ex-surface: var(--cx-surface);
   --ex-surface-2: var(--cx-surface-2);
@@ -1104,8 +1110,8 @@ body.live-app #rv-dash .rv-next-list li {
 }
 body.live-app #rv-dash .rv-next-list li.rv-next-empty { background: transparent; border-style: dashed; }
 body.live-app #rv-dash .rv-next-rank {
-  background: var(--ex-blue-soft);
-  color: var(--ex-blue);
+  background: var(--ex-red-soft);
+  color: var(--ex-red);
   border-radius: 6px;
   font: 800 0.7rem var(--ex-num);
 }
@@ -1166,6 +1172,118 @@ body.live-app #rv-dash .rv-mkt-card {
   border-radius: 10px;
   color: var(--cx-ink-2);
 }
+body.live-app #rv-dash .rv-mkt-list tr.is-done td { opacity: 0.78; }
+body.live-app #rv-dash .rv-mkt-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+body.live-app #rv-dash .rv-mkt-done-btn,
+body.live-app #rv-dash .rv-mkt-wide-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cx-line-strong);
+  background: var(--cx-surface);
+  color: var(--cx-ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+body.live-app #rv-dash .rv-mkt-wide-btn {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(37, 99, 235, 0.12);
+  color: #dbeafe;
+}
+body.live-app #rv-dash .rv-mkt-done-btn:disabled,
+body.live-app #rv-dash .rv-mkt-wide-btn:disabled { opacity: 0.55; cursor: wait; }
+body.live-app #rv-dash .rv-mkt-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+body.live-app #rv-dash .rv-mkt-wide {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(8, 12, 20, 0.72);
+}
+body.live-app #rv-dash .rv-mkt-wide[hidden] { display: none !important; }
+body.live-app #rv-dash .rv-mkt-wide-card {
+  width: min(720px, 100%);
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  background: var(--cx-surface);
+  border: 1px solid var(--cx-line-strong);
+  border-radius: 14px;
+  box-shadow: var(--cx-shadow);
+}
+body.live-app #rv-dash .rv-mkt-wide-h,
+body.live-app #rv-dash .rv-mkt-wide-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--cx-line);
+}
+body.live-app #rv-dash .rv-mkt-wide-foot {
+  border-bottom: 0;
+  border-top: 1px solid var(--cx-line);
+  align-items: center;
+}
+body.live-app #rv-dash .rv-mkt-wide-body {
+  padding: 14px 18px 18px;
+  display: grid;
+  gap: 8px;
+}
+body.live-app #rv-dash .rv-mkt-wide-body .fact {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--cx-line);
+  border-radius: 10px;
+  background: var(--cx-surface-2);
+}
+body.live-app #rv-dash .rv-mkt-wide-body .fact span {
+  color: var(--cx-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+body.live-app #rv-dash .rv-mkt-wide-body .fact b {
+  color: #fff;
+  font-weight: 600;
+  word-break: break-word;
+}
+body.live-app #rv-dash .rv-q-box {
+  display: inline-flex;
+  min-width: 72px;
+  justify-content: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--cx-line-strong);
+  background: var(--cx-surface-2);
+  font-family: var(--ex-num);
+  font-weight: 700;
+  color: #fff;
+}
+body.live-app #rv-dash .rv-q-box.is-empty { color: var(--cx-muted); font-weight: 600; }
 body.live-app #rv-dash .rv-pager button {
   background: var(--cx-surface-2);
   border: 1px solid var(--cx-line-strong);
@@ -1235,7 +1353,7 @@ body.live-app #panel-salesreport .sr-sheet-close {
   color: var(--cx-ink);
   border-radius: 10px;
 }
-body.live-app #panel-salesreport .sr-sheet-close:hover { background: var(--ex-red); border-color: var(--ex-red); color: #fff; }
+body.live-app #panel-salesreport .sr-sheet-close:hover { background: var(--cx-raise); border-color: var(--ex-hover); color: #fff; }
 
 /* the four blocks inside the schedule */
 body.live-app #panel-salesreport :is(.sr-sched-head, .sr-sched-filters, .sr-sched-kpi-block, .sr-sched-table-card, .sr-pace-board) {
@@ -1247,7 +1365,7 @@ body.live-app #panel-salesreport :is(.sr-sched-head, .sr-sched-filters, .sr-sche
   box-shadow: var(--cx-shadow);
   color: var(--cx-ink);
 }
-body.live-app #panel-salesreport .sr-sched-head { border-top: 3px solid var(--ex-red); }
+body.live-app #panel-salesreport .sr-sched-head { border-top: 3px solid var(--ex-slate); }
 body.live-app #panel-salesreport :is(.sr-sched-title, .sr-sched-table-title) { color: #fff; font-weight: 800; }
 body.live-app #panel-salesreport :is(.sr-sched-sub, .sr-sched-table-sub, .sr-sched-kpi-heading, .sr-sched-field .lab, .sr-sched-pager .foot, .sr-sched-pager label) {
   color: var(--cx-muted);
@@ -1376,14 +1494,14 @@ body.live-app #panel-salesreport .sr-status {
   border: 1px solid transparent;
 }
 body.live-app #panel-salesreport .sr-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-body.live-app #panel-salesreport .sr-status.is-on { background: var(--ex-green-soft); color: var(--ex-green); border-color: rgba(15, 157, 118, 0.3); }
-body.live-app #panel-salesreport .sr-status.is-below { background: var(--ex-red-soft); color: var(--ex-red); border-color: rgba(235, 10, 30, 0.35); }
-body.live-app #panel-salesreport .sr-status.is-vac { background: var(--ex-amber-soft); color: var(--ex-amber); border-color: rgba(217, 119, 6, 0.3); }
+body.live-app #panel-salesreport .sr-status.is-on { background: var(--ex-green-soft); color: var(--ex-green); border-color: var(--ex-green); }
+body.live-app #panel-salesreport .sr-status.is-below { background: var(--ex-red-soft); color: var(--ex-red); border-color: var(--ex-red); }
+body.live-app #panel-salesreport .sr-status.is-vac { background: var(--ex-amber-soft); color: var(--ex-amber); border-color: var(--ex-amber); }
 body.live-app #panel-salesreport .sr-status.is-na { background: rgba(148, 163, 184, 0.14); color: var(--cx-muted); border-color: var(--cx-line-strong); }
 body.live-app #panel-salesreport .sr-leg { color: var(--cx-muted); }
 body.live-app #panel-salesreport .sr-sched-count {
-  background: rgba(59, 130, 246, 0.14);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--ex-blue-soft);
+  border: 1px solid var(--ex-blue);
   color: var(--ex-blue);
   border-radius: 999px;
   font-weight: 800;
@@ -1429,7 +1547,7 @@ body.live-app #bas-dash .mv-score-tab {
   color: var(--cx-muted);
   font: 700 0.8rem var(--ex-font);
   cursor: pointer;
-  transition: background .16s, color .16s;
+  transition: background-color var(--ex-dur), color var(--ex-dur);
 }
 body.live-app #bas-dash .mv-score-tab:hover { color: #fff; }
 body.live-app #bas-dash .mv-score-tab.is-on {
@@ -1457,7 +1575,7 @@ body.live-app #bas-dash .mv-cols > summary {
   font-size: 0.8rem;
   list-style: none;
 }
-body.live-app #bas-dash .mv-cols[open] > summary { border-color: var(--ex-red); color: #fff; }
+body.live-app #bas-dash .mv-cols[open] > summary { border-color: var(--ex-hover); color: #fff; }
 body.live-app #bas-dash .mv-cols-list {
   background: var(--cx-surface-2);
   border: 1px solid var(--cx-line-strong);
@@ -1474,7 +1592,7 @@ body.live-app #bas-dash .mv-pager button {
   border-radius: 8px;
   cursor: pointer;
 }
-body.live-app #bas-dash .mv-pager button:hover:not(:disabled) { border-color: var(--ex-red); color: #fff; }
+body.live-app #bas-dash .mv-pager button:hover:not(:disabled) { border-color: var(--ex-hover); color: #fff; }
 body.live-app #bas-dash .mv-pager button:disabled { opacity: .4; cursor: default; }
 body.live-app #bas-dash .mv-page-label { color: var(--cx-ink-2); font-family: var(--ex-num); }
 
@@ -1484,13 +1602,13 @@ body.live-app #rv-dash .rv-top {
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%),
     var(--cx-surface);
   border: 1px solid var(--cx-line);
-  border-top: 3px solid var(--ex-red);
+  border-top: 3px solid var(--ex-slate);
   border-radius: var(--ex-radius);
   box-shadow: var(--cx-shadow);
 }
 body.live-app #rv-dash .rv-brand-word { color: #fff; font-weight: 800; letter-spacing: 0.2em; }
 body.live-app #rv-dash .rv-eye {
-  color: var(--ex-red);
+  color: var(--cx-muted);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -1508,7 +1626,7 @@ body.live-app #rv-dash .rv-exit {
   cursor: pointer;
 }
 body.live-app #rv-dash .rv-exit small { color: var(--cx-muted); }
-body.live-app #rv-dash .rv-exit:hover { border-color: var(--ex-red); background: rgba(235, 10, 30, 0.1); }
+body.live-app #rv-dash .rv-exit:hover { border-color: var(--ex-hover); background: var(--ex-blue-soft); }
 body.live-app #rv-dash .rv-controls {
   background: var(--cx-surface);
   border: 1px solid var(--cx-line);
@@ -1547,16 +1665,69 @@ body.live-app #panel-salesreport .sr-emp-sum {
   margin: 6px 0;
   border-radius: 10px;
   background: var(--ex-blue-soft);
-  border: 1px solid rgba(37, 99, 235, 0.35);
+  border: 1px solid var(--ex-blue);
   color: #fff;
   font-weight: 700;
   font-size: 0.8rem;
 }
 
+/* 20% Cars card */
+body.live-app #bo-dash #bo-20pct-cars {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+body.live-app #bo-dash .bo-20pct-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+body.live-app #bo-dash .bo-20pct-head h2 { margin: 0; }
+body.live-app #bo-dash .bo-20pct-stats,
+body.live-app #bo-dash .bo-20pct-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cx-ink-2);
+}
+body.live-app #bo-dash .bo-20pct-stats span,
+body.live-app #bo-dash .bo-20pct-channels span {
+  font-family: var(--ex-num);
+}
+body.live-app #bo-dash .bo-20pct-paid { color: var(--ex-green); }
+body.live-app #bo-dash .bo-20pct-unpaid { color: var(--ex-red); }
+body.live-app #bo-dash #bo-20pct-cars table tbody tr { cursor: pointer; }
+body.live-app #bo-dash #bo-20pct-cars table tbody tr:hover td { background: rgba(255, 255, 255, 0.045); }
+
+@media (min-width: 1101px) and (min-height: 640px) {
+  body.bo-dash-mode #bo-dash.bo-tower {
+    grid-template-rows:
+      var(--bo-head-h) var(--bo-tool-h) auto var(--bo-kpi-h)
+      auto
+      var(--bo-row) var(--bo-row) var(--bo-row);
+    grid-template-areas:
+      "head head head head head"
+      "tool tool tool tool tool"
+      "chip chip chip chip chip"
+      "kpi  kpi  kpi  kpi  kpi"
+      "pct  pct  pct  pct  pct"
+      "mdl  mdl  sts  age  ins"
+      "prd  prd  sum  typ  shw"
+      "prd  prd  ppl  old  qlt";
+  }
+  body.bo-dash-mode #bo-dash #bo-20pct-cars {
+    grid-area: pct;
+    grid-column: auto;
+    max-height: 260px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  html body.live-app *,
-  html body.live-app *::before,
-  html body.live-app *::after {
+  *, *::before, *::after {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
@@ -1571,103 +1742,44 @@ body.live-app #panel-salesreport .sr-emp-sum {
   <link rel="stylesheet" href="unified-design.css?v=20261103ud2" />
   <link rel="stylesheet" href="bo-dashboard-fit.css?v=20261103bf1" />
   <link rel="stylesheet" href="matched-vehicles.css?v=20261105mv1" />
-  <link rel="stylesheet" href="zone-tracker.css?v=20261105zt2" />
-  <style id="executive-finish">
-    /* Wins over unified-design.css: slate/blue hover, one card shadow, 20% Cars. */
-    :root { --ud-focus: 0 0 0 3px var(--ex-blue-soft); }
+  <link rel="stylesheet" href="zone-tracker.css?v=20261111ztfs1" />
+  <style id="executive-skin-late">
+    /* Wins over unified-design / BO fit: slate hover, no red decoration, 20% Cars slot. */
+    body.live-app :is(.btn, .btn-ghost, .ghost, .gec-btn, .pt-btn, .bo-btn, .cp-btn):not(.btn-primary):not(.is-primary):hover:not(:disabled) {
+      border-color: var(--ex-hover) !important;
+      color: var(--ex-ink);
+    }
+    body.live-app :is(select, textarea, input):focus {
+      outline: none;
+      border-color: var(--ex-blue);
+      box-shadow: var(--ex-focus);
+    }
     html body.live-app.toyota-theme .app-topbar .btn:hover,
     html body.live-app.toyota-theme .app-topbar .sidebar-toggle:hover {
       border-color: var(--ex-hover) !important;
     }
-    body.live-app :is(select, textarea, input):focus {
-      border-color: var(--ex-blue) !important;
-      box-shadow: var(--ud-focus) !important;
+    body.live-app .kpi:hover,
+    body.live-app #panel-salesreport .sr-tap:hover,
+    body.live-app #bo-dash .bo-tap:hover,
+    body.live-app #boe-dash .boe-kpi:hover,
+    body.live-app #panel-ytdsales .ytd-card:hover {
+      transform: none;
+      border-color: var(--ex-hover);
     }
-    body.live-app :is(.btn, .btn-ghost, .ghost, .gec-btn, .pt-btn, .bo-btn, .cp-btn):not(.btn-primary):not(.is-primary):hover:not(:disabled) {
-      border-color: var(--ex-hover) !important;
+    body.live-app .pbi-wide-backdrop,
+    body.live-app .drawer-backdrop {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
-    body.live-app :is(.card, .gcc-card, .lxt-card, .tbt-card, .ytd-card, .rv-board-card, .kpi, .bo-kpi) {
-      border-radius: var(--ex-radius);
-      box-shadow: var(--ex-shadow);
+    body.live-app #live-badge.ok::before,
+    body.live-app #panel-salesreport .sr-live-pill i {
+      animation: none;
     }
-    body.live-app :is(#dashboard, #sales-host, #bo-dash, #panel-salesreport, #rv-dash) thead th {
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    html body.live-app .app-topbar,
-    html body.live-app.toyota-theme .app-topbar,
-    html body.live-app.toyota-theme.theme-dark .app-topbar {
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-      background: color-mix(in srgb, var(--cx-surface) 94%, transparent) !important;
-    }
-    html body.live-app .pbi-wide-backdrop,
-    html body.sr-mode .pbi-wide-backdrop,
-    html body.live-app .drawer-backdrop {
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-    }
-    html body.live-app .pbi-wide-backdrop,
-    html body.sr-mode .pbi-wide-backdrop {
-      background: rgba(3, 7, 15, 0.82) !important;
-    }
-    html body.live-app .drawer-backdrop {
-      background: rgba(3, 7, 15, 0.72) !important;
-    }
-
-    #bo-20pct {
-      min-width: 0;
-    }
-    #bo-20pct .bo-20pct-kpis {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin: 0 0 10px;
-    }
-    #bo-20pct .bo-20pct-kpis.bo-20pct-channels {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    #bo-20pct .bo-20pct-kpis > div {
-      background: var(--cx-surface-2);
-      border: 1px solid var(--cx-line);
-      border-radius: 10px;
-      padding: 8px 10px;
-      min-width: 0;
-    }
-    #bo-20pct .bo-20pct-kpis span {
-      display: block;
-      color: var(--cx-muted);
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    #bo-20pct .bo-20pct-kpis b {
-      display: block;
-      color: #fff;
-      font: 700 1.15rem var(--ex-num);
-      margin-top: 2px;
-    }
-    #bo-20pct .bo-20pct-kpis small {
-      display: block;
-      margin-top: 4px;
-      color: var(--cx-muted);
-      font-size: 11px;
-    }
-    #bo-20pct .bo-20pct-kpis .is-paid b,
-    #bo-20pct .bo-20pct-paid { color: var(--ex-green) !important; }
-    #bo-20pct .bo-20pct-kpis .is-not b,
-    #bo-20pct .bo-20pct-not { color: var(--ex-red) !important; }
-    #bo-20pct .table-wrap { max-height: 220px; overflow: auto; }
-    #bo-20pct table tbody tr { cursor: pointer; }
-    #bo-20pct table tbody tr:hover td { background-color: rgba(255, 255, 255, 0.045); }
-
     @media (min-width: 1101px) and (min-height: 640px) {
       body.bo-dash-mode #bo-dash.bo-tower {
         grid-template-rows:
-          var(--bo-head-h) var(--bo-tool-h) auto var(--bo-kpi-h) minmax(168px, auto)
+          var(--bo-head-h) var(--bo-tool-h) auto var(--bo-kpi-h)
+          auto
           var(--bo-row) var(--bo-row) var(--bo-row);
         grid-template-areas:
           "head head head head head"
@@ -1679,14 +1791,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
           "prd  prd  sum  typ  shw"
           "prd  prd  ppl  old  qlt";
       }
-      body.bo-dash-mode #bo-dash #bo-20pct {
+      body.bo-dash-mode #bo-dash #bo-20pct-cars {
         grid-area: pct;
-        min-height: 0;
+        max-height: 260px;
         overflow: auto;
       }
-    }
-    @media (max-width: 860px) {
-      #bo-20pct .bo-20pct-kpis { grid-template-columns: 1fr 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       html body.live-app *,
@@ -1938,9 +2047,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
       <div class="panel-section" id="panel-contact" style="display:none"><div id="contact-performance-host"></div></div>
       <div class="panel-section" id="panel-evaluation" style="display:none"><div id="evaluation-host"></div></div>
 
-      <!-- PANEL: Delivery · view of delivery-transformation/admin.html -->
+      <!-- PANEL: Delivery · live delivery-operation-production collector admin -->
       <div class="panel-section" id="panel-delivery" style="display:none">
-        <iframe id="delivery-view-frame" class="delivery-view-frame" title="Delivery" src="about:blank" allowfullscreen></iframe>
+        <iframe id="delivery-view-frame" class="delivery-view-frame" title="Delivery" src="about:blank" allow="fullscreen" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
       </div>
 
       <!-- PANEL: Lexus Tracker (lexus-control/lexus-tracker.js) -->
@@ -2479,16 +2588,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
           <div class="bo-chips" id="bo-chips"></div>
 
           <div class="bo-kpis" id="bo-kpis"></div>
-
-          <article class="card bo-20pct" id="bo-20pct">
-            <div class="pbi-viz-head">
-              <div>
-                <h2>20% Cars</h2>
-                <p class="hint">CAMRY · LC300 · LC70 · RAV4 · HILUX SC · HILUX DC</p>
-              </div>
-            </div>
-            <div id="bo-20pct-body"></div>
-          </article>
+          <article class="card bo-20pct-card" id="bo-20pct-cars"></article>
 
           <div class="bo-fit-main">
             <div class="bo-row bo-row-insights">
@@ -2810,8 +2910,9 @@ body.live-app #panel-salesreport .sr-emp-sum {
         <div class="bo-empty card" id="rv-empty">
           <h2>Reserved Vehicles Tracker</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Reads <b>E-Sales المحجوز</b> from the Reserved File (or from Stock E-Sales when no Reserved File is pushed) — order <b>Col F</b> · VIN <b>Col L</b> · product <b>Col I</b> · suffix <b>Col J</b> · ext <b>Col M</b> · int <b>Col N</b>.
-            It ranks each order with the BO queue algorithm, shows the next 3 queue orders, and checks Sales Raw for proforma.
+            One page for the <b>live reserved sheet</b> and <b dir="rtl">طلبات التسويق</b>.
+            Mark marketing requests <b>Done</b> here so the employee sees the stamp on their side.
+            Queue 1–3 refresh whenever Back Order is uploaded from Admin Push or BO hub.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
@@ -2853,11 +2954,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
           </header>
           <div class="rv-toolbar">
             <div class="rv-controls">
-              <label>Push<select id="rv-push"><option value="">Current live sheet</option></select></label>
-              <label>Compare from<select id="rv-push-from"><option value="">Earlier push</option></select></label>
-              <label>Compare to<select id="rv-push-to"><option value="">Later push</option></select></label>
-              <label>From<input id="rv-date-from" type="date" /></label>
-              <label>To<input id="rv-date-to" type="date" /></label>
               <label>Status
                 <select id="rv-filter-status" title="Filter VIN status">
                   <option value="">All statuses</option>
@@ -2870,10 +2966,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
                   <option value="noqueue">Not in BO file</option>
                 </select>
               </label>
-              <button type="button" class="btn" id="rv-compare">Compare Pushes</button>
             </div>
             <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
-            <p class="rv-banner" id="rv-snapshot-banner" hidden></p>
             <p class="rv-banner" id="rv-compare-result" hidden></p>
           </div>
           <div class="bo-kpis" id="rv-kpis"></div>
@@ -2900,7 +2994,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
                   <header class="rv-board-h">
                     <div>
                       <h3 dir="rtl">طلبات التسويق</h3>
-                      <p id="rv-mkt-count">Order number, advisor, and when it was sent</p>
+                      <p id="rv-mkt-count">Wide to review · Done stamps the employee side</p>
                     </div>
                   </header>
                   <input id="rv-mkt-search" type="search" placeholder="Search marketing orders" aria-label="Search marketing orders" />
@@ -2918,15 +3012,20 @@ body.live-app #panel-salesreport .sr-emp-sum {
                 </article>
               </aside>
             </section>
-            <section class="rv-audit" id="rv-audit-card">
-              <header class="rv-board-h">
+          </div>
+          <div class="rv-mkt-wide" id="rv-mkt-wide" hidden>
+            <div class="rv-mkt-wide-card" role="dialog" aria-modal="true" aria-labelledby="rv-mkt-wide-title">
+              <header class="rv-mkt-wide-h">
                 <div>
-                  <h3>Push snapshots</h3>
-                  <p id="rv-audit-count">Each push from reserved admin or the report sheet keeps live and removed VINs</p>
+                  <p class="rv-eye">طلبات التسويق</p>
+                  <h3 id="rv-mkt-wide-title">Order</h3>
+                  <p id="rv-mkt-wide-sub">Full order check</p>
                 </div>
+                <button type="button" class="btn" id="rv-mkt-wide-close">Close</button>
               </header>
-              <div class="rv-audit-table" id="rv-audit"></div>
-            </section>
+              <div class="rv-mkt-wide-body" id="rv-mkt-wide-body"></div>
+              <footer class="rv-mkt-wide-foot" id="rv-mkt-wide-foot"></footer>
+            </div>
           </div>
         </div>
       </div>
@@ -3171,11 +3270,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
           <p class="foot" id="zt-loading" hidden>Loading day RTL snapshots…</p>
         </div>
 
-        <div id="zt-dash" class="zt-dash" hidden>
+        <div id="zt-dash" class="zt-dash zt-tower" hidden>
           <header class="pt-top zt-top">
             <div class="pt-top-copy">
               <div class="pt-brand" aria-hidden="true">
                 <img class="pt-brand-logo" src="../images/logo/toyota.png" alt="" width="28" height="28" decoding="async" onerror="this.style.display='none'" />
+                <span class="pt-brand-word">TOYOTA</span>
               </div>
               <div class="pt-brand-copy">
                 <p class="pt-eye">ALJ DIGITAL RETAIL</p>
@@ -3191,7 +3291,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
               <button type="button" class="btn" id="zt-month-prev">Previous</button>
               <button type="button" class="btn" id="zt-month-next">Next</button>
               <button type="button" class="btn" id="zt-month-now">This Month</button>
-              <div class="pt-mode zt-mode" role="group" aria-label="Period">
+              <div class="pt-mode zt-period" role="group" aria-label="Period">
                 <button type="button" data-zt-mode="daily">Daily</button>
                 <button type="button" data-zt-mode="cumulative">Cumulative</button>
               </div>
@@ -3202,6 +3302,10 @@ body.live-app #panel-salesreport .sr-emp-sum {
                 <span class="pt-updated-k">Last Updated</span>
                 <strong class="pt-updated" id="zt-updated">—</strong>
               </span>
+              <button type="button" class="zt-exit" id="zt-exit" title="Back to Sales Report">
+                <span>↪ EXIT</span>
+                <small>Back to Sales Report</small>
+              </button>
             </div>
           </header>
 
@@ -3219,28 +3323,28 @@ body.live-app #panel-salesreport .sr-emp-sum {
           <div class="pt-kpis zt-kpis" id="zt-kpis"></div>
 
           <div class="zt-grid">
-            <article class="pt-card zt-card">
+            <article class="pt-card zt-card" id="zt-card-zones">
               <div class="pt-card-h"><h3>Cars received per zone</h3><span class="zt-note" id="zt-zone-chart-note"></span></div>
               <div class="pt-chart zt-chart"><canvas id="zt-chart-zones"></canvas><p class="zt-empty-note" id="zt-zone-chart-empty" hidden>No cars received for these filters.</p></div>
             </article>
-            <article class="pt-card zt-card">
+            <article class="pt-card zt-card" id="zt-card-daily">
               <div class="pt-card-h"><h3 id="zt-daily-title">Daily received</h3><span class="zt-note" id="zt-daily-note"></span></div>
               <div class="pt-chart zt-chart"><canvas id="zt-chart-daily"></canvas></div>
             </article>
-            <article class="pt-card zt-card zt-span-2">
+            <article class="pt-card zt-card zt-span-2" id="zt-card-matrix">
               <div class="pt-card-h"><h3>Zone × model</h3><span class="zt-note">Cars in today's file · click a zone row to select it</span></div>
               <div class="zt-scroll" id="zt-matrix"></div>
             </article>
-            <article class="pt-card zt-card zt-span-2">
+            <article class="pt-card zt-card zt-span-2" id="zt-card-plan">
               <div class="pt-card-h"><h3 id="zt-plan-title">Selected zone by model &amp; SFX</h3><span class="zt-note">Allocation from Admin plan · Remaining = Allocation − Received MTD</span></div>
               <div class="zt-scroll" id="zt-plan"></div>
             </article>
-            <article class="pt-card zt-card zt-span-2">
+            <article class="pt-card zt-card zt-span-2" id="zt-card-moves">
               <div class="pt-card-h"><h3>Movements</h3><span class="zt-note" id="zt-moves-count"></span></div>
               <div class="pt-tabs zt-kinds" id="zt-move-kinds"></div>
               <div class="zt-scroll zt-scroll-tall" id="zt-moves"></div>
             </article>
-            <article class="pt-card zt-card zt-span-2">
+            <article class="pt-card zt-card zt-span-2" id="zt-card-unmatched">
               <div class="pt-card-h"><h3>Cars with no plan line</h3><span class="zt-note" id="zt-unmatched-count"></span></div>
               <div class="zt-scroll" id="zt-unmatched"></div>
             </article>
@@ -7695,7 +7799,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (!cfg || !cfg.display) return;
       const { ctx } = chart;
       const suffix = cfg.suffix || "";
-      const fontFamily = cfg.fontFamily || "'Manrope', 'Segoe UI', sans-serif";
+      const fontFamily = cfg.fontFamily || "'Manrope', 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif";
       const horizontal = chart.options.indexAxis === "y";
       const canvasEl = chart.canvas;
       const fitRow = Number((canvasEl && canvasEl.dataset && canvasEl.dataset.fitRowPx) || 0);
@@ -7811,10 +7915,36 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }));
   }
 
+  function exCssToken(name, fallback) {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      if (v) return v;
+    } catch (_) { /* ignore */ }
+    return fallback;
+  }
+
+  function chartTokenPalette() {
+    const slate = exCssToken("--cx-muted", "#8d9bb0");
+    const blue = exCssToken("--ex-blue", "#2563eb");
+    const teal = exCssToken("--ex-green", "#0f9d76");
+    const amber = exCssToken("--ex-amber", "#d97706");
+    const red = exCssToken("--ex-red", "#eb0a1e");
+    window.__exChartPalette = [slate, blue, teal, amber, red];
+    if (window.Chart && Chart.defaults) {
+      Chart.defaults.color = slate;
+      Chart.defaults.borderColor = exCssToken("--cx-line", "rgba(148,163,184,.10)");
+      Chart.defaults.font.family = "Manrope, 'IBM Plex Sans Arabic', 'Segoe UI', system-ui, sans-serif";
+      if (Chart.defaults.datasets && Chart.defaults.datasets.bar) {
+        Chart.defaults.datasets.bar.backgroundColor = blue;
+      }
+    }
+    return [slate, blue, teal, amber, red, slate, blue, teal];
+  }
+
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
-    const colors = ["#8d9bb0", "#2563eb", "#0f9d76", "#d97706", "#eb0a1e", "#64748b", "#7aa2ff", "#0d9488"];
+    const colors = chartTokenPalette();
     const fontFamily = "'Manrope', 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif";
     const figureFont = "'Space Grotesk', 'Manrope', sans-serif";
     const opts = extra || {};
@@ -7938,7 +8068,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         labels,
         datasets: (opts.datasets || [{
           data: values,
-          backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : "rgba(37, 99, 235, 0.82)"),
+          backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : colors[1]),
           borderWidth: type === "doughnut" ? 3 : 0,
           borderColor: type === "doughnut" ? (cockpit ? "#0d1420" : "#fff") : undefined,
           borderRadius: type === "bar" ? 4 : 0,
@@ -8077,12 +8207,11 @@ body.live-app #panel-salesreport .sr-emp-sum {
       },
     };
     const existing = charts[id];
-    const canReuse = existing && existing.canvas === canvas && existing.config && existing.config.type === type;
-    if (canReuse) {
-      chartConfig.options.animation = { duration: 0, easing: "easeOutQuart" };
+    if (existing && existing.canvas === canvas && existing.config.type === type) {
       existing.data = chartConfig.data;
       existing.options = chartConfig.options;
-      existing.update("none");
+      if (existing.options) existing.options.animation = { duration: 0 };
+      existing.update();
       return;
     }
     if (existing) existing.destroy();
@@ -9396,27 +9525,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     ]);
     appendObjectSheet(wb, "Executive Insights", insights);
     appendObjectSheet(wb, "Strategic Products", strategic);
-    const pct20 = build20PctCars(list);
-    appendObjectSheet(wb, "20% Cars", [
-      ...pct20.rows.map((r) => ({
-        Product: r.product,
-        Total: r.total,
-        Paid: r.paid,
-        "Not Paid": r.notPaid,
-        B2C: r.b2c,
-        Telesales: r.telesales,
-        Unknown: r.unknown,
-      })),
-      {
-        Product: "TOTAL",
-        Total: pct20.totals.total,
-        Paid: pct20.totals.paid,
-        "Not Paid": pct20.totals.notPaid,
-        B2C: pct20.totals.b2c,
-        Telesales: pct20.totals.telesales,
-        Unknown: pct20.totals.unknown,
-      },
-    ]);
     appendObjectSheet(wb, "Each Product", byProduct);
     appendObjectSheet(wb, "Top 10 Product Backlog", topBacklog);
     appendObjectSheet(wb, "Confirmation by Product", byProduct.map((r) => ({
@@ -9434,6 +9542,22 @@ body.live-app #panel-salesreport .sr-emp-sum {
     })));
     appendObjectSheet(wb, "Sales Type Confirmed vs Not", bySalesType);
     appendObjectSheet(wb, "By SFX", bySfx);
+    const pct20 = build20PctCars(list);
+    appendObjectSheet(wb, "20% Cars", pct20.rows.map((r) => ({
+      Product: r.product,
+      Total: r.total,
+      Paid: r.paid,
+      "Not Paid": r.notPaid,
+      B2C: r.b2c,
+      Telesales: r.telesales,
+    })).concat([{
+      Product: "TOTAL",
+      Total: pct20.totals.total,
+      Paid: pct20.totals.paid,
+      "Not Paid": pct20.totals.notPaid,
+      B2C: pct20.totals.b2c,
+      Telesales: pct20.totals.telesales,
+    }]));
     appendObjectSheet(wb, "BO Detail", detail);
     downloadWorkbook(wb, `BO-Dashboard-${excelFileStamp()}`);
     setStatus(`BO Dashboard Excel exported · ${formatNumber(detail.length)} detail rows · section sheets`, "ok");
@@ -9831,7 +9955,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (wait) wait.style.display = "none";
       const frame = document.getElementById("delivery-view-frame");
       if (frame && (!frame.getAttribute("src") || frame.getAttribute("src") === "about:blank")) {
-        frame.setAttribute("src", "../delivery-transformation/admin.html?view=1&v=20261109emb2");
+        frame.setAttribute("src", "https://delivery-operation-production.up.railway.app/delivery-transformation/admin.html?view=1");
       }
     } else if (leavingDelivery && !window._data) {
       const dash = $("#dashboard");
@@ -13288,7 +13412,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return "ok";
   }
 
-  const PCT20_ORDER = [
+  const PCT20_CARS = [
     { key: "CAMRY", label: "CAMRY" },
     { key: "LC300", label: "LC300" },
     { key: "LC70", label: "LC70" },
@@ -13296,66 +13420,57 @@ body.live-app #panel-salesreport .sr-emp-sum {
     { key: "HILUXSC", label: "HILUX SC" },
     { key: "HILUXDC", label: "HILUX DC" },
   ];
-  const PCT20_ALIAS = {
-    CAMRY: "CAMRY",
-    LC300: "LC300",
-    LANDCRUISER300: "LC300",
-    LC70: "LC70",
-    LANDCRUISER70: "LC70",
-    RAV4: "RAV4",
-    HILUXSC: "HILUXSC",
-    HILUXSINGLECAB: "HILUXSC",
-    HILUXSINGLE: "HILUXSC",
-    HILUXDC: "HILUXDC",
-    HILUXDOUBLECAB: "HILUXDC",
-    HILUXDOUBLE: "HILUXDC",
-  };
 
-  function map20PctProductKey(product) {
-    const k = boeNormProductKey(product);
-    return PCT20_ALIAS[k] || "";
-  }
-
-  function findBoPaidLetter() {
-    const rows = slots.backorder.rows || [];
-    const sample = rows.find(Boolean) || null;
-    const aliases = HEADER_ALIASES.paid || [];
-    const letter = findHeaderLetter(sample, aliases.map((a) => {
-      const na = String(a).toLowerCase();
-      return (n) => n === na || n.includes(na);
-    }));
-    return letter || "J";
-  }
-
-  function rawBoPaidAmount(bo, paidLetter) {
-    const raw = (slots.backorder.rows || [])[bo.id];
-    if (!raw) return null;
-    const cell = cellByLetter(raw, paidLetter);
-    const s = String(cell ?? "").replace(/[, ]/g, "").trim();
-    if (!s) return null;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  function bo20PctOrderNumber(bo) {
-    let s = String(bo && bo.boNumber || "").trim();
-    if (!s) {
-      const raw = (slots.backorder.rows || [])[bo && bo.id];
-      if (raw) s = String(cellByLetter(raw, "F") ?? "").trim();
+  function pct20ProductKey(product) {
+    const key = boeNormProductKey(product);
+    if (!key) return "";
+    if (key === "LANDCRUISER300") return "LC300";
+    if (key === "LANDCRUISER70") return "LC70";
+    if (key === "HILUXSINGLECAB") return "HILUXSC";
+    if (key === "HILUXDOUBLECAB") return "HILUXDC";
+    if (key === "CAMRY" || key === "LC300" || key === "LC70" || key === "RAV4" || key === "HILUXSC" || key === "HILUXDC") {
+      return key;
     }
-    return s.replace(/\.0+$/, "");
+    return "";
   }
 
-  function classify20PctChannel(boNumber) {
-    const s = String(boNumber || "").trim().replace(/\.0+$/, "");
-    if (!s) return "unknown";
-    const ch = s.charAt(0);
+  function pct20PaidLetter() {
+    const sample = (slots.backorder.rows || [])[0] || {};
+    const aliases = (HEADER_ALIASES.paid || []).map((a) => String(a).toLowerCase());
+    return findHeaderLetter(sample, [(n) => aliases.some((a) => n === a)])
+      || findHeaderLetter(sample, [(n) => aliases.some((a) => n.includes(a))])
+      || "J";
+  }
+
+  function pct20IsPaidAmount(raw) {
+    const s = String(raw ?? "").replace(/[, ]/g, "").trim();
+    if (!s) return false;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0;
+  }
+
+  function pct20BoNumber(bo, rawRow) {
+    let raw = cellToString(bo && bo.boNumber).trim();
+    if (!raw && rawRow) {
+      const letter = findHeaderLetter(rawRow, [
+        (n) => n === "back order number" || n === "backorder number" || n === "bo number" || n === "order number",
+      ]) || "F";
+      raw = cellToString(cellByLetter(rawRow, letter)).trim();
+    }
+    if (!raw && rawRow) raw = cellToString(cellByLetter(rawRow, "F")).trim();
+    return raw.replace(/\.0+$/, "");
+  }
+
+  function pct20Channel(bo, rawRow) {
+    const num = pct20BoNumber(bo, rawRow);
+    if (!num) return "unknown";
+    const ch = num.charAt(0);
     if (ch === "5") return "b2c";
     if (ch >= "0" && ch <= "9") return "telesales";
     return "unknown";
   }
 
-  function empty20PctRow(label) {
+  function pct20EmptyRow(label) {
     return {
       product: label,
       total: 0,
@@ -13366,138 +13481,131 @@ body.live-app #panel-salesreport .sr-emp-sum {
       telesales: 0,
       telesalesPaid: 0,
       unknown: 0,
-      sampleProduct: "",
-      sampleCounts: {},
     };
   }
 
-  function pick20PctSample(row) {
-    let best = row.sampleProduct || "";
-    let n = 0;
-    Object.keys(row.sampleCounts || {}).forEach((name) => {
-      const c = row.sampleCounts[name] || 0;
-      if (c > n) {
-        n = c;
-        best = name;
-      }
-    });
-    return best || row.product;
-  }
-
   function build20PctCars(list) {
+    const paidLetter = pct20PaidLetter();
     const buckets = {};
-    PCT20_ORDER.forEach((p) => { buckets[p.key] = empty20PctRow(p.label); });
-    const paidLetter = findBoPaidLetter();
+    const samples = {};
+    PCT20_CARS.forEach((p) => {
+      buckets[p.key] = pct20EmptyRow(p.label);
+      samples[p.key] = Object.create(null);
+    });
     (list || []).forEach((bo) => {
-      const key = map20PctProductKey(bo.product);
-      if (!key || !buckets[key]) return;
-      const row = buckets[key];
-      row.total += 1;
-      const orig = String(bo.product || "");
-      if (orig) row.sampleCounts[orig] = (row.sampleCounts[orig] || 0) + 1;
-      const paidAmt = rawBoPaidAmount(bo, paidLetter);
-      const isPaidAmt = paidAmt != null && paidAmt > 0;
-      if (isPaidAmt) row.paid += 1;
-      else row.notPaid += 1;
-      const ch = classify20PctChannel(bo20PctOrderNumber(bo));
-      if (ch === "b2c") {
-        row.b2c += 1;
-        if (isPaidAmt) row.b2cPaid += 1;
-      } else if (ch === "telesales") {
-        row.telesales += 1;
-        if (isPaidAmt) row.telesalesPaid += 1;
+      const key = pct20ProductKey(bo.product);
+      const rec = buckets[key];
+      if (!rec) return;
+      rec.total += 1;
+      const name = String(bo.product || rec.product);
+      samples[key][name] = (samples[key][name] || 0) + 1;
+      const rawRow = (slots.backorder.rows || [])[bo.id];
+      const isPaidAmt = pct20IsPaidAmount(rawRow ? cellByLetter(rawRow, paidLetter) : "");
+      if (isPaidAmt) rec.paid += 1;
+      else rec.notPaid += 1;
+      const channel = pct20Channel(bo, rawRow);
+      if (channel === "b2c") {
+        rec.b2c += 1;
+        if (isPaidAmt) rec.b2cPaid += 1;
+      } else if (channel === "telesales") {
+        rec.telesales += 1;
+        if (isPaidAmt) rec.telesalesPaid += 1;
       } else {
-        row.unknown += 1;
+        rec.unknown += 1;
       }
     });
-    const rows = PCT20_ORDER.map((p) => {
-      const row = buckets[p.key];
-      row.sampleProduct = pick20PctSample(row);
-      return row;
+    const rows = PCT20_CARS.map((p) => {
+      const rec = buckets[p.key];
+      let sampleProduct = p.label;
+      let best = 0;
+      Object.keys(samples[p.key]).forEach((name) => {
+        if (samples[p.key][name] > best) {
+          best = samples[p.key][name];
+          sampleProduct = name;
+        }
+      });
+      rec.sampleProduct = sampleProduct;
+      return rec;
     });
-    const totals = rows.reduce((t, r) => {
-      t.total += r.total;
-      t.paid += r.paid;
-      t.notPaid += r.notPaid;
-      t.b2c += r.b2c;
-      t.b2cPaid += r.b2cPaid;
-      t.telesales += r.telesales;
-      t.telesalesPaid += r.telesalesPaid;
-      t.unknown += r.unknown;
-      return t;
-    }, empty20PctRow("TOTAL"));
-    totals.product = "TOTAL";
+    rows.forEach((r) => {
+      if (r.paid + r.notPaid !== r.total || r.b2c + r.telesales + r.unknown !== r.total) {
+        console.warn("[20% Cars] identity mismatch", r.product, r);
+      }
+    });
+    const totals = pct20EmptyRow("TOTAL");
+    rows.forEach((r) => {
+      totals.total += r.total;
+      totals.paid += r.paid;
+      totals.notPaid += r.notPaid;
+      totals.b2c += r.b2c;
+      totals.b2cPaid += r.b2cPaid;
+      totals.telesales += r.telesales;
+      totals.telesalesPaid += r.telesalesPaid;
+      totals.unknown += r.unknown;
+    });
     return { rows, totals };
   }
 
   function renderBo20PctCars(list) {
-    const host = document.getElementById("bo-20pct-body");
-    if (!host) return;
+    const el = $("#bo-20pct-cars");
+    if (!el) return;
     const { rows, totals } = build20PctCars(list);
     console.info("[20% Cars]", totals);
-    const paidPct = totals.total ? Math.round((totals.paid / totals.total) * 100) : 0;
-    const unknownLine = totals.unknown
-      ? `<div><span>Unknown</span><b>${escapeHtml(formatNumber(totals.unknown))}</b></div>`
-      : "";
-    host.innerHTML = `
-      <div class="bo-20pct-kpis">
-        <div><span>Total 20% cars</span><b>${escapeHtml(formatNumber(totals.total))}</b></div>
-        <div class="is-paid"><span>Paid</span><b>${escapeHtml(formatNumber(totals.paid))}</b></div>
-        <div class="is-not"><span>Not paid</span><b>${escapeHtml(formatNumber(totals.notPaid))}</b></div>
-        <div><span>Paid %</span><b>${escapeHtml(String(paidPct))}%</b></div>
+    const paidPct = totals.total ? ((totals.paid / totals.total) * 100).toFixed(1) + "%" : "0.0%";
+    const b2cUnpaid = totals.b2c - totals.b2cPaid;
+    const telUnpaid = totals.telesales - totals.telesalesPaid;
+    const rowHtml = rows.map((r) => {
+      const filterName = r.sampleProduct || r.product;
+      return `<tr class="bo-prod-row" data-bo-product="${escapeHtml(filterName)}">
+        <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(filterName)}">${escapeHtml(r.product)}</button></td>
+        <td class="num">${formatNumber(r.total)}</td>
+        <td class="num bo-20pct-paid">${formatNumber(r.paid)}</td>
+        <td class="num bo-20pct-unpaid">${formatNumber(r.notPaid)}</td>
+        <td class="num">${formatNumber(r.b2c)}</td>
+        <td class="num">${formatNumber(r.telesales)}</td>
+      </tr>`;
+    }).join("");
+    el.innerHTML = `<div class="bo-20pct-head"><h2>20% Cars</h2></div>
+      <div class="bo-20pct-stats">
+        <span>Total 20% cars <b>${formatNumber(totals.total)}</b></span>
+        <span class="bo-20pct-paid">Paid <b>${formatNumber(totals.paid)}</b></span>
+        <span class="bo-20pct-unpaid">Not paid <b>${formatNumber(totals.notPaid)}</b></span>
+        <span>Paid % <b>${escapeHtml(paidPct)}</b></span>
       </div>
-      <div class="bo-20pct-kpis bo-20pct-channels">
-        <div>
-          <span>B2C</span>
-          <b>${escapeHtml(formatNumber(totals.b2c))}</b>
-          <small><em class="bo-20pct-paid">${escapeHtml(formatNumber(totals.b2cPaid))} paid</em>
-          · <em class="bo-20pct-not">${escapeHtml(formatNumber(totals.b2c - totals.b2cPaid))} not paid</em></small>
-        </div>
-        <div>
-          <span>Telesales</span>
-          <b>${escapeHtml(formatNumber(totals.telesales))}</b>
-          <small><em class="bo-20pct-paid">${escapeHtml(formatNumber(totals.telesalesPaid))} paid</em>
-          · <em class="bo-20pct-not">${escapeHtml(formatNumber(totals.telesales - totals.telesalesPaid))} not paid</em></small>
-        </div>
-        ${unknownLine}
+      <div class="bo-20pct-channels">
+        <span>B2C <b>${formatNumber(totals.b2c)}</b> · <span class="bo-20pct-paid">Paid ${formatNumber(totals.b2cPaid)}</span> / <span class="bo-20pct-unpaid">Not paid ${formatNumber(b2cUnpaid)}</span></span>
+        <span>Telesales <b>${formatNumber(totals.telesales)}</b> · <span class="bo-20pct-paid">Paid ${formatNumber(totals.telesalesPaid)}</span> / <span class="bo-20pct-unpaid">Not paid ${formatNumber(telUnpaid)}</span></span>
+        ${totals.unknown ? `<span>Unknown <b>${formatNumber(totals.unknown)}</b></span>` : ""}
       </div>
       <div class="table-wrap">
         <table class="bo-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th class="num">Total</th>
-              <th class="num">Paid</th>
-              <th class="num">Not Paid</th>
-              <th class="num">B2C</th>
-              <th class="num">Telesales</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map((r) => {
-              const filter = r.sampleProduct || r.product;
-              return `<tr class="bo-prod-row" data-bo-product="${escapeHtml(filter)}">
-                <td>${escapeHtml(r.product)}</td>
-                <td class="num">${escapeHtml(formatNumber(r.total))}</td>
-                <td class="num bo-20pct-paid">${escapeHtml(formatNumber(r.paid))}</td>
-                <td class="num bo-20pct-not">${escapeHtml(formatNumber(r.notPaid))}</td>
-                <td class="num">${escapeHtml(formatNumber(r.b2c))}</td>
-                <td class="num">${escapeHtml(formatNumber(r.telesales))}</td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-          <tfoot>
-            <tr class="bo-total-row">
-              <td><b>TOTAL</b></td>
-              <td class="num"><b>${escapeHtml(formatNumber(totals.total))}</b></td>
-              <td class="num bo-20pct-paid"><b>${escapeHtml(formatNumber(totals.paid))}</b></td>
-              <td class="num bo-20pct-not"><b>${escapeHtml(formatNumber(totals.notPaid))}</b></td>
-              <td class="num"><b>${escapeHtml(formatNumber(totals.b2c))}</b></td>
-              <td class="num"><b>${escapeHtml(formatNumber(totals.telesales))}</b></td>
-            </tr>
-          </tfoot>
+          <thead><tr>
+            <th>Product</th>
+            <th class="num">Total</th>
+            <th class="num">Paid</th>
+            <th class="num">Not Paid</th>
+            <th class="num">B2C</th>
+            <th class="num">Telesales</th>
+          </tr></thead>
+          <tbody>${rowHtml}</tbody>
+          <tfoot><tr class="bo-total-row">
+            <td><b>TOTAL</b></td>
+            <td class="num"><b>${formatNumber(totals.total)}</b></td>
+            <td class="num bo-20pct-paid"><b>${formatNumber(totals.paid)}</b></td>
+            <td class="num bo-20pct-unpaid"><b>${formatNumber(totals.notPaid)}</b></td>
+            <td class="num"><b>${formatNumber(totals.b2c)}</b></td>
+            <td class="num"><b>${formatNumber(totals.telesales)}</b></td>
+          </tr></tfoot>
         </table>
       </div>`;
+    el.querySelectorAll("[data-bo-product]").forEach((node) => {
+      node.addEventListener("click", (e) => {
+        e.stopPropagation();
+        boView.product = node.getAttribute("data-bo-product") || "";
+        boView.car = boView.product;
+        refreshBoFromFilters();
+      });
+    });
   }
 
   function renderBoKpis(m, extras) {
@@ -15907,6 +16015,14 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }
     const product = cellToString(v && v.product).trim() || "—";
     const suffix = normalizeProductSuffix(product, cellToString(v && (v.suffix || v.sfx)).trim() || "—");
+    const details = v && v.details && typeof v.details === "object" ? v.details : null;
+    // Exact "Sharing Level" (capital L) only — not "Sharing level" codes.
+    const sharingExact = details && details["Sharing Level"] != null
+      ? cellToString(details["Sharing Level"]).trim()
+      : "";
+    const sharingLevel = sharingExact
+      || cellToString(v && (v.sharingLevel || v.shareLevel || v.sharing)).trim()
+      || "";
     return {
       id: `rtl-day-${dateKey}-${i}`,
       source: "RTL-daily",
@@ -15920,9 +16036,14 @@ body.live-app #panel-salesreport .sr-emp-sum {
       usage: cellToString(v && v.usage).trim()
         || detailByHeader(v && v.details, ["usage description", "usage desc", "usage"])
         || "—",
-      location: cellToString(v && v.location).trim() || "—",
+      location: cellToString(v && v.location).trim()
+        || detailByHeader(v && v.details, ["current location", "allocated location", "location"])
+        || "—",
       status: cellToString(v && v.status).trim(),
       searchAreaDesc: cellToString(v && (v.vehicleSearchArea || v.searchAreaDesc)).trim(),
+      sharingLevel,
+      shareLevel: sharingLevel,
+      details,
       snapshotDate: dateKey,
       snapshotId: snapId || "",
     };
@@ -17908,8 +18029,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const qrs = boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3");
     const defs = {
       dup_col_f: { id: "dup_col_f", label: `Duplicate ${f}`, severity: "critical" },
-      missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70)`, severity: "critical" },
-      paid_other_product: { id: "paid_other_product", label: `${j} filled (not CAMRY·LC300·LC70)`, severity: "critical" },
+      missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70·RAV4·HILUX DC/SC)`, severity: "critical" },
+      paid_other_product: { id: "paid_other_product", label: `${j} filled (not CAMRY·LC300·LC70·RAV4·HILUX DC/SC)`, severity: "critical" },
       sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: `ALJUF/Bank not Confirmed (${h})`, severity: "critical" },
       rav4_nop_040: { id: "rav4_nop_040", label: `RAV4 ${nop} = 040`, severity: "critical" },
       rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} → Col AC correction`, severity: "critical" },
@@ -17918,9 +18039,10 @@ body.live-app #panel-salesreport .sr-emp-sum {
       col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe (except EB2C)`, severity: "critical" },
       camry_nop_00_20: { id: "camry_nop_00_20", label: `CAMRY ${nop} = 00 or 20`, severity: "critical" },
       lc300_nop_00_20: { id: "lc300_nop_00_20", label: `LC300 ${nop} = 00 or 20`, severity: "critical" },
-      veloz_nop_s28: { id: "veloz_nop_s28", label: `VELOZ ${nop} = S28`, severity: "critical" },
+      veloz_nop_s28: { id: "veloz_nop_s28", label: `VELOZ ${nop} = S28 or 3Q3`, severity: "critical" },
       crown_qrs_20: { id: "crown_qrs_20", label: `CROWN ${qrs} = 20`, severity: "critical" },
-      bad_model_year: { id: "bad_model_year", label: "Model Year = 2027", severity: "warn" },
+      yaris_qrs_20: { id: "yaris_qrs_20", label: `YARIS ${qrs} = 20`, severity: "critical" },
+      bad_model_year: { id: "bad_model_year", label: "Model Year = 2027 (LC·FJ·URBAN·HILUX DC/SC)", severity: "warn" },
     };
     const phoneLetter = boePhoneLetter();
     if (phoneLetter) {
@@ -17969,6 +18091,23 @@ body.live-app #panel-salesreport .sr-emp-sum {
       return key === ak || key.startsWith(ak) || key.includes(ak);
     });
   }
+
+  /** Exact product match — avoids "LC" matching "LC300" / "LC70". */
+  function boeIsProductExact(product, aliases) {
+    const key = boeNormProductKey(product);
+    if (!key) return false;
+    return (aliases || []).some((a) => key === boeNormProductKey(a));
+  }
+
+  function boeIsYear2027Product(product) {
+    const key = boeNormProductKey(product);
+    if (!key) return false;
+    if (key === "LC" || key === "FJ" || key === "LCFJ") return true;
+    if (key === "URBAN" || key === "URBANCRUISER" || key.startsWith("URBAN")) return true;
+    return boeIsProductExact(product, ["HILUX DC", "HILUX SC"]);
+  }
+
+  const BOE_PAID_PRODUCTS = ["CAMRY", "LC300", "LC70", "RAV4", "RAV 4", "HILUX DC", "HILUX SC"];
 
   function boeIsRav4(product) {
     return boeIsProduct(product, ["RAV4", "RAV 4"]);
@@ -18181,10 +18320,10 @@ body.live-app #panel-salesreport .sr-emp-sum {
           pushErr("dup_ship_to", [shipLetter]);
         }
 
-        // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70 — skip ALJUF & Bank.
+        // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70/RAV4/HILUX DC/SC — skip ALJUF & Bank.
         // Any other product with a paid amount is an error.
         if (salesType !== "ALJUF" && salesType !== "Bank") {
-          const paidAllowed = boeIsProduct(product, ["CAMRY", "LC300", "LC70"]);
+          const paidAllowed = boeIsProduct(product, BOE_PAID_PRODUCTS);
           const jTok = boeToken(colJ);
           const paidBlank = isBlankBoField(colJ) || !jTok || /^0+$/.test(jTok);
           if (paidAllowed && paidBlank) pushErr("missing_col_j", ["J"]);
@@ -18221,15 +18360,19 @@ body.live-app #panel-salesreport .sr-emp-sum {
           if (hit.length) pushErr("lc300_nop_00_20", hit);
         }
         if (boeIsProduct(product, ["VELOZ"])) {
-          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["S28"]);
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["S28", "3Q3"]);
           if (hit.length) pushErr("veloz_nop_s28", hit);
         }
         if (boeIsProduct(product, ["CROWN"])) {
           const hit = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
           if (hit.length) pushErr("crown_qrs_20", hit);
         }
+        if (boeIsProduct(product, ["YARIS", "YARIS SD"])) {
+          const hit = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
+          if (hit.length) pushErr("yaris_qrs_20", hit);
+        }
 
-        if (year === "2027") {
+        if (year === "2027" && boeIsYear2027Product(product)) {
           pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
         }
       }
@@ -22258,14 +22401,24 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return dvpConsultantInList(r, dvpLexusConsultantNames());
   }
 
-  /** B2C channel: Sales Raw Col A matches Toyota B2C controller users. */
+  function isNotAssignedSaleRow(r) {
+    const raw = String((r && (r._salesmanRaw || r.salesman)) || "").trim();
+    if (!raw) return false;
+    const loose = normalizeNameLoose(rosterSalesmanName(raw) || raw);
+    if (!loose) return false;
+    if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c" || loose === "e b2c") return true;
+    if (/^api[\s\-_]*(batch|patch)$/.test(loose) || /^e[\s\-]?commerce$/.test(loose)) return true;
+    return nameKey(raw) === nameKey("Not assigned");
+  }
+
+  /** B2C channel: Toyota B2C controller users in Col A, plus Not Assigned / EB2C rows. */
   function isB2cSaleRow(r) {
-    return dvpConsultantInList(r, dvpB2cMatchNames());
+    return isNotAssignedSaleRow(r) || dvpConsultantInList(r, dvpB2cMatchNames());
   }
 
   function dvpBucketForSaleRow(r, guestKeys) {
     // 1) Lexus = Hamid Saeed (Col A) + Lexus controller users
-    // 2) B2C = Toyota B2C controller users (Col A)
+    // 2) B2C = Toyota B2C controller users (Col A) + Not Assigned / EB2C
     // 3) Guest Exp = Admin Push selected employees
     // 4) Telesales = everyone else
     if (isLexusConsultantSaleRow(r)) return "lexus";
@@ -22280,7 +22433,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (!window.SalesControl || typeof window.SalesControl.setChannelSubs !== "function") return;
     window.SalesControl.setChannelSubs({
       lexus: dvpLexusConsultantNames()[0] || "Hamid Saeed",
-      b2c: dvpB2cConsultantNames().join(" · ") || "Controller users",
+      b2c: (dvpB2cConsultantNames().concat(["Not Assigned"]).join(" · ")) || "Not Assigned",
     });
   }
 
@@ -22359,7 +22512,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
       const emptyTip = id === "lexus"
         ? "No Col A Hamid Saeed rows in this period."
         : id === "b2c"
-          ? "No Col A Toyota B2C user rows in this period."
+          ? "No Col A Toyota B2C / Not Assigned rows in this period."
           : id === "guest"
             ? "No deliveries/proforma for Admin Guest Exp advisors in this period."
             : "No delivered or proforma activity in this period.";
@@ -23226,9 +23379,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   }
 
   let rvBoardOrders = {};
-  let rvSnapshotVersion = "";
   let rvHistoryPage = 1;
-  let rvAuditPage = 1;
   let rvSheetMode = "live";
 
   function rvPad(n) { return String(n).padStart(2, "0"); }
@@ -23241,30 +23392,34 @@ body.live-app #panel-salesreport .sr-emp-sum {
     return `${rvPad(Math.floor(total / 3600))}:${rvPad(Math.floor((total % 3600) / 60))}:${rvPad(total % 60)}`;
   }
   function rvTimerText(dateText, deadline) {
-    if (!dateText) return "No Assignment Date";
+    if (!dateText) return "—";
     const remain = rvRemain(deadline);
     return remain ? `${dateText} ( ${remain} )` : dateText;
   }
-  function rvAheadText(order, index) {
-    const item = (order.ahead || [])[index];
-    if (!item) return "—";
-    const orderNo = item.orderNumber && item.orderNumber !== "NO ORDER" ? item.orderNumber : "";
-    return ["#" + (item.queueNumber == null ? "" : item.queueNumber), orderNo, item.salesAdvisor || ""].filter(Boolean).join(" ") || "—";
+  function rvQueueOrderAt(order, tier) {
+    const list = Array.isArray(order.queueOrders) && order.queueOrders.length
+      ? order.queueOrders
+      : (Array.isArray(order.ahead) ? order.ahead : []);
+    return list[tier - 1] || null;
+  }
+  function rvQueueOrderHtml(order, tier) {
+    const item = rvQueueOrderAt(order, tier);
+    const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : "";
+    if (!orderNo || orderNo === "NO ORDER") {
+      return `<span class="rv-q-box is-empty" title="No matching back order #${tier}">—</span>`;
+    }
+    const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : "";
+    const title = `Queue #${tier} · order ${orderNo}` + (who ? ` · ${who}` : "");
+    return `<span class="rv-q-box" title="${escapeHtml(title)}">${escapeHtml(orderNo)}</span>`;
+  }
+  function rvUpdatedBy(order) {
+    return order.statusNoteBy || order.statusChangedBy || order.leaderNoteBy || "";
   }
   function rvChannelOk(order) {
     const area = String(order.area || "").toLowerCase();
     const share = String(order.share || "").toLowerCase();
     return area === "rtlesal" || share.includes("retail electronic sales");
   }
-  function rvPushSource(item) {
-    const source = String((item && item.source) || "").toLowerCase();
-    if (source.includes("report")) return "Report sheet";
-    if (source.includes("reserved")) return "Reserved admin";
-    const who = String((item && item.uploadedBy) || "");
-    if (/report/i.test(who)) return "Report sheet";
-    return who || "Push";
-  }
-
   function rvColumnVStatus(vin) {
     if (!vin || typeof findSalesRawDetailForVin !== "function") return { label: "Unknown", cls: "na" };
     const sales = findSalesRawDetailForVin(vin);
@@ -23273,16 +23428,83 @@ body.live-app #panel-salesreport .sr-emp-sum {
     if (String(raw).trim() && String(raw).trim() !== "—" && String(raw).trim() !== "NA") return { label: "Delivered", cls: "ok" };
     return { label: "Proforma", cls: "warn" };
   }
-
   function rvCsv(rows) {
-    const header = ["Queue", "Order", "VIN", "Advisor", "Payment", "Reservation status", "Sales Raw"];
+    const header = ["Salesman", "Model year", "Customer", "Status", "Note", "Leader note", "Updated by", "Order", "Product", "Suffix", "Exterior", "Interior", "VIN", "Expiry", "Usage", "Age", "Area", "Share", "Queue 1", "Queue 2", "Queue 3"];
     const lines = [header.join(",")].concat(rows.map((row) => header.map((key) => `"${String(row[key] == null ? "" : row[key]).replace(/"/g, '""')}"`).join(",")));
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = rvSnapshotVersion ? `reserved-snapshot-${rvSnapshotVersion}.csv` : "reserved-live-sheet.csv";
+    link.download = "reserved-live-sheet.csv";
     link.click();
     URL.revokeObjectURL(link.href);
+  }
+  function rvFindMarketing(id, orderNumber) {
+    const token = String(orderNumber || "").replace(/\s+/g, "").toLowerCase();
+    return ((rvBoardOrders && rvBoardOrders.requests) || []).find((item) => {
+      if (id && item.id === id) return true;
+      return !id && token && String(item.orderNumber || "").replace(/\s+/g, "").toLowerCase() === token;
+    }) || null;
+  }
+  function closeRvMarketingWide() {
+    const box = $("#rv-mkt-wide");
+    if (box) box.hidden = true;
+  }
+  function openRvMarketingWide(id, orderNumber) {
+    const item = rvFindMarketing(id, orderNumber);
+    const box = $("#rv-mkt-wide");
+    const title = $("#rv-mkt-wide-title");
+    const sub = $("#rv-mkt-wide-sub");
+    const body = $("#rv-mkt-wide-body");
+    const foot = $("#rv-mkt-wide-foot");
+    if (!item || !box || !body || !foot) return;
+    if (title) title.textContent = `Order ${item.orderNumber || ""}`;
+    if (sub) {
+      const stamp = item.cancelled
+        ? `Cancelled${item.cancelledDisplay ? " · " + item.cancelledDisplay : ""}`
+        : item.done
+          ? `Done${item.doneBy ? " · " + item.doneBy : ""}${item.doneDisplay ? " · " + item.doneDisplay : ""}`
+          : `Sent ${item.display || (item.at ? new Date(item.at).toLocaleString() : "—")}`;
+      sub.textContent = `${item.advisorName || "Advisor"}${item.product ? " · " + item.product : ""} · ${stamp}`;
+    }
+    const facts = [
+      ["Order number", item.orderNumber || "—"],
+      ["Advisor", item.advisorName || "—"],
+      ["Employee #", item.employeeNumber || "—"],
+      ["Product", item.product || "—"],
+      ["Sent", item.display || (item.at ? new Date(item.at).toLocaleString() : "—")],
+    ].concat((item.fields || []).map((field) => [field.label, field.value]));
+    body.innerHTML = facts.map(([label, value]) => `<div class="fact"><span>${escapeHtml(label)}</span><b dir="auto">${escapeHtml(value || "—")}</b></div>`).join("");
+    if (item.cancelled) {
+      foot.innerHTML = `<span class="rv-mkt-stamp" style="border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.12);color:#64748b">Cancelled</span>`;
+    } else if (item.done) {
+      foot.innerHTML = `<span class="rv-mkt-stamp" title="${escapeHtml(item.doneDisplay || item.doneAt || "")}">Done · ${escapeHtml(item.doneBy || "Leader")}</span>`;
+    } else {
+      foot.innerHTML = `<button type="button" class="rv-mkt-done-btn" data-rv-mkt-done="${escapeHtml(item.id || "")}" data-rv-mkt-order="${escapeHtml(item.orderNumber || "")}">Done</button>`;
+    }
+    box.hidden = false;
+  }
+  async function markRvMarketingDone(id, orderNumber, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "…";
+    }
+    try {
+      const res = await fetch("/api/reserved-orders/marketing/done", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: id || "", orderNumber: orderNumber || "", doneBy: "Leader" }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Could not stamp Done.");
+      closeRvMarketingWide();
+      await loadRvBoard(true);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Done";
+      }
+      alert(err.message || "Could not stamp Done.");
+    }
   }
 
   function paintRvLiveSheet(needle) {
@@ -23291,35 +23513,14 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const mkt = $("#rv-mkt-rows");
     const mktCount = $("#rv-mkt-count");
     const history = $("#rv-history");
-    const audit = $("#rv-audit");
-    if (!mkt || !history || !audit) return;
+    if (!mkt || !history) return;
     const data = rvBoardOrders || {};
-    const viewing = data.viewing || rvSnapshotVersion || "";
     const dash = $("#rv-dash");
-    if (dash) dash.classList.toggle("is-snapshot", !!viewing);
-    const banner = $("#rv-snapshot-banner");
-    if (banner) {
-      if (viewing) {
-        banner.hidden = false;
-        banner.innerHTML = `Viewing snapshot ${escapeHtml(viewing)} · ${escapeHtml(data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "saved push")} · Sales Raw status uses the current Sales Raw file. <button type="button" class="btn" id="rv-back-live">Back to current live sheet</button>`;
-        const back = $("#rv-back-live");
-        if (back) back.addEventListener("click", () => { rvSnapshotVersion = ""; const sel = $("#rv-push"); if (sel) sel.value = ""; loadRvBoard(true); });
-      } else banner.hidden = true;
-    }
+    if (dash) dash.classList.remove("is-snapshot");
     const updated = $("#rv-updated");
     if (updated) updated.textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No push yet";
-    if (meta) meta.textContent = `${data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No live push yet"} · ${data.esalesName || "Stock E-Sales"} · ${data.boName || "Back Order"}`;
-    const pushes = data.pushes || [];
-    ["rv-push", "rv-push-from", "rv-push-to"].forEach((id, index) => {
-      const sel = $("#" + id);
-      if (!sel) return;
-      const current = sel.value;
-      const first = index === 0 ? `<option value="">Current live sheet</option>` : `<option value="">${index === 1 ? "Earlier push" : "Later push"}</option>`;
-      sel.innerHTML = first + pushes.slice().reverse().map((item) => `<option value="${escapeHtml(item.version)}">${escapeHtml(item.display || item.at || item.version)} · ${escapeHtml(item.uploadedBy || "Admin")}</option>`).join("");
-      if ([...sel.options].some((opt) => opt.value === current)) sel.value = current;
-      if (id === "rv-push" && viewing) sel.value = viewing;
-    });
-    const q = String(needle || "").trim().toLowerCase();
+    if (meta) meta.textContent = `${data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No live push yet"} · ${data.esalesName || "Stock E-Sales"} · ${data.boName || "Back Order"} · same columns as reserved-orders admin`;
+    const q = String(needle || ($("#rv-search") || {}).value || "").trim().toLowerCase();
     const orders = data.orders || [];
     document.querySelectorAll("[data-rv-sheet]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-rv-sheet") === rvSheetMode);
@@ -23336,17 +23537,17 @@ body.live-app #panel-salesreport .sr-emp-sum {
         ["Sold VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed", "Left the sheet", '<path d="M5 12.5l4.5 4.5L19 7.5"/>'],
         ["Delivered", delivered, "rv-tone-live", "Invoiced · Sales Raw col V", '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.7"/><circle cx="17" cy="17.5" r="1.7"/>'],
         ["Proforma", proforma, "rv-tone-mkt", "Sold, not invoiced yet", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'],
-        ["Marketing", (data.requests || []).filter((item) => !item.cancelled).length, "rv-tone-amber", "Open orders", '<path d="M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6"/>'],
+        ["Marketing", (data.requests || []).filter((item) => !item.cancelled && !item.done).length, "rv-tone-amber", "Open orders", '<path d="M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6"/>'],
         ["Reassigned", counts.reassigned || 0, "rv-tone-move", "Moved to another advisor", '<path d="M7 7h11l-3-3M17 17H6l3 3"/>'],
       ];
       kpis.innerHTML = cards.map(([label, value, tone, sub, ico]) => `<div class="bo-kpi ${tone}"><span class="rv-kico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ico}</svg></span><span class="lab">${escapeHtml(label)}</span><strong class="val">${escapeHtml(String(value))}</strong><span class="rv-ksub">${escapeHtml(sub)}</span></div>`).join("");
     }
     if (table) {
       const pool = rvSheetMode === "removed" ? removedOrders : liveOrders;
-      const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.suffix, order.soldLabel, order.soldKind].join(" ").toLowerCase().includes(q));
+      const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.statusNote, order.leaderNote, order.suffix, order.soldLabel, order.soldKind, rvUpdatedBy(order)].join(" ").toLowerCase().includes(q));
       const head = rvSheetMode === "removed"
         ? ["Sold as", "Salesman name", "Customer name", "Order number", "Product", "VIN number", "Last status", "Invoice (V)", "Where"]
-        : ["Salesman name", "Customer name", "Order number", "Model year", "Product", "Area", "Sharing level", "ALJ suffix", "Exterior color", "Interior color", "VIN number", "Reservation exp date", "Status", "Queue 1", "Queue 2", "Queue 3"];
+        : ["Salesman name", "Model year", "Customer name", "Status", "Note", "Leader note", "Updated by", "Order number", "Product", "ALJ suffix", "Exterior color", "Interior color", "VIN", "Expiry date", "Usage", "Allocation age", "Area", "Share level", "Queue 1", "Queue 2", "Queue 3"];
       table.innerHTML = shown.length
         ? `<table><thead><tr>${head.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${shown.slice(0, 300).map((order) => {
             if (rvSheetMode === "removed") {
@@ -23367,33 +23568,55 @@ body.live-app #panel-salesreport .sr-emp-sum {
             const rowCls = [cancel ? "rv-row-cancel" : ""].filter(Boolean).join(" ");
             const initialsOf = (name) => { const p = String(name || "").trim().split(/\s+/).filter(Boolean); return p.length ? ((p[0][0] || "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() : "?"; };
             const hueOf = (name) => { let h = 0; String(name || "").split("").forEach((ch) => { h = (h * 31 + ch.charCodeAt(0)) % 360; }); return h; };
-            const cells = [
-              order.salesAdvisor, order.customerName, order.orderNumber, order.modelYear, order.product, order.area, order.share, order.suffix, order.exterior, order.interior,
-            ].map((value, index) => {
-              if (index === 0) return `<td><span class="rv-who"><span class="rv-av" style="--h:${hueOf(value)}">${escapeHtml(initialsOf(value))}</span><span>${escapeHtml(value || "—")}</span></span></td>`;
-              if (index === 2) return `<td class="rv-ord">${escapeHtml(value || "—")}</td>`;
-              return `<td${index === 4 ? ` class="${productCls.trim()}"` : ""}>${escapeHtml(value || "—")}</td>`;
-            }).join("");
-            return `<tr class="${rowCls}">${cells}
-              <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
-              <td class="rv-timer" data-date="${escapeHtml(order.assignDate || "")}" data-deadline="${escapeHtml(order.deadline || "")}">${escapeHtml(rvTimerText(order.assignDate, order.deadline))}</td>
+            const expiryText = order.expiryDisplay || order.assignDate || "";
+            return `<tr class="${rowCls}">
+              <td><span class="rv-who"><span class="rv-av" style="--h:${hueOf(order.salesAdvisor)}">${escapeHtml(initialsOf(order.salesAdvisor))}</span><span>${escapeHtml(order.salesAdvisor || "—")}</span></span></td>
+              <td>${escapeHtml(order.modelYear || "—")}</td>
+              <td dir="auto">${escapeHtml(order.customerName || "—")}</td>
               <td><span class="rv-st${cancel ? " is-cancel" : ""}">${escapeHtml(order.status || "—")}</span></td>
-              <td>${escapeHtml(rvAheadText(order, 0))}</td>
-              <td>${escapeHtml(rvAheadText(order, 1))}</td>
-              <td>${escapeHtml(rvAheadText(order, 2))}</td>
+              <td dir="auto" title="${escapeHtml(order.statusNote || "")}">${escapeHtml(order.statusNote || "—")}</td>
+              <td dir="auto" title="${escapeHtml(order.leaderNote || "")}">${escapeHtml(order.leaderNote || "—")}</td>
+              <td>${escapeHtml(rvUpdatedBy(order) || "—")}</td>
+              <td class="rv-ord">${escapeHtml(order.orderNumber || "—")}</td>
+              <td class="${productCls.trim()}">${escapeHtml(order.product || order.vehicle || "—")}</td>
+              <td>${escapeHtml(order.suffix || "—")}</td>
+              <td>${escapeHtml(order.exterior || "—")}</td>
+              <td>${escapeHtml(order.interior || "—")}</td>
+              <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+              <td class="rv-timer" data-date="${escapeHtml(expiryText)}" data-deadline="${escapeHtml(order.deadline || "")}">${escapeHtml(rvTimerText(expiryText, order.deadline))}</td>
+              <td>${escapeHtml(order.usage || "—")}</td>
+              <td>${escapeHtml(order.allocationAge || "—")}</td>
+              <td>${escapeHtml(order.area || "—")}</td>
+              <td>${escapeHtml(order.share || "—")}</td>
+              <td>${rvQueueOrderHtml(order, 1)}</td>
+              <td>${rvQueueOrderHtml(order, 2)}</td>
+              <td>${rvQueueOrderHtml(order, 3)}</td>
             </tr>`;
           }).join("")}</tbody></table>`
         : `<p class="foot">${rvSheetMode === "removed" ? "No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw." : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
     }
     const mktQuery = String(($("#rv-mkt-search") || {}).value || "").trim().toLowerCase();
-    const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.display || item.at}`.toLowerCase().includes(mktQuery));
-    if (mktCount) mktCount.textContent = requests.length ? `${requests.filter((item) => !item.cancelled).length} open` : "Order number, advisor, and when it was sent";
+    const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.display || item.at} ${item.doneBy || ""} ${(item.fields || []).map((f) => `${f.label} ${f.value}`).join(" ")}`.toLowerCase().includes(mktQuery));
+    if (mktCount) mktCount.textContent = requests.length
+      ? `${requests.filter((item) => !item.cancelled && !item.done).length} open · ${requests.filter((item) => item.done).length} done · Wide to check · Done for employee`
+      : "Wide to review · Done stamps the employee side";
     mkt.innerHTML = requests.length
-      ? `<table><thead><tr><th>Order</th><th>Advisor</th><th>When</th></tr></thead><tbody>${requests.slice(0, 80).map((item) => `<tr class="${item.cancelled ? "is-cancelled" : ""}">
+      ? `<table><thead><tr><th>Order</th><th>Advisor</th><th>When</th><th>Actions</th></tr></thead><tbody>${requests.slice(0, 80).map((item) => {
+          const done = item.done === true;
+          const cancelled = item.cancelled === true;
+          const wideBtn = `<button type="button" class="rv-mkt-wide-btn" data-rv-mkt-wide="${escapeHtml(item.id || "")}" data-rv-mkt-order="${escapeHtml(item.orderNumber || "")}">Wide</button>`;
+          const status = cancelled
+            ? `<span class="rv-mkt-stamp" style="border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.12);color:#64748b">Cancelled</span>`
+            : done
+              ? `<span class="rv-mkt-stamp" title="${escapeHtml(item.doneDisplay || item.doneAt || "")}">Done · ${escapeHtml(item.doneBy || "Leader")}</span>`
+              : `<button type="button" class="rv-mkt-done-btn" data-rv-mkt-done="${escapeHtml(item.id || "")}" data-rv-mkt-order="${escapeHtml(item.orderNumber || "")}">Done</button>`;
+          return `<tr class="${cancelled ? "is-cancelled" : ""}${done ? " is-done" : ""}">
           <td>${escapeHtml(item.orderNumber || "—")}</td>
           <td>${escapeHtml(item.advisorName || "—")}</td>
           <td>${escapeHtml(item.display || (item.at ? new Date(item.at).toLocaleString() : "—"))}</td>
-        </tr>`).join("")}</tbody></table>`
+          <td><div class="rv-mkt-actions">${wideBtn}${status}</div></td>
+        </tr>`;
+        }).join("")}</tbody></table>`
       : `<p class="foot">No marketing orders sent yet.</p>`;
     const historyQuery = String(($("#rv-history-search") || {}).value || "").trim().toLowerCase();
     const moveByVin = new Map(((data.movement && data.movement.rows) || []).map((row) => [String(row.vin || "").toUpperCase(), row]));
@@ -23422,33 +23645,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
         }).join("")}</tbody></table>
         <div class="rv-pager"><button type="button" data-rv-hist="-1" ${rvHistoryPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvHistoryPage} / ${pages}</span><button type="button" data-rv-hist="1" ${rvHistoryPage >= pages ? "disabled" : ""}>Next</button></div>`
       : `<p class="foot">${data._error || "No VIN assignments on this sheet yet."}</p>`;
-    const fromDate = ($("#rv-date-from") || {}).value || "";
-    const toDate = ($("#rv-date-to") || {}).value || "";
-    const auditRows = pushes.filter((item) => {
-      const day = String(item.at || "").slice(0, 10);
-      if (fromDate && day && day < fromDate) return false;
-      if (toDate && day && day > toDate) return false;
-      return true;
-    }).slice().reverse();
-    const auditPages = Math.max(1, Math.ceil(auditRows.length / 6));
-    if (rvAuditPage > auditPages) rvAuditPage = auditPages;
-    const auditSlice = auditRows.slice((rvAuditPage - 1) * 6, rvAuditPage * 6);
-    const auditCount = $("#rv-audit-count");
-    if (auditCount) auditCount.textContent = `${pushes.length} snapshot${pushes.length === 1 ? "" : "s"} · live VINs still on the sheet · removed VINs keep their last status`;
-    audit.innerHTML = auditSlice.length
-      ? `<table><thead><tr><th>Push</th><th>From</th><th>Live</th><th>Removed</th><th>Newly removed</th><th></th></tr></thead><tbody>${auditSlice.map((item) => {
-          const move = item.movement || {};
-          return `<tr>
-            <td>${escapeHtml(item.display || item.at || "—")}</td>
-            <td>${escapeHtml(rvPushSource(item))}</td>
-            <td>${escapeHtml(String(item.liveVins || 0))}</td>
-            <td>${escapeHtml(String(item.removedVins || 0))}</td>
-            <td>${escapeHtml(String(move.removed || 0))}</td>
-            <td><button type="button" class="btn" data-rv-view="${escapeHtml(item.version)}">View</button></td>
-          </tr>`;
-        }).join("")}</tbody></table>
-        <div class="rv-pager"><button type="button" data-rv-audit="-1" ${rvAuditPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvAuditPage} / ${auditPages}</span><button type="button" data-rv-audit="1" ${rvAuditPage >= auditPages ? "disabled" : ""}>Next</button></div>`
-      : `<p class="foot">No push snapshots stored yet. The next push from reserved orders admin or the report sheet admin saves one.</p>`;
   }
 
   function bindRvBoardControls() {
@@ -23465,6 +23661,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
       }, 1000);
     }
     root.addEventListener("click", (e) => {
+      if (e.target === $("#rv-mkt-wide")) { closeRvMarketingWide(); return; }
+      if (e.target.closest("#rv-mkt-wide-close")) { closeRvMarketingWide(); return; }
       const soldRow = e.target.closest("[data-rv-sold]");
       if (soldRow) {
         const vin = soldRow.getAttribute("data-rv-sold") || "";
@@ -23478,12 +23676,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
         }
         return;
       }
-      const view = e.target.closest("[data-rv-view]");
-      if (view) {
-        rvSnapshotVersion = view.getAttribute("data-rv-view") || "";
-        loadRvBoard(true);
-        return;
-      }
       const sheetTab = e.target.closest("[data-rv-sheet]");
       if (sheetTab) {
         rvSheetMode = sheetTab.getAttribute("data-rv-sheet") || "live";
@@ -23492,50 +23684,30 @@ body.live-app #panel-salesreport .sr-emp-sum {
       }
       const hist = e.target.closest("[data-rv-hist]");
       if (hist) { rvHistoryPage += Number(hist.getAttribute("data-rv-hist")) || 0; paintRvLiveSheet(($("#rv-live-search") || {}).value || ""); return; }
-      const auditBtn = e.target.closest("[data-rv-audit]");
-      if (auditBtn) { rvAuditPage += Number(auditBtn.getAttribute("data-rv-audit")) || 0; paintRvLiveSheet(($("#rv-live-search") || {}).value || ""); }
+      const mktWide = e.target.closest("[data-rv-mkt-wide]");
+      if (mktWide) {
+        openRvMarketingWide(mktWide.getAttribute("data-rv-mkt-wide") || "", mktWide.getAttribute("data-rv-mkt-order") || "");
+        return;
+      }
+      const mktDone = e.target.closest("[data-rv-mkt-done]");
+      if (mktDone) {
+        if (mktDone.disabled) return;
+        markRvMarketingDone(mktDone.getAttribute("data-rv-mkt-done") || "", mktDone.getAttribute("data-rv-mkt-order") || "", mktDone);
+      }
     });
     const search = $("#rv-live-search");
     if (search) search.addEventListener("input", () => paintRvLiveSheet(search.value));
+    const topSearch = $("#rv-search");
+    if (topSearch) topSearch.addEventListener("input", () => paintRvLiveSheet(topSearch.value));
     const mktSearch = $("#rv-mkt-search");
     if (mktSearch) mktSearch.addEventListener("input", () => paintRvLiveSheet(search ? search.value : ""));
     const historySearch = $("#rv-history-search");
     if (historySearch) historySearch.addEventListener("input", () => { rvHistoryPage = 1; paintRvLiveSheet(search ? search.value : ""); });
-    const push = $("#rv-push");
-    if (push) push.addEventListener("change", () => { rvSnapshotVersion = push.value || ""; rvHistoryPage = 1; loadRvBoard(true); });
-    ["rv-date-from", "rv-date-to"].forEach((id) => {
-      const input = $("#" + id);
-      if (input) input.addEventListener("change", () => { rvAuditPage = 1; paintRvLiveSheet(search ? search.value : ""); });
-    });
-    const compare = $("#rv-compare");
-    if (compare) compare.addEventListener("click", async () => {
-      const from = ($("#rv-push-from") || {}).value || "";
-      const to = ($("#rv-push-to") || {}).value || "";
-      const box = $("#rv-compare-result");
-      if (!from || !to || from === to) {
-        if (box) { box.hidden = false; box.textContent = "Choose two different saved pushes to compare."; }
-        return;
-      }
-      try {
-        const res = await fetch(`/api/reserved-orders/board?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload.error || "Compare failed");
-        const counts = (payload.movement && payload.movement.counts) || {};
-        if (box) {
-          box.hidden = false;
-          box.textContent = `Added ${counts.new || 0} · removed ${counts.removed || 0} · reassigned ${counts.reassigned || 0} · unchanged ${counts.unchanged || 0}`;
-        }
-        rvBoardOrders = Object.assign({}, rvBoardOrders, { movement: payload.movement });
-        rvHistoryPage = 1;
-        paintRvLiveSheet(search ? search.value : "");
-      } catch (err) {
-        if (box) { box.hidden = false; box.textContent = err.message || "The snapshots could not be compared."; }
-      }
-    });
     const refresh = $("#rv-refresh");
-    if (refresh) refresh.addEventListener("click", () => { const btn = $("#run-btn"); if (btn) btn.click(); });
+    if (refresh) refresh.addEventListener("click", () => { loadRvBoard(true); });
     const exit = $("#rv-exit");
     if (exit) exit.addEventListener("click", () => {
+      closeRvMarketingWide();
       if (typeof window.switchReportPanel === "function") window.switchReportPanel("salesreport");
       else switchPanel("ytdsales");
     });
@@ -23544,14 +23716,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
   async function loadRvBoard(force) {
     bindRvBoardControls();
     const search = $("#rv-live-search");
-    if (!force && rvBoardOrders._loaded && (rvBoardOrders.viewing || "") === rvSnapshotVersion) {
+    if (!force && rvBoardOrders._loaded) {
       paintRvLiveSheet(search ? search.value : "");
       return;
     }
     try {
-      const params = new URLSearchParams();
-      if (rvSnapshotVersion) params.set("version", rvSnapshotVersion);
-      const res = await fetch(`/api/reserved-orders/board?${params.toString()}`);
+      const res = await fetch("/api/reserved-orders/board");
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || "board");
       rvBoardOrders = payload;
@@ -23562,12 +23732,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (meta) meta.textContent = rvBoardOrders._error;
     }
     paintRvLiveSheet(search ? search.value : "");
-    if (rvSnapshotVersion && activePanel === "reservedvehicles") {
-      const empty = $("#rv-empty");
-      const dash = $("#rv-dash");
-      if (empty) { empty.hidden = true; empty.style.display = "none"; }
-      if (dash) dash.hidden = false;
-    }
   }
 
   function renderReservedVehiclesTracker() {
@@ -23587,14 +23751,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
     loadRvBoard(false);
     return;
 
+    /* legacy local-sheet renderer kept below for reference; live board path returns above */
     if (!hasReservedVehiclesInputs()) {
-      if (rvSnapshotVersion) {
-        empty.hidden = true;
-        empty.style.display = "none";
-        dash.hidden = false;
-        loadRvBoard(false);
-        return;
-      }
       empty.hidden = false;
       empty.style.display = "";
       dash.hidden = true;
@@ -23605,7 +23763,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
     empty.style.display = "none";
     dash.hidden = false;
     loadRvBoard(false);
-    if (rvSnapshotVersion) return;
 
     const sheetName = slots.central.reservedSheet || "E-Sales المحجوز";
     const sheetNames = Array.isArray(slots.central.sheetNames) ? slots.central.sheetNames : [];
@@ -23915,20 +24072,39 @@ body.live-app #panel-salesreport .sr-emp-sum {
   }
 
   function exportReservedVehiclesExcel() {
-    if (rvSnapshotVersion && rvBoardOrders && Array.isArray(rvBoardOrders.orders)) {
-      rvCsv(rvBoardOrders.orders.map((order) => {
-        const sales = rvColumnVStatus(order.vin);
+    if (rvBoardOrders && Array.isArray(rvBoardOrders.orders) && rvBoardOrders.orders.length) {
+      const live = rvBoardOrders.orders.filter((order) => !order.removed);
+      rvCsv(live.map((order) => {
+        const q = (tier) => {
+          const item = rvQueueOrderAt(order, tier);
+          const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : "";
+          return !orderNo || orderNo === "NO ORDER" ? "" : orderNo;
+        };
         return {
-          Queue: order.queueNumber == null ? "" : order.queueNumber,
+          Salesman: order.salesAdvisor || "",
+          "Model year": order.modelYear || "",
+          Customer: order.customerName || "",
+          Status: order.status || "",
+          Note: order.statusNote || "",
+          "Leader note": order.leaderNote || "",
+          "Updated by": rvUpdatedBy(order) || "",
           Order: order.orderNumber || "",
+          Product: order.product || order.vehicle || "",
+          Suffix: order.suffix || "",
+          Exterior: order.exterior || "",
+          Interior: order.interior || "",
           VIN: order.vin || "",
-          Advisor: order.salesAdvisor || "",
-          Payment: order.paymentLabel || "",
-          "Reservation status": order.status || "",
-          "Sales Raw": sales.label,
+          Expiry: order.expiryDisplay || order.assignDate || "",
+          Usage: order.usage || "",
+          Age: order.allocationAge || "",
+          Area: order.area || "",
+          Share: order.share || "",
+          "Queue 1": q(1),
+          "Queue 2": q(2),
+          "Queue 3": q(3),
         };
       }));
-      setStatus(`Snapshot ${rvSnapshotVersion} exported`, "ok");
+      setStatus(`Live sheet exported · ${live.length} rows`, "ok");
       return;
     }
     if (!hasReservedVehiclesInputs()) {

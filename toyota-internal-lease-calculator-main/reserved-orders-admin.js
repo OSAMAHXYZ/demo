@@ -14,8 +14,8 @@
     let alertProducts = [];
     const BO_ERRORS = [
         ['dup_col_f', 'Duplicate Back Order Number'],
-        ['missing_col_j', 'Paid amount missing on CAMRY, LC300, or LC70'],
-        ['paid_other_product', 'Paid amount filled on another product'],
+        ['missing_col_j', 'Paid amount missing on CAMRY, LC300, LC70, RAV4, HILUX DC, or HILUX SC'],
+        ['paid_other_product', 'Paid amount filled on another product (not CAMRY/LC300/LC70/RAV4/HILUX DC/SC)'],
         ['sales_type_not_confirmed', 'ALJUF or Bank is not Confirmed'],
         ['rav4_nop_040', 'RAV4 exterior color is 040'],
         ['rav4_sh_forbidden_color', 'RAV4 SH forbidden exterior color'],
@@ -24,14 +24,30 @@
         ['col_ab_aljre_or_blank', 'Column AB blank or ALJRe'],
         ['camry_nop_00_20', 'CAMRY exterior color is 00 or 20'],
         ['lc300_nop_00_20', 'LC300 exterior color is 00 or 20'],
-        ['veloz_nop_s28', 'VELOZ exterior color is S28'],
+        ['veloz_nop_s28', 'VELOZ exterior color is S28 or 3Q3'],
         ['crown_qrs_20', 'CROWN interior color is 20'],
-        ['bad_model_year', 'Model Year is not 2026'],
+        ['yaris_qrs_20', 'YARIS interior color is 20'],
+        ['bad_model_year', 'Model Year is 2027 (LC / FJ / URBAN / HILUX DC / HILUX SC)'],
         ['phone_empty', 'Phone is empty']
     ];
     let editing = '';
     let marketingRequests = [];
     const ALERT_OPS = { equals: 'equals', not_equals: 'does not equal', contains: 'contains', not_contains: 'does not contain', gt: 'greater than', lt: 'less than', empty: 'is empty', not_empty: 'is not empty' };
+    // Built from code points so file encoding can never turn this label into mojibake.
+    const MARKETING_LABEL = String.fromCharCode(0x0637, 0x0644, 0x0628, 0x0627, 0x062A, 0x20, 0x0627, 0x0644, 0x062A, 0x0633, 0x0648, 0x064A, 0x0642);
+    function fixMarketingArabicLabels() {
+        document.querySelectorAll('#admin-nav [data-panel="marketing"]').forEach((button) => {
+            button.setAttribute('dir', 'rtl');
+            button.setAttribute('lang', 'ar');
+            button.textContent = MARKETING_LABEL;
+        });
+        const heading = document.querySelector('#panel-marketing .head h1, #panel-marketing h1');
+        if (heading) {
+            heading.setAttribute('dir', 'rtl');
+            heading.setAttribute('lang', 'ar');
+            heading.textContent = MARKETING_LABEL;
+        }
+    }
 
     const $ = (id) => document.getElementById(id);
     function password() { return sessionStorage.getItem(passKey) || ''; }
@@ -435,7 +451,14 @@
         return data;
     }
     function showGate(message) { $('gate').classList.remove('hidden'); $('admin-app').classList.add('hidden'); $('gate-error').textContent = message || ''; }
-    function showApp() { $('gate').classList.add('hidden'); $('admin-app').classList.remove('hidden'); paintAdminWho(); requestAnimationFrame(paintAdminRail); scheduleFitSheet(); }
+    function showApp() {
+        $('gate').classList.add('hidden');
+        $('admin-app').classList.remove('hidden');
+        fixMarketingArabicLabels();
+        paintAdminWho();
+        requestAnimationFrame(paintAdminRail);
+        scheduleFitSheet();
+    }
     function currentPanelName() {
         const on = document.querySelector('#admin-nav button.active');
         return (on && on.dataset.panel) || 'overview';
@@ -454,6 +477,7 @@
         else if (key === 'sold') renderSold();
         else if (key === 'sheet') renderSheet();
         else if (key === 'employees') renderStaff();
+        else if (key === 'rights') renderRights();
         else if (key === 'archive') renderArchive();
         else if (key === 'audit') renderAudit();
         else if (key === 'reports') renderReport();
@@ -488,8 +512,8 @@
     // Live sheet columns. A-J come from the pushed Reserved Order File (A salesman, B customer, C order, D model year,
     // E product, F suffix, G exterior, H interior, I VIN, J expiry). The four RTL columns come from the pushed
     // RTL Stock row of the same VIN (M status, K allocation age, N area, H share level). Same columns as the employee page.
-    const MERGED_COL_ORDER = ['Salesman name', 'Queue 3', 'Model year', 'Customer name', 'Status', 'Note', 'Updated by', 'Order number', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level'];
-    const MERGED_META_COLS = ['Queue 2', 'Queue 1'];
+    const MERGED_COL_ORDER = ['Salesman name', 'Model year', 'Customer name', 'Status', 'Note', 'Updated by', 'Order number', 'Product', 'ALJ suffix', 'Exterior color', 'Interior color', 'VIN', 'Expiry date', 'Usage', 'Allocation age', 'Area', 'Share level', 'Queue 1', 'Queue 2', 'Queue 3'];
+    const MERGED_META_COLS = [];
     const MERGED_HEAD_SHORT = {
         'Queue 1': 'Q1', 'Queue 2': 'Q2', 'Queue 3': 'Q3',
         'Salesman name': 'Salesman', 'Customer name': 'Customer', 'Updated by': 'Updated',
@@ -498,12 +522,26 @@
         'Allocation age': 'Age', 'Share level': 'Share level', 'Leader note': 'Leader'
     };
     const XL_DEFAULT_WIDTHS = {
-        'Queue 2': 28, 'Queue 1': 28, 'Salesman name': 132, 'Queue 3': 28, 'Model year': 44,
-        'Customer name': 160, Status: 100, Note: 40, 'Updated by': 56, 'Order number': 92,
-        Product: 88, 'ALJ suffix': 44, 'Exterior color': 44, 'Interior color': 36, VIN: 148,
-        'Expiry date': 128, Usage: 44, 'Allocation age': 44, Area: 72, 'Share level': 110,
-        'Leader note': 72
+        'Queue 2': 96, 'Queue 1': 96, 'Salesman name': 168, 'Queue 3': 96, 'Model year': 56,
+        'Customer name': 168, Status: 110, Note: 140, 'Updated by': 64, 'Order number': 92,
+        Product: 96, 'ALJ suffix': 52, 'Exterior color': 44, 'Interior color': 40, VIN: 148,
+        'Expiry date': 128, Usage: 56, 'Allocation age': 44, Area: 72, 'Share level': 110,
+        'Leader note': 140
     };
+    const XL_MIN_WIDTHS = {
+        'Queue 1': 84, 'Queue 2': 84, 'Queue 3': 84, 'Model year': 56,
+        'Salesman name': 96, Salesman: 96, 'Customer name': 96, Customer: 96,
+        Status: 108, Note: 88, 'Leader note': 88, Product: 72, VIN: 132,
+        'Order number': 84, 'Expiry date': 120, Area: 64, 'Share level': 96, 'ALJ suffix': 52
+    };
+    const XL_MAX_WIDTHS = {
+        'Salesman name': 280, Salesman: 280, 'Customer name': 300, Customer: 300,
+        Note: 240, 'Leader note': 220, Product: 200, 'Share level': 180, Area: 160
+    };
+    const XL_FIT_LABELS = new Set(['Salesman name', 'Salesman', 'Customer name', 'Customer', 'Note', 'Leader note', 'Product', 'Status']);
+    const XL_PAD_N = 14;
+    const XL_PAD_W = 64;
+    const XL_RN_W = 36;
     const XL_MONO_COLS = new Set(['Order number', 'VIN', 'ALJ suffix', 'Exterior color', 'Interior color', 'Area', 'Model year', 'Queue 1', 'Queue 2', 'Queue 3', 'Allocation age']);
     const XL_NUM_COLS = new Set(['Order number', 'Model year', 'Queue 1', 'Queue 2', 'Queue 3', 'Allocation age']);
     const XL_WIDTHS_KEY = 'ro-sheet-colwidths';
@@ -512,6 +550,84 @@
     const XL_CF_KEY = 'ro-sheet-cf';
     let xlWidths = {};
     try { xlWidths = JSON.parse(localStorage.getItem(XL_WIDTHS_KEY) || '{}') || {}; } catch (e) { xlWidths = {}; }
+    let xlAutoWidths = {};
+    function measureTextPx(text, font) {
+        if (!measureTextPx.c) measureTextPx.c = document.createElement('canvas').getContext('2d');
+        measureTextPx.c.font = font || '13px Inter,"IBM Plex Sans Arabic",system-ui,sans-serif';
+        return Math.ceil(measureTextPx.c.measureText(String(text || '')).width);
+    }
+    function widthBounds(label) {
+        return { min: XL_MIN_WIDTHS[label] || 40, max: XL_MAX_WIDTHS[label] || 200 };
+    }
+    function widthOf(label) {
+        const { min, max } = widthBounds(label);
+        const saved = Number(xlWidths[label]);
+        if (Number.isFinite(saved) && saved >= min && saved <= max) return Math.round(saved);
+        if (xlAutoWidths[label]) return xlAutoWidths[label];
+        return Math.max(min, XL_DEFAULT_WIDTHS[label] || 88);
+    }
+    function autofitCols(cols, rows, valueFn, headFn) {
+        const out = {};
+        cols.forEach((label) => {
+            const { min, max } = widthBounds(label);
+            const saved = Number(xlWidths[label]);
+            if (Number.isFinite(saved) && saved >= min && saved <= max) {
+                out[label] = Math.round(saved);
+                return;
+            }
+            let w = measureTextPx(headFn(label), '600 11.5px Inter,system-ui,sans-serif') + 28;
+            const font = '13px Inter,"IBM Plex Sans Arabic",system-ui,sans-serif';
+            const scan = XL_FIT_LABELS.has(label) ? rows.length : Math.min(rows.length, 80);
+            for (let i = 0; i < scan; i += 1) {
+                const raw = String(valueFn(rows[i], label) || '').replace(/\s+/g, ' ').trim();
+                if (!raw || raw === '—') continue;
+                w = Math.max(w, measureTextPx(raw.length > 42 ? raw.slice(0, 42) : raw, font) + 18);
+                if (w >= max) { w = max; break; }
+            }
+            out[label] = Math.max(min, Math.min(max, w));
+        });
+        xlAutoWidths = out;
+        return out;
+    }
+    function freezeMeta(cols) {
+        if (!xlFreezeOn) return { cls() { return ''; }, left() { return ''; }, last: '' };
+        const frozen = cols.slice(0, 3);
+        const lefts = {};
+        let x = XL_RN_W;
+        frozen.forEach((label) => {
+            lefts[label] = x;
+            x += widthOf(label);
+        });
+        const last = frozen[frozen.length - 1] || '';
+        return {
+            last,
+            cls(label) {
+                const i = frozen.indexOf(label);
+                if (i < 0) return '';
+                return ` xl-fz${i + 1}${label === last ? ' xl-fz-last' : ''}`;
+            },
+            left(label) {
+                return lefts[label] == null ? '' : `;left:${lefts[label]}px`;
+            }
+        };
+    }
+    function colBoxStyle(label, freeze) {
+        const w = widthOf(label);
+        return `width:${w}px;min-width:${w}px;max-width:${w}px${freeze ? freeze.left(label) : ''}`;
+    }
+    function excelPadHead(start) {
+        let html = '';
+        for (let i = 0; i < XL_PAD_N; i += 1) {
+            html += `<th class="xl-h xl-pad" data-c="${start + i}" style="width:${XL_PAD_W}px;min-width:${XL_PAD_W}px;max-width:${XL_PAD_W}px"><small class="xl-let">${esc(xlLetter(start + i))}</small><b></b></th>`;
+        }
+        return html;
+    }
+    function excelPadCols() {
+        return `<col class="xl-pad" style="width:${XL_PAD_W}px">`.repeat(XL_PAD_N);
+    }
+    function excelPadCells() {
+        return `<td class="xl-pad" style="width:${XL_PAD_W}px;min-width:${XL_PAD_W}px;max-width:${XL_PAD_W}px"></td>`.repeat(XL_PAD_N);
+    }
     let sheetSort = { label: '', dir: '' };
     let sheetColFilter = { label: '', value: '' };
     let xlFreezeOn = true;
@@ -538,8 +654,14 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN of the Reserved Order File, matched with RTL Stock and ranked against the Toyota Back Order file. Click a row to change its status.'
+        merged: 'One row per VIN of the Reserved Order File, matched with RTL Stock and ranked against the Toyota Back Order file. Queue 1–3 show the first three matching back-order numbers (product + suffix + exterior + interior), same ranking as BO Order Lookup. Click a row to change its status.'
     };
+    function queueOrderAt(order, tier) {
+        const list = Array.isArray(order.queueOrders) && order.queueOrders.length
+            ? order.queueOrders
+            : (Array.isArray(order.ahead) ? order.ahead : []);
+        return list[tier - 1] || null;
+    }
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
         return field && field.value != null ? String(field.value).trim() : '';
@@ -642,6 +764,11 @@
                 ahead: (Array.isArray(esalesSide.ahead) && esalesSide.ahead.length ? esalesSide.ahead : null)
                     || (Array.isArray(reservedSide.ahead) && reservedSide.ahead.length ? reservedSide.ahead : null)
                     || esalesSide.ahead || [],
+                queueOrders: (Array.isArray(esalesSide.queueOrders) && esalesSide.queueOrders.length ? esalesSide.queueOrders : null)
+                    || (Array.isArray(reservedSide.queueOrders) && reservedSide.queueOrders.length ? reservedSide.queueOrders : null)
+                    || (Array.isArray(esalesSide.ahead) && esalesSide.ahead.length ? esalesSide.ahead : null)
+                    || (Array.isArray(reservedSide.ahead) && reservedSide.ahead.length ? reservedSide.ahead : null)
+                    || [],
                 boQueuePosition: esalesSide.boQueuePosition != null ? esalesSide.boQueuePosition : reservedSide.boQueuePosition,
                 boQueueSize: esalesSide.boQueueSize != null ? esalesSide.boQueueSize : reservedSide.boQueueSize,
                 boOrdersAhead: esalesSide.boOrdersAhead != null ? esalesSide.boOrdersAhead : reservedSide.boOrdersAhead,
@@ -726,9 +853,12 @@
         return Array.from(byVin.values())
             .map(buildMergedOrder)
             .sort((a, b) => {
+                const qa = a.queueNumber == null ? 9e9 : Number(a.queueNumber);
+                const qb = b.queueNumber == null ? 9e9 : Number(b.queueNumber);
+                if (qa !== qb) return qa - qb;
                 const pa = a.boQueuePosition == null ? 9e9 : Number(a.boQueuePosition);
                 const pb = b.boQueuePosition == null ? 9e9 : Number(b.boQueuePosition);
-                return pa - pb || (a.queueNumber || 0) - (b.queueNumber || 0);
+                return pa - pb;
             });
     }
     function salesTypeOf(order) {
@@ -905,8 +1035,37 @@
         </tr>`;
         }).join('');
     }
+    let lastMergedList = [];
+    function mergedOrderByKey(key) {
+        const list = lastMergedList.length ? lastMergedList : buildMergedList(orders);
+        const byKey = list.find((item) => item.key === key);
+        if (byKey) return byKey;
+        const raw = orders.find((item) => item.key === key);
+        if (!raw) return null;
+        const vin = String(raw.vin || '').trim().toUpperCase();
+        if (vin) {
+            const byVin = list.find((item) => String(item.vin || '').trim().toUpperCase() === vin);
+            if (byVin) {
+                return Object.assign({}, byVin, {
+                    key: raw.key,
+                    status: raw.status,
+                    statusNote: raw.statusNote,
+                    statusChangedBy: raw.statusChangedBy,
+                    statusChangedAt: raw.statusChangedAt,
+                    statusChangedDisplay: raw.statusChangedDisplay,
+                    statusChangedEmployeeNumber: raw.statusChangedEmployeeNumber,
+                    leaderNote: raw.leaderNote,
+                    leaderNoteBy: raw.leaderNoteBy,
+                    leaderNoteAt: raw.leaderNoteAt,
+                    leaderNoteDisplay: raw.leaderNoteDisplay,
+                    history: raw.history || byVin.history
+                });
+            }
+        }
+        return buildMergedOrder(raw);
+    }
     function openOrder(key) {
-        const order = orders.find((item) => item.key === key);
+        const order = mergedOrderByKey(key);
         if (!order) return;
         const history = (order.history || []).slice().reverse().map((item) => `<div class="status-history-row">
             <b>${esc(item.changedBy || '—')}${item.employeeNumber ? ' · ' + esc(item.employeeNumber) : ''}</b>
@@ -921,10 +1080,11 @@
             || (parseLocal(order.statusChangedAt)
                 ? parseLocal(order.statusChangedAt).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' (Saudi)'
                 : (order.statusChangedAt || ''));
-        const product = sheetValue(order, 'Product', 'merged') || order.vehicle || 'Car not named';
-        const suffix = sheetValue(order, 'ALJ suffix', 'merged') || '';
-        const customer = sheetValue(order, 'Customer name', 'merged') || order.customerName || 'No customer name';
-        const orderNo = sheetValue(order, 'Order number', 'merged') || order.orderNumber || '';
+        const val = (label) => sheetValue(order, label, 'merged');
+        const product = val('Product') || order.vehicle || 'Car not named';
+        const suffix = val('ALJ suffix') || '';
+        const customer = val('Customer name') || order.customerName || 'No customer name';
+        const orderNo = val('Order number') || order.orderNumber || '';
         const deadline = expiryDeadlineOf(order);
         const current = employeeStatusKey(order.status) || (isNotUpdated(order) ? '' : String(order.status || '').trim());
         const picks = offeredStatuses().map((name) => {
@@ -933,10 +1093,13 @@
             return `<button type="button" class="pick ${cls}" data-admin-pick="${esc(name)}" data-key="${esc(order.key)}" aria-pressed="${name === current ? 'true' : 'false'}"><b><span class="dot ${dot}"></span>${esc(name)}</b></button>`;
         }).join('');
         const tierLine = (i) => {
-            const q = (order.boTierQueues || [])[i];
-            if (!q) return `<div class="tierline"><span>Choice ${i + 1}</span><span class="muted-text">No colour choice</span><b></b></div>`;
-            const pct = q.size ? Math.max(0, Math.min(100, (Number(q.position) / Number(q.size)) * 100)) : 0;
-            return `<div class="tierline"><span>Choice ${i + 1}</span><span class="rail2"><em data-l="${pct.toFixed(1)}" style="width:0"></em><i data-l="${pct.toFixed(1)}" style="left:0"></i></span><b>#${esc(String(q.position))} / ${esc(String(q.size))}</b></div>`;
+            const item = queueOrderAt(order, i + 1);
+            const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
+            if (!orderNo) return `<div class="tierline"><span>Q${i + 1}</span><span class="muted-text">No match</span><b></b></div>`;
+            const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : '';
+            const size = order.boQueueSize || 0;
+            const pct = size ? Math.max(0, Math.min(100, ((i + 1) / Number(size)) * 100)) : 0;
+            return `<div class="tierline" title="${esc(who || orderNo)}"><span>Q${i + 1}</span><span class="rail2"><em data-l="${pct.toFixed(1)}" style="width:0"></em><i data-l="${pct.toFixed(1)}" style="left:0"></i></span><b class="num">${esc(orderNo)}</b></div>`;
         };
         const fact = (label, value, extra) => `<div><span>${esc(label)}</span><b dir="auto"${extra === 'mono' ? ' class="mono"' : ''}>${value ? esc(value) : '—'}${extra && extra !== 'mono' ? extra : ''}</b></div>`;
         showDrawer(`<div class="dr-head"><div><h2 dir="auto">${esc(product)}${suffix ? ` <span class="sfx">${esc(suffix)}</span>` : ''}</h2><p dir="auto">${esc(customer)}${orderNo ? ' · order ' + esc(orderNo) : ''}</p></div><button class="x" id="close-drawer" type="button" aria-label="Close">${icon('close')}</button></div>
@@ -955,17 +1118,26 @@
                     <span class="muted" id="leader-note-feedback"></span>
                 </section>
                 <section class="sec"><h3>Expiry</h3>${deadline ? expHtml(deadline, 'Reserved Order File column J · ' + esc(formatExpiryDate(order)), true) : '<span class="muted-text">No expiry date</span>'}</section>
-                <section class="sec"><h3>Back Order queue</h3>${[0, 1, 2].map(tierLine).join('')}<p class="hint">Position among orders for the same product, suffix and colours. Lower is sooner.</p></section>
+                <section class="sec"><h3>Back Order queue</h3>${[0, 1, 2].map(tierLine).join('')}<p class="hint">First three matching back-order numbers for the same product, suffix and colours (BO Order Lookup ranking).</p></section>
                 <section class="sec"><h3>Car</h3><div class="facts">
-                    ${fact('VIN', sheetValue(order, 'VIN', 'merged') || order.vin, 'mono')}
-                    ${fact('Model year', sheetValue(order, 'Model year', 'merged') || order.modelYear)}
-                    ${fact('Exterior', sheetValue(order, 'Exterior color', 'merged'), sheetValue(order, 'Exterior color', 'merged') ? `<span class="sw">${swatch(sheetValue(order, 'Exterior color', 'merged'))}</span>` : '')}
-                    ${fact('Interior', sheetValue(order, 'Interior color', 'merged'), sheetValue(order, 'Interior color', 'merged') ? `<span class="sw">${swatch(sheetValue(order, 'Interior color', 'merged'))}</span>` : '')}
-                    ${fact('Usage', sheetValue(order, 'Usage', 'merged'))}
-                    ${fact('Allocation age', sheetValue(order, 'Allocation age', 'merged'))}
-                    ${fact('Area', sheetValue(order, 'Area', 'merged'))}
-                    ${fact('Share level', sheetValue(order, 'Share level', 'merged'))}
-                    ${fact('Salesman', sheetValue(order, 'Salesman name', 'merged') || order.salesAdvisor)}
+                    ${fact('VIN', val('VIN') || order.vin, 'mono')}
+                    ${fact('Model year', val('Model year') || order.modelYear)}
+                    ${fact('Order #', orderNo)}
+                    ${fact('Customer', customer)}
+                    ${fact('Product', product)}
+                    ${fact('Suffix', suffix)}
+                    ${fact('Exterior', val('Exterior color'), val('Exterior color') ? `<span class="sw">${swatch(val('Exterior color'))}</span>` : '')}
+                    ${fact('Interior', val('Interior color'), val('Interior color') ? `<span class="sw">${swatch(val('Interior color'))}</span>` : '')}
+                    ${fact('Usage', val('Usage'))}
+                    ${fact('Allocation age', val('Allocation age'))}
+                    ${fact('Area', val('Area'))}
+                    ${fact('Share level', val('Share level'))}
+                    ${fact('Salesman', val('Salesman name') || order.salesAdvisor)}
+                    ${fact('Q2', val('Queue 2'))}
+                    ${fact('Q1', val('Queue 1'))}
+                    ${fact('Q3', val('Queue 3'))}
+                    ${fact('Status', order.status || 'Not updated')}
+                    ${fact('Note', order.statusNote)}
                 </div></section>
                 <section class="sec"><h3>Status history (Saudi time)</h3>${history}</section>
                 <section class="sec"><h3>Audit</h3>${related.map((event) => `<div class="status-history-row"><b>${esc(event.user)}</b><span class="saudi-time">${esc(event.display || event.at)}</span><div>${esc(event.action)}</div></div>`).join('') || '<div>No audit events</div>'}</section>
@@ -1012,17 +1184,86 @@
         if ($('staff-id')) $('staff-id').value = '';
         if ($('staff-role')) $('staff-role').value = 'employee';
         if ($('staff-active')) $('staff-active').checked = true;
+        if ($('staff-edit5')) $('staff-edit5').checked = false;
+        fillStaffMatchSelect('');
         if ($('staff-form-title')) $('staff-form-title').textContent = 'Add person';
         if ($('save-staff')) $('save-staff').textContent = 'Save person';
         if ($('staff-error')) $('staff-error').textContent = '';
     }
+    function liveSalesmanNames() {
+        const map = new Map();
+        (orders || []).forEach((order) => {
+            const name = (typeof sheetValue === 'function' ? sheetValue(order, 'Salesman name', 'merged') : '') || order.salesAdvisor || '';
+            const text = String(name || '').trim();
+            if (!text || /^(unassigned|not assigned|salesman name|api-batch|api batch)$/i.test(text)) return;
+            const key = text.toLowerCase();
+            if (!map.has(key)) map.set(key, text);
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
+    function rightsNameKey(value) {
+        return String(value || '').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+    function rightsNameWords(key) {
+        return String(key || '').split(' ').filter(Boolean).map((word) => word.replace(/^al-/, 'al'));
+    }
+    function rightsWordMatch(a, b) {
+        if (a === b) return true;
+        if (a.replace(/-/g, '') === b.replace(/-/g, '')) return true;
+        if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+        return false;
+    }
+    function rightsNamesMatch(a, b) {
+        const x = rightsNameKey(a);
+        const y = rightsNameKey(b);
+        if (!x || !y) return false;
+        if (x === y) return true;
+        if (x.split(' ').sort().join(' ') === y.split(' ').sort().join(' ')) return true;
+        const xw = rightsNameWords(x);
+        const yw = rightsNameWords(y);
+        if (xw.length >= 2 && yw.length >= 2) {
+            const short = xw.length <= yw.length ? xw : yw;
+            const full = xw.length <= yw.length ? yw : xw;
+            if (rightsWordMatch(short[0], full[0]) && rightsWordMatch(short[short.length - 1], full[full.length - 1])
+                && short.every((word) => full.some((item) => rightsWordMatch(word, item)))) return true;
+        }
+        return false;
+    }
+    function matchLiveSalesmanName(stored, names) {
+        const text = String(stored || '').trim();
+        if (!text) return '';
+        const exact = names.find((name) => rightsNameKey(name) === rightsNameKey(text));
+        if (exact) return exact;
+        const fuzzy = names.find((name) => rightsNamesMatch(name, text));
+        return fuzzy || '';
+    }
+    function fillStaffMatchSelect(selected) {
+        const sel = $('staff-match');
+        if (!sel) return;
+        const names = liveSalesmanNames();
+        const keep = selected != null ? String(selected) : sel.value;
+        sel.innerHTML = '<option value="">Match by their name</option>' + names.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+        if (keep) {
+            if (![...sel.options].some((opt) => opt.value === keep)) {
+                const extra = document.createElement('option');
+                extra.value = keep;
+                extra.textContent = keep;
+                sel.appendChild(extra);
+            }
+            sel.value = keep;
+        }
+    }
     function renderStaff() {
+        fillStaffMatchSelect($('staff-match') ? $('staff-match').value : '');
         const list = $('staff-list');
         if (!list) return;
         const rows = staff.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
         list.innerHTML = '<h2>People</h2>' + (rows.length
             ? rows.map((person) => {
                 const admin = person.role === 'admin';
+                const match = person.matchedSalesman || '';
+                const extra = (Array.isArray(person.editFor) ? person.editFor : []).filter(Boolean);
+                const who = [match, ...extra].filter(Boolean).join(' · ');
                 return `<div class="staff-row">
                     <div>
                         <b dir="auto">${esc(person.name)}</b>
@@ -1030,12 +1271,67 @@
                         <div class="staff-meta">
                             <span class="pill ${admin ? 'p-info' : 'p-none'}"><span class="dot"></span>${admin ? 'Admin page' : 'Employee page'}</span>
                             <span class="tag${person.active !== false ? ' good' : ''}">${person.active !== false ? 'Active' : 'Inactive'}</span>
+                            ${who ? `<span class="tag">Edits ${esc(who)}</span>` : ''}
+                            ${person.canEditOrdersStartingWith5 ? '<span class="tag">Orders starting with 5</span>' : ''}
                         </div>
                     </div>
                     <button class="btn sm" type="button" data-edit="${esc(person.recordId)}">Edit</button>
                 </div>`;
             }).join('')
             : '<p class="empty">No people yet. Add the first person on the left.</p>');
+    }
+    function renderRights() {
+        const box = $('rights-table');
+        if (!box) return;
+        const names = liveSalesmanNames();
+        const people = staff.filter((person) => person.role !== 'admin').sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        if (!people.length) {
+            box.innerHTML = '<p class="empty">Add employees first, then choose which salesman each one can edit.</p>';
+            return;
+        }
+        box.innerHTML = people.map((person) => {
+            const stored = [];
+            const primaryRaw = String(person.matchedSalesman || '').trim();
+            if (primaryRaw) stored.push(primaryRaw);
+            (Array.isArray(person.editFor) ? person.editFor : []).forEach((name) => {
+                const text = String(name || '').trim();
+                if (!text) return;
+                if (stored.some((item) => rightsNamesMatch(item, text))) return;
+                stored.push(text);
+            });
+            let primary = matchLiveSalesmanName(primaryRaw, names) || primaryRaw;
+            if (!primary && stored.length) {
+                primary = matchLiveSalesmanName(stored[0], names) || stored[0];
+            }
+            const checkedLive = new Set();
+            const orphanExtras = [];
+            stored.forEach((name) => {
+                if (rightsNamesMatch(name, primary)) return;
+                const live = matchLiveSalesmanName(name, names);
+                if (live && live !== primary) checkedLive.add(live);
+                else if (!live) orphanExtras.push(name);
+            });
+            const options = ['<option value="">Match by their name</option>'].concat(names.map((name) => {
+                const selected = name === primary ? ' selected' : '';
+                return `<option value="${esc(name)}"${selected}>${esc(name)}</option>`;
+            }));
+            if (primary && !names.some((name) => name === primary)) {
+                options.splice(1, 0, `<option value="${esc(primary)}" selected>${esc(primary)}</option>`);
+            }
+            const chips = names.map((name) => {
+                if (name === primary) return '';
+                const on = checkedLive.has(name);
+                return `<label class="rights-chip"><input type="checkbox" data-extra="${esc(person.recordId)}" value="${esc(name)}"${on ? ' checked' : ''}> ${esc(name)}</label>`;
+            }).join('') + orphanExtras.map((name) => (
+                `<label class="rights-chip"><input type="checkbox" data-extra="${esc(person.recordId)}" value="${esc(name)}" checked> ${esc(name)}</label>`
+            )).join('');
+            return `<div class="rights-row" data-id="${esc(person.recordId)}">
+                <div class="rights-who"><b dir="auto">${esc(person.name)}</b><small>ID ${esc(person.id || '—')}</small></div>
+                <label class="field"><span>Edits salesman</span><select class="sel" data-match="${esc(person.recordId)}">${options.join('')}</select></label>
+                <div><span class="rights-lab">Also edits</span><div class="rights-names">${chips || '<small>No other salesman names in the live sheet.</small>'}</div></div>
+                <label class="staff-active"><input type="checkbox" data-five="${esc(person.recordId)}"${person.canEditOrdersStartingWith5 ? ' checked' : ''}> Order numbers starting with 5</label>
+            </div>`;
+        }).join('');
     }
     function renderArchive() {
         $('archive-rows').innerHTML = archive.slice().reverse().map((item) => `<tr>
@@ -1178,7 +1474,11 @@
             const titles = { 'Updated by': 'Updated', 'Leader note': 'Leader' };
             MERGED_META_COLS.concat(MERGED_COL_ORDER).forEach((label) => { if (!titles[label]) titles[label] = MERGED_HEAD_SHORT[label] || label; });
             Object.keys(MERGED_HEAD_SHORT).forEach((label) => { titles[label] = MERGED_HEAD_SHORT[label]; });
-            return { cols: MERGED_META_COLS.concat(MERGED_COL_ORDER, ['Leader note']), titles };
+            const cols = MERGED_COL_ORDER.filter((label) => label !== 'Leader note');
+            const qAt = cols.indexOf('Queue 1');
+            if (qAt >= 0) cols.splice(qAt, 0, 'Leader note');
+            else cols.push('Leader note');
+            return { cols, titles };
         }
         const meta = source === 'reserved'
             ? ['Queue', 'Status', 'Leader note', 'Updated by', 'BO ahead', 'Expiry', 'Time left']
@@ -1247,8 +1547,8 @@
     function sheetValue(order, label, source) {
         const tierMatch = /^Queue ([123])$/.exec(label);
         if (tierMatch) {
-            const q = (order.boTierQueues || [])[Number(tierMatch[1]) - 1];
-            return q ? `${q.position} / ${q.size}` : '';
+            const item = queueOrderAt(order, Number(tierMatch[1]));
+            return item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
         }
         if (label === 'Queue position') {
             if (order.boQueuePosition == null) return '';
@@ -1442,28 +1742,23 @@
                 return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * dir;
             });
         }
-        const freezeLabels = xlFreezeOn ? ['Queue 2', 'Queue 1', 'Salesman name'] : [];
-        const freezeClass = (label) => {
-            const i = freezeLabels.indexOf(label);
-            return i === 0 ? ' xl-fz1' : i === 1 ? ' xl-fz2' : i === 2 ? ' xl-fz3' : '';
-        };
-        const widthOf = (label) => Number(xlWidths[label]) || XL_DEFAULT_WIDTHS[label] || 88;
+        autofitCols(cols, rows, (order, label) => sheetValue(order, label, source), (label) => colName(label) || label);
+        const freeze = freezeMeta(cols);
         const head = (label, i) => {
             const named = colName(label);
             const letter = xlLetter(i);
             const sortCls = sheetSort.label === label ? (sheetSort.dir === 'za' ? ' is-desc' : ' is-asc') : '';
-            const w = widthOf(label);
-            return `<th class="xl-h${freezeClass(label)}${sortCls}" draggable="true" data-label="${esc(label)}" data-c="${i}" style="width:${w}px;min-width:${w}px;max-width:${w}px" title="${esc(named || label)}"><small class="xl-let">${esc(letter)}</small><b>${esc(named || label)}</b><i class="xl-caret" data-sort="${esc(label)}"></i><span class="xl-resize" data-resize="${esc(label)}"></span></th>`;
+            const qCls = (label === 'Queue 1' || label === 'Queue 2' || label === 'Queue 3') ? ' col-q col-tier' : '';
+            return `<th class="xl-h${freeze.cls(label)}${sortCls}${qCls}" draggable="true" data-label="${esc(label)}" data-c="${i}" style="${colBoxStyle(label, freeze)}" title="${esc(named || label)}"><small class="xl-let">${esc(letter)}</small><b>${esc(named || label)}</b><i class="xl-caret" data-sort="${esc(label)}"></i><span class="xl-resize" data-resize="${esc(label)}"></span></th>`;
         };
         const tdOpen = (label, extra, title) => {
-            const w = widthOf(label);
             const cls = [
                 extra || '',
-                freezeClass(label).trim(),
+                freeze.cls(label).trim(),
                 XL_MONO_COLS.has(label) ? 'xl-mono' : '',
                 XL_NUM_COLS.has(label) ? 'xl-num' : ''
             ].filter(Boolean).join(' ');
-            return `<td class="${esc(cls)}" style="width:${w}px;min-width:${w}px;max-width:${w}px"${title ? ` title="${esc(title)}"` : ''}>`;
+            return `<td class="${esc(cls)}" style="${colBoxStyle(label, freeze)}"${title ? ` title="${esc(title)}"` : ''}>`;
         };
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
@@ -1506,11 +1801,15 @@
             const tierMatch = /^Queue ([123])$/.exec(label);
             if (tierMatch) {
                 const tier = Number(tierMatch[1]);
-                const q = (order.boTierQueues || [])[tier - 1];
-                if (!q) return `${tdOpen(label, 'col-queue col-tier', 'No colour choice ' + tier)}<span class="muted-text">—</span></td>`;
-                const pair = [q.exterior, q.interior].filter(Boolean).join(' / ');
-                const title = `Colour choice ${tier}${pair ? ' (' + pair + ')' : ''}: position ${q.position} of ${q.size}`;
-                return `${tdOpen(label, 'col-queue col-tier', title)}<div class="q"><b>${esc(String(q.position))}</b><small>/ ${esc(String(q.size))}</small></div></td>`;
+                const item = queueOrderAt(order, tier);
+                const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
+                if (!orderNo) {
+                    return `${tdOpen(label, 'col-queue col-tier col-q', 'No matching back order #' + tier + ' for this vehicle (product + suffix + exterior + interior)')}<div class="q q-box is-empty"><b class="num">—</b></div></td>`;
+                }
+                const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : '';
+                const size = order.boQueueSize != null ? String(order.boQueueSize) : '';
+                const title = `Queue #${tier} · order ${orderNo}` + (who ? ` · ${who}` : '') + (size ? ` · ${size} matched` : '') + ' (product + suffix + exterior + interior)';
+                return `${tdOpen(label, 'col-queue col-tier col-q', title)}<div class="q q-box"><b class="num">${esc(orderNo)}</b></div></td>`;
             }
             if (label === 'Queue position') {
                 if (order.boQueuePosition == null) return `${tdOpen(label, 'col-queue', 'Not found in the Toyota Back Order file')}<span class="ahead-empty">—</span></td>`;
@@ -1564,8 +1863,8 @@
                     : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.')
             : 'No rows match these filters. Clear search or pick another filter.';
         const note = noVin ? `${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} <button type="button" class="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button>` : '';
-        const heads = `<tr class="xl-heads"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => head(label, i)).join('')}</tr>`;
-        const colgroup = `<colgroup><col style="width:36px">${cols.map((label) => `<col data-label="${esc(label)}" style="width:${widthOf(label)}px">`).join('')}</colgroup>`;
+        const heads = `<tr class="xl-heads"><th class="xl-corner" aria-hidden="true"></th>${cols.map((label, i) => head(label, i)).join('')}${excelPadHead(cols.length)}</tr>`;
+        const colgroup = `<colgroup><col style="width:${XL_RN_W}px">${cols.map((label) => `<col data-label="${esc(label)}" style="width:${widthOf(label)}px">`).join('')}${excelPadCols()}</colgroup>`;
         const sign = [source, rows.length, cols.join('\t'), sheetSort.label, sheetSort.dir, sheetColFilter.label, sheetColFilter.value, xlFreezeOn, xlCfOn, JSON.stringify(xlWidths), rows.map((order) => [order.key, order.status, order.statusChangedAt, order.leaderNote].join(':')).join('|')].join('#');
         if (box.dataset.sign === sign && box.querySelector('.xl-grid')) {
             xlRestoreSelection(box, source);
@@ -1584,7 +1883,7 @@
                     bucket === 'none' ? 'is-none' : '',
                     bucket === 'Payment' ? 'is-ok' : ''
                 ].filter(Boolean).join(' ');
-                return `<tr class="${classes}" data-key="${esc(order.key || '')}" tabindex="0"><th class="xl-rn" scope="row">${index + 2}</th>${cols.map((label) => cell(order, label)).join('')}</tr>`;
+                return `<tr class="${classes}" data-key="${esc(order.key || '')}" tabindex="0"><th class="xl-rn" scope="row">${index + 1}</th>${cols.map((label) => cell(order, label)).join('')}${excelPadCells()}</tr>`;
             }).join('')}</tbody></table>`
             : `<p class="empty">${emptyMsg}</p>`;
         const grid = box.querySelector('.xl-grid');
@@ -1733,8 +2032,8 @@
             }
         }
         const name = $('xl-name');
-        const a1 = xlLetter(cMin) + (rMin + 2);
-        const a2 = xlLetter(cMax) + (rMax + 2);
+        const a1 = xlLetter(cMin) + (rMin + 1);
+        const a2 = xlLetter(cMax) + (rMax + 1);
         if (name) name.textContent = (rMin === rMax && cMin === cMax) ? a1 : `${a1}:${a2}`;
         const anchor = body.rows[r] && body.rows[r].cells[c + 1];
         xlSetFormula(xlCellText(anchor));
@@ -1828,15 +2127,26 @@
         if (label === 'Queue position') return ['Queue 1', 'Queue 2', 'Queue 3'];
         return [label];
     };
+    function ensureQueue123Last(cols) {
+        const queueTail = ['Queue 1', 'Queue 2', 'Queue 3'];
+        const list = Array.isArray(cols) ? cols : [];
+        const rest = list.filter((label) => !queueTail.includes(label));
+        const tail = queueTail.filter((label) => list.includes(label));
+        return rest.concat(tail);
+    }
     function xlOrdered(source, all) {
         const known = new Set(all);
         const saved = (xlLayout(source).order || []).flatMap(renamedCol).filter((label) => known.has(label));
-        return saved.concat(all.filter((label) => !saved.includes(label)));
+        return ensureQueue123Last(saved.concat(all.filter((label) => !saved.includes(label))));
     }
     function xlVisibleCols(source, all) {
         const hidden = new Set((xlLayout(source).hidden || []).flatMap(renamedCol));
+        hidden.delete('Queue 1');
+        hidden.delete('Queue 2');
+        hidden.delete('Queue 3');
+        hidden.delete('Queue position');
         const shown = xlOrdered(source, all).filter((label) => !hidden.has(label));
-        return shown.length ? shown : all.slice();
+        return shown.length ? shown : ensureQueue123Last(all.slice());
     }
     function xlDirty() { return JSON.stringify(xlNorm(xlDraft)) !== JSON.stringify(xlNorm(xlSaved)); }
     function applyServerLayout(data, asSaved) {
@@ -1877,10 +2187,12 @@
         xlFlash = '';
         renderSheet();
         xlPaintLayoutState();
+        xlRenderColsPop();
     }
     function xlSetHidden(source, label, hide) {
         const info = xlInfo[source];
         if (!info) return;
+        if (hide && (label === 'Queue 1' || label === 'Queue 2' || label === 'Queue 3')) return;
         const layout = xlLayout(source);
         const hidden = new Set(layout.hidden || []);
         if (hide) {
@@ -1953,15 +2265,33 @@
         xlLayout(source).order = ordered;
         xlAfterLayoutChange();
     }
-    function xlToggleColsPop(force) {
+    function xlPlaceColsPop(anchor) {
+        const pop = $('xl-cols-pop');
+        const btn = anchor || $('xl-cols-toolbar') || $('xl-cols-btn');
+        if (!pop || !btn) return;
+        const r = btn.getBoundingClientRect();
+        const width = Math.min(380, window.innerWidth - 16);
+        pop.style.position = 'fixed';
+        pop.style.zIndex = '90';
+        pop.style.width = width + 'px';
+        pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + 'px';
+        pop.style.right = 'auto';
+        pop.style.top = Math.min(window.innerHeight - 80, r.bottom + 6) + 'px';
+    }
+    function xlToggleColsPop(force, anchor) {
         const pop = $('xl-cols-pop');
         const btn = $('xl-cols-btn');
+        const bar = $('xl-cols-toolbar');
         if (!pop) return;
         const open = typeof force === 'boolean' ? force : pop.classList.contains('hidden');
         pop.classList.toggle('hidden', !open);
         pop.classList.toggle('open', open);
         if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        if (open) xlRenderColsPop();
+        if (bar) bar.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+            xlRenderColsPop();
+            xlPlaceColsPop(anchor);
+        }
     }
     function xlRenderColsPop() {
         const pop = $('xl-cols-pop');
@@ -2011,6 +2341,7 @@
     }
     function renderSheet() {
         const mergedList = buildMergedList(orders);
+        lastMergedList = mergedList;
         const mergedCount = $('sheet-count-merged');
         if (mergedCount) mergedCount.textContent = String(mergedList.length);
         fillSheetFilters(mergedList);
@@ -2031,21 +2362,37 @@
     function renderMarketing() {
         const body = $('marketing-rows');
         if (!body) return;
+        const active = marketingRequests.filter((item) => !item.cancelled);
+        const cancelled = marketingRequests.filter((item) => item.cancelled);
+        const card = (item) => {
+            const fields = (item.fields || []).slice(0, 10).map((field) => `<div class="mkt-fact"><span>${esc(field.label)}</span><b dir="auto">${esc(field.value)}</b></div>`).join('');
+            const product = (item.fields || []).find((f) => /product|model|vehicle/i.test(String(f.label || '')));
+            const customer = (item.fields || []).find((f) => /customer|guest|client/i.test(String(f.label || '')));
+            return `<article class="mkt-card${item.cancelled ? ' is-cancelled' : ''}">
+                <div class="mkt-ribbon">${item.cancelled ? 'Cancelled' : 'Marketing request'}</div>
+                <header class="mkt-head">
+                    <div>
+                        <p class="mkt-eye">ORDER</p>
+                        <h3 dir="ltr">#${esc(item.orderNumber || '—')}</h3>
+                        <p class="mkt-sub" dir="auto">${esc((product && product.value) || (customer && customer.value) || 'طلب تسويق')}</p>
+                    </div>
+                    <div class="mkt-meta">
+                        <span><em>Advisor</em><b dir="auto">${esc(item.advisorName || '—')}</b></span>
+                        <span><em>Employee ID</em><b>${esc(item.employeeNumber || '—')}</b></span>
+                        <span><em>Sent</em><b>${esc(item.display || item.at || '—')}</b></span>
+                        ${item.cancelled && item.cancelledDisplay ? `<span><em>Cancelled</em><b>${esc(item.cancelledDisplay)}</b></span>` : ''}
+                    </div>
+                </header>
+                <div class="mkt-fields">${fields || '<div class="mkt-fact"><span>BO file</span><b>No other values on this row</b></div>'}</div>
+            </article>`;
+        };
         body.innerHTML = marketingRequests.length
-            ? marketingRequests.map((item) => {
-                const fields = (item.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b>${esc(field.value)}</b></div>`).join('');
-                return `<article class="mkt-card${item.cancelled ? ' is-cancelled' : ''}">
-                    <header>
-                        <b>Order ${esc(item.orderNumber)}</b>
-                        ${item.cancelled ? `<span class="mkt-cancel">Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>` : ''}
-                        <span>Advisor ${esc(item.advisorName || '—')}</span>
-                        <span>Employee ID ${esc(item.employeeNumber || '—')}</span>
-                        <span>Sent ${esc(item.display || item.at || '—')}</span>
-                    </header>
-                    <div class="mkt-fields">${fields || '<div><span>BO file</span><b>No other values on this row</b></div>'}</div>
-                </article>`;
-            }).join('')
+            ? `<div class="mkt-board-head">
+                    <div><h2 dir="rtl" lang="ar">${MARKETING_LABEL}</h2><p>${active.length} open · ${cancelled.length} cancelled · entries kept</p></div>
+               </div>
+               <div class="mkt-grid">${marketingRequests.map(card).join('')}</div>`
             : '<p class="empty">No marketing orders sent yet.</p>';
+        fixMarketingArabicLabels();
     }
     function soldTone(kind) {
         if (kind === 'delivered') return 'p-ok';
@@ -2166,7 +2513,9 @@
             const selected = $('audit-action').value;
             $('audit-action').innerHTML = '<option value="">Action</option>' + actions.map((item) => `<option>${esc(item)}</option>`).join('');
             $('audit-action').value = selected;
-            marketingRequests = extra[1].requests || [];
+            marketingRequests = (data.marketing && Array.isArray(data.marketing))
+                ? data.marketing
+                : (extra[1].requests || []);
             const alertData = extra[2] || {};
             alerts = alertData.alerts || [];
             alertFields = alertData.fields || [];
@@ -2317,7 +2666,12 @@
                     id,
                     role,
                     active: $('staff-active').checked,
-                    previousRecordId: editing
+                    matchedSalesman: $('staff-match') ? $('staff-match').value : '',
+                    canEditOrdersStartingWith5: $('staff-edit5') ? $('staff-edit5').checked : false,
+                    previousRecordId: editing,
+                    editFor: editing
+                        ? ((staff.find((item) => item.recordId === editing) || {}).editFor || [])
+                        : []
                 })
             });
             const page = role === 'admin' ? 'admin page' : 'employee page';
@@ -2328,6 +2682,48 @@
         } catch (e) { if (e.message !== 'unauthorized') $('staff-error').textContent = e.message; }
     });
     if ($('staff-cancel')) $('staff-cancel').addEventListener('click', clearStaffForm);
+    if ($('rights-save')) $('rights-save').addEventListener('click', async () => {
+        if ($('rights-error')) $('rights-error').textContent = '';
+        const people = [];
+        document.querySelectorAll('#rights-table .rights-row').forEach((row) => {
+            const recordId = row.getAttribute('data-id') || row.dataset.id || '';
+            const existing = staff.find((person) => person.recordId === recordId);
+            const match = row.querySelector('[data-match]');
+            let primary = match ? String(match.value || '').trim() : '';
+            let extra = [...row.querySelectorAll('[data-extra]:checked')]
+                .map((el) => String(el.value || '').trim())
+                .filter((name) => name && !rightsNamesMatch(name, primary));
+            const five = row.querySelector('[data-five]');
+            const formEmpty = !primary && !extra.length;
+            if (formEmpty && existing) {
+                primary = String(existing.matchedSalesman || '').trim();
+                extra = (Array.isArray(existing.editFor) ? existing.editFor : [])
+                    .map((name) => String(name || '').trim())
+                    .filter((name) => name && !rightsNamesMatch(name, primary));
+            }
+            people.push({
+                recordId,
+                matchedSalesman: primary,
+                editFor: extra,
+                canEditOrdersStartingWith5: !!(five && five.checked)
+            });
+        });
+        try {
+            const result = await api('/api/reserved-orders/staff-rights', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ people })
+            });
+            if (Array.isArray(result.staff)) staff = result.staff;
+            const kept = (result.staff || staff).filter((row) => row.role !== 'admin' && (row.matchedSalesman || (row.editFor && row.editFor.length) || row.canEditOrdersStartingWith5)).length;
+            toast('Edit rights saved', kept + ' employee' + (kept === 1 ? '' : 's') + ' kept with edit access.', 'd-ok');
+            renderRights();
+            renderStaff();
+            await refresh();
+        } catch (e) {
+            if (e.message !== 'unauthorized' && $('rights-error')) $('rights-error').textContent = e.message;
+        }
+    });
     $('staff-list').addEventListener('click', (event) => {
         const button = event.target.closest('[data-edit]');
         if (!button) return;
@@ -2338,6 +2734,8 @@
         $('staff-id').value = person.id;
         $('staff-role').value = person.role || 'employee';
         $('staff-active').checked = person.active !== false;
+        if ($('staff-edit5')) $('staff-edit5').checked = !!person.canEditOrdersStartingWith5;
+        fillStaffMatchSelect(person.matchedSalesman || '');
         if ($('staff-form-title')) $('staff-form-title').textContent = 'Edit person';
         if ($('save-staff')) $('save-staff').textContent = 'Save changes';
         $('staff-name').focus();
@@ -2604,9 +3002,10 @@
                 event.stopPropagation();
                 const label = handle.getAttribute('data-resize');
                 const startX = event.clientX;
-                const startW = Number(xlWidths[label]) || XL_DEFAULT_WIDTHS[label] || 88;
+                const startW = widthOf(label);
+                const { min, max } = widthBounds(label);
                 const move = (ev) => {
-                    const next = Math.max(28, Math.min(420, startW + (ev.clientX - startX)));
+                    const next = Math.max(min, Math.min(Math.max(max, 420), startW + (ev.clientX - startX)));
                     xlWidths[label] = next;
                     box.querySelectorAll(`[data-label="${CSS.escape(label)}"]`).forEach((el) => {
                         el.style.width = next + 'px';
@@ -2827,7 +3226,8 @@
         renderSheet();
     });
     // Layout controls: Columns popover, Save / Reset, right-click menu on column headers.
-    if ($('xl-cols-btn')) $('xl-cols-btn').addEventListener('click', (event) => { event.stopPropagation(); xlToggleColsPop(); });
+    if ($('xl-cols-btn')) $('xl-cols-btn').addEventListener('click', (event) => { event.stopPropagation(); xlToggleColsPop(undefined, event.currentTarget); });
+    if ($('xl-cols-toolbar')) $('xl-cols-toolbar').addEventListener('click', (event) => { event.stopPropagation(); xlToggleColsPop(undefined, event.currentTarget); });
     if ($('xl-cols-close')) $('xl-cols-close').addEventListener('click', () => xlToggleColsPop(false));
     if ($('xl-cols-q')) $('xl-cols-q').addEventListener('input', xlRenderColsPop);
     if ($('xl-cols-showall')) $('xl-cols-showall').addEventListener('click', () => {
@@ -2878,7 +3278,7 @@
     document.addEventListener('click', (event) => {
         if (!event.target.closest('#xl-ctx')) xlCloseCtx();
         const pop = $('xl-cols-pop');
-        if (pop && !pop.classList.contains('hidden') && !event.target.closest('#xl-cols-pop, #xl-cols-btn')) xlToggleColsPop(false);
+        if (pop && !pop.classList.contains('hidden') && !event.target.closest('#xl-cols-pop, #xl-cols-btn, #xl-cols-toolbar')) xlToggleColsPop(false);
     });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
@@ -3252,6 +3652,7 @@
     }
     bindDrop($('drop-reserved'), $('reserved-file'));
     bindDrop($('drop-rtl'), $('rtl-file'));
+    fixMarketingArabicLabels();
     try {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(`${protocol}//${location.host}`);
@@ -3260,6 +3661,9 @@
             if ((msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') && (password() || adminToken())) refresh().catch(() => {});
         });
     } catch (e) { /* the sheet still refreshes on the next manual open */ }
+    setInterval(() => {
+        if (password() || adminToken()) refresh().catch(() => {});
+    }, 3000);
     fillGateStaff();
     if (password() || adminToken()) refresh({ first: true }).then(showApp).catch(() => { hideDataLoad(); fillGateStaff(); });
 })();

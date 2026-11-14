@@ -2,13 +2,13 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.4, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
     <meta name="color-scheme" content="dark light">
     <title>Reserved Orders Admin</title>
     <script>(function(){try{var t=localStorage.getItem('ro-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}}catch(e){}})();</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261109live1">
+    <link rel="stylesheet" href="reserved-orders-v2.css?v=20261111arabic2">
 </head>
 <body>
     <button class="btn theme-toggle theme-dock" type="button" data-theme-toggle title="Day colors" aria-label="Day colors"><svg class="ico-day" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg><svg class="ico-night" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1112.5 3 7 7 0 0021 14.5z"/></svg><span data-theme-label>Day</span></button>
@@ -28,7 +28,7 @@
         <form class="login-card" id="gate-form">
             <span class="mark" aria-hidden="true"><svg viewBox="0 0 44 28"><ellipse cx="22" cy="14" rx="20" ry="12.5" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="10" rx="9.5" ry="6" fill="none" stroke="#fff" stroke-width="2.6"/><ellipse cx="22" cy="15" rx="4" ry="11" fill="none" stroke="#fff" stroke-width="2.6"/></svg></span>
             <h1>Reserved admin</h1>
-            <p>Sign in as admin. Other admins use their name and employee ID.</p>
+            <p>Sign in as admin with password <b dir="ltr">osama1234</b> (legacy <b dir="ltr">1234</b> still works). Moath and Emad Harazi use their name + employee ID.</p>
             <label class="field" for="admin-user"><span>User</span><input id="admin-user" type="text" value="admin" autocomplete="username" required></label>
             <label class="field" for="admin-password"><span>Password</span><input id="admin-password" type="password" required autocomplete="current-password"></label>
             <div class="err" id="gate-error"></div>
@@ -47,9 +47,10 @@
                 <button class="active" type="button" data-panel="overview">Overview</button>
                 <button type="button" data-panel="orders" hidden style="display:none">Orders</button>
                 <button type="button" data-panel="sold">Sold VINs</button>
-                <button type="button" data-panel="marketing" dir="rtl">طلبات التسويق</button>
+                <button type="button" data-panel="marketing" dir="rtl">&#1591;&#1604;&#1576;&#1575;&#1578; &#1575;&#1604;&#1578;&#1587;&#1608;&#1610;&#1602;</button>
                 <button type="button" data-panel="sheet">Live sheet</button>
                 <button type="button" data-panel="employees">Employees</button>
+                <button type="button" data-panel="rights">Edit rights</button>
                 <button type="button" data-panel="push">Data push</button>
                 <button type="button" data-panel="archive">Archive</button>
                 <button type="button" data-panel="audit">Audit logs</button>
@@ -128,7 +129,7 @@
                 <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Sold as</th><th>VIN</th><th>Order</th><th>Advisor</th><th>Last status</th><th>Invoice (V)</th><th>Removed</th><th>Where</th></tr></thead><tbody id="sold-rows"></tbody></table></div></div>
             </section>
             <section id="panel-marketing" class="hidden view">
-                <div class="head"><div><h1 dir="rtl">طلبات التسويق</h1><p>Each card is an order an advisor checked in the BO file and sent here.</p></div></div>
+                <div class="head"><div><h1 dir="rtl">&#1591;&#1604;&#1576;&#1575;&#1578; &#1575;&#1604;&#1578;&#1587;&#1608;&#1610;&#1602;</h1><p>Each card is an order an advisor checked in the BO file and sent here.</p></div></div>
                 <section class="marketing-admin" id="marketing-rows"></section>
             </section>
             <section id="panel-sheet" class="hidden view xlw">
@@ -149,6 +150,7 @@
                         <option value="expired">Expired</option>
                     </select>
                     <button type="button" class="btn" id="sheet-filter-clear">Clear</button>
+                    <button type="button" class="btn" id="xl-cols-toolbar" aria-haspopup="true" aria-expanded="false">Columns</button>
                     <span class="spacer"></span>
                     <small class="live-flag" id="xl-layout-state">Live for everyone</small>
                     <button type="button" class="btn" id="xl-reset-layout">Reset</button>
@@ -161,9 +163,9 @@
                     <button type="button" role="menuitem" data-act="left">Move left</button>
                     <button type="button" role="menuitem" data-act="right">Move right</button>
                     <button type="button" role="menuitem" data-act="showall">Show all columns</button>
-                    <button type="button" role="menuitem" data-act="sort-az">Sort A→Z</button>
-                    <button type="button" role="menuitem" data-act="sort-za">Sort Z→A</button>
-                    <button type="button" role="menuitem" data-act="filter">Filter…</button>
+                    <button type="button" role="menuitem" data-act="sort-az">Sort Aâ†’Z</button>
+                    <button type="button" role="menuitem" data-act="sort-za">Sort Zâ†’A</button>
+                    <button type="button" role="menuitem" data-act="filter">Filterâ€¦</button>
                 </div>
                 <div class="colpop hidden" id="xl-filter-pop" role="dialog" aria-label="Filter column">
                     <div class="xl-colspop-head"><b id="xl-filter-title">Filter</b><button type="button" class="x" id="xl-filter-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
@@ -205,11 +207,11 @@
                     <div class="sheet-foot">
                         <section class="chips sheet-tabs" id="sheet-chips" aria-label="Filter by status"></section>
                         <div class="xl-status">
-                            <span id="xl-agg">Count — · Sum — · Avg —</span>
+                            <span id="xl-agg">Count â€” · Sum â€” · Avg â€”</span>
                             <span id="xl-stat"></span>
                             <span id="xl-novin"></span>
                             <span class="xl-zoom">
-                                <button type="button" id="xl-zoom-out" aria-label="Zoom out">−</button>
+                                <button type="button" id="xl-zoom-out" aria-label="Zoom out">âˆ’</button>
                                 <b id="xl-zoom-val">100%</b>
                                 <input id="xl-zoom" type="range" min="60" max="150" step="10" value="100" aria-label="Zoom" hidden>
                                 <button type="button" id="xl-zoom-in" aria-label="Zoom in">+</button>
@@ -232,7 +234,13 @@
                                     <option value="admin">Admin page</option>
                                 </select>
                             </label>
-                            <label class="staff-active"><input id="staff-active" type="checkbox" checked> Active — can sign in</label>
+                            <label class="field" for="staff-match"><span>Edits salesman</span>
+                                <select class="sel" id="staff-match">
+                                    <option value="">Match by their name</option>
+                                </select>
+                            </label>
+                            <label class="staff-active"><input id="staff-active" type="checkbox" checked> Active â€” can sign in</label>
+                            <label class="staff-active"><input id="staff-edit5" type="checkbox"> Can edit order numbers starting with 5</label>
                             <div class="bar">
                                 <button class="btn primary" id="save-staff" type="button">Save person</button>
                                 <button class="btn" id="staff-cancel" type="button">Clear</button>
@@ -279,6 +287,16 @@
                 <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Time</th><th>Employee</th><th>Role</th><th>Action</th><th>Source</th><th>VIN</th><th>Order</th><th>Old</th><th>New</th><th>Details</th><th></th></tr></thead><tbody id="audit-rows"></tbody></table></div></div>
             </section>
             <section id="panel-reports" class="hidden"><section class="card pane" id="report-body"></section></section>
+            <section id="panel-rights" class="hidden view">
+                <div class="head"><div><h1>Who can edit whose cars</h1><p>Match each employee to the Reserved Order File salesman (column A). They can then update those rows. Their own name still matches automatically.</p></div></div>
+                <section class="card pane">
+                    <div class="tbl-wrap" id="rights-table"></div>
+                    <div class="bar" style="margin-top:12px">
+                        <button class="btn primary" id="rights-save" type="button">Save edit rights</button>
+                    </div>
+                    <div class="err" id="rights-error"></div>
+                </section>
+            </section>
             <section id="panel-settings" class="hidden view">
                 <div class="head"><div><h1>Settings</h1><p>Add or remove statuses. Employees see the same list.</p></div></div>
                 <section class="card pane status-settings">
@@ -319,6 +337,4 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-admin.js?v=20261109live1"></script>
-</body>
-</html>
+    <script src="reserved-orders-admin.js?v=20261111rights2"></script>

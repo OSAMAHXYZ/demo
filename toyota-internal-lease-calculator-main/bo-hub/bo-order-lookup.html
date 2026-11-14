@@ -204,6 +204,33 @@
       margin: 0 0 4px;
       letter-spacing: -.2px;
     }
+    .live-team-label {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      direction: rtl;
+      font-family: 'Tajawal', 'Plus Jakarta Sans', sans-serif;
+      font-size: 44px;
+      font-weight: 700;
+      line-height: 1.15;
+      color: #fff;
+      margin: 6px 0 16px;
+      letter-spacing: 0;
+    }
+    .live-team-label::before {
+      content: "";
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: #34d399;
+      box-shadow: 0 0 0 6px rgba(52, 211, 153, 0.22);
+      animation: livePulse 1.6s ease-in-out infinite;
+      flex: none;
+    }
+    @keyframes livePulse {
+      0%, 100% { box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.2); }
+      50% { box-shadow: 0 0 0 12px rgba(52, 211, 153, 0.04); }
+    }
     .sub { margin: 0; color: var(--muted); font-size: 14px; }
 
     .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
@@ -389,6 +416,22 @@
       line-height: 1.45;
     }
     .queue-wild-banner strong { color: #7dd3fc; }
+    .queue-debug {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .queue-debug-title { font-weight: 700; margin-bottom: 6px; }
+    .queue-debug-list, .queue-debug-excluded {
+      margin: 0 0 8px;
+      padding-left: 1.2em;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .queue-debug-date { color: var(--muted); margin-left: 8px; }
+    .queue-debug details summary { cursor: pointer; color: var(--muted); }
     .pair-queue-card .queue-hero-grid {
       margin-bottom: 0;
       gap: 10px;
@@ -710,6 +753,7 @@
       body { padding: 88px 14px 32px; }
       .hero { padding: 22px; border-radius: 20px; }
       h1 { font-size: 28px; }
+      .live-team-label { font-size: 34px; }
       .queue-hero-grid { grid-template-columns: 1fr; }
       .nc-controls { grid-template-columns: 1fr; }
       .product-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -718,8 +762,9 @@
 </head>
 <body data-i18n-title="page_title">
   <nav class="page-nav" aria-label="Page navigation" style="justify-content: flex-end; gap: 10px;">
-    <a href="../reserved-orders.html" class="page-nav-btn" style="margin-right: auto;">← Reserved Orders</a>
     <button type="button" class="lang-toggle-btn" data-lang-toggle>العربية</button>
+    <span class="page-nav-btn" id="signedInUser" style="display:none"></span>
+    <a href="../reserved-orders.html" class="page-nav-btn">Customer Interaction</a>
     <a href="../detailed-calculations.html" class="page-nav-btn page-nav-btn-accent" data-i18n="nav_detailed">Detailed Calculator →</a>
     <a href="bo-data-admin.html" class="page-nav-btn">BO Admin</a>
   </nav>
@@ -727,17 +772,25 @@
     <div class="hero">
       <div class="hero-eyebrow" data-i18n="hero_eyebrow">BO Lookup · Live Queue Insights</div>
       <h1 data-i18n="hero_title">BO Order Lookup</h1>
-      <p class="sub" data-i18n="hero_sub">Enter a back order number to see your queue position, orders ahead, and matching reservations — all from the latest daily BO upload.</p>
+      <p class="sub" data-i18n="hero_sub">Enter a VIN or order number. If it is not in the latest BO file, the Live Sheet is searched automatically.</p>
       <div class="hero-search">
-        <input id="orderNumberInput" type="text" data-i18n-placeholder="ph_order" placeholder="Enter Order Number" />
+        <input id="orderNumberInput" type="text" data-i18n-placeholder="ph_order" placeholder="VIN or order number" />
         <button id="searchBtn" type="button" data-i18n="btn_search">Search</button>
       </div>
       <div class="meta" id="boMeta" data-i18n="meta_checking">Checking latest BO upload...</div>
       <div id="status" class="status"></div>
     </div>
 
+    <div class="card" id="liveSheetCard" style="display:none;">
+      <h3 class="card-title live-team-label" id="liveSheetTitle" dir="rtl"></h3>
+      <p class="sub" id="liveSheetMeta">Delivery live sheet</p>
+      <table>
+        <tbody id="liveSheetBody"></tbody>
+      </table>
+    </div>
+
     <div class="card" id="resultCard" style="display:none;">
-      <h3 class="card-title" data-i18n="card_order">Order Details</h3>
+      <h3 class="card-title" id="resultCardTitle" data-i18n="card_order">Order Details</h3>
       <p class="sub" id="resultMeta"></p>
       <div class="result-top">
         <div class="queue-box" id="queueBox" style="display:none;">
@@ -803,6 +856,14 @@
   </div>
 
   <script>
+    try {
+      const signedIn = JSON.parse(localStorage.getItem('toyotaInteractionUser') || 'null');
+      const signedEl = document.getElementById('signedInUser');
+      if (signedIn && signedIn.name && signedEl) {
+        signedEl.textContent = signedIn.name;
+        signedEl.style.display = '';
+      }
+    } catch (e) {}
     // Queue algorithm: scripts/bo-order-lookup.js (BoOrderLookup class)
     const boMetaEl = document.getElementById('boMeta');
     const statusEl = document.getElementById('status');
@@ -834,6 +895,8 @@
     let selectedProduct = null;
     let lastOrderNumber = '';
     let lastOrderPayload = null;
+    let lastLiveRows = null;
+    const resultCardTitle = document.getElementById('resultCardTitle');
 
     function tl(key, vars) {
       return window.i18nFmt ? i18nFmt(key, vars) : key;
@@ -916,6 +979,7 @@
     function renderDetails(details) {
       detailsBody.innerHTML = '';
       Object.entries(details).forEach(([key, value]) => {
+        if (String(key).startsWith('__')) return;
         const tr = document.createElement('tr');
         tr.innerHTML = `<th>${key}</th><td>${value === null || value === undefined || value === '' ? '-' : String(value)}</td>`;
         detailsBody.appendChild(tr);
@@ -1117,8 +1181,10 @@
     function formatBoDate(value) {
       if (value == null || value === '') return '—';
       const d = new Date(value);
-      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-      return String(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      const date = d.toLocaleDateString('en-GB', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
+      const time = d.toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return time === '00:00:00' ? date : `${date} ${time}`;
     }
 
     function renderQueue(queue) {
@@ -1148,6 +1214,25 @@
           </div>`;
       }
 
+      function debugBlock(pq) {
+        const debug = pq && pq.debug;
+        if (!debug || !Array.isArray(debug.included)) return '';
+        const included = debug.included.map((row) =>
+          `<li><strong>${escHtml(String(row.position))}.</strong> ${escHtml(row.orderNumber)} <span class="queue-debug-date">${escHtml(formatBoDate(row.sortDate))}</span></li>`
+        ).join('');
+        const excluded = Array.isArray(debug.excluded) ? debug.excluded : [];
+        const excludedHtml = excluded.map((row) =>
+          `<li>${escHtml(row.orderNumber)} — ${escHtml(row.reason)}</li>`
+        ).join('');
+        return `
+          <div class="queue-debug">
+            <div class="queue-debug-title">Queue source records (${debug.included.length})</div>
+            <ol class="queue-debug-list">${included}</ol>
+            <div>Queue Position = ${escHtml(pq.position != null ? String(pq.position) : '—')} · Orders Ahead = ${escHtml(pq.ordersAhead != null ? String(pq.ordersAhead) : '—')} · Total Queue = ${escHtml(String(pq.totalQueueSize ?? debug.included.length))}</div>
+            ${excludedHtml ? `<details><summary>Excluded from this tier (${excluded.length})</summary><ul class="queue-debug-excluded">${excludedHtml}</ul></details>` : ''}
+          </div>`;
+      }
+
       const pairCardsHtml = pairQueues.map((pq, idx) => {
         const tierLabel = pq.tier != null ? `Tier ${pq.tier}` : `Pair ${idx + 1}`;
         const wildNote = pq.expandedFromWildcard && pq.wildcardSource
@@ -1166,6 +1251,7 @@
               ${statCard('Orders Ahead', pq.ordersAhead, false)}
               ${statCard('Total Queue', pq.totalQueueSize, false)}
             </div>
+            ${debugBlock(pq)}
           </div>`;
       }).join('');
 
@@ -1179,6 +1265,7 @@
           <span><strong>Back Order:</strong> ${escHtml(String(values.orderNumber ?? ''))}</span>
           <span><strong>Product:</strong> ${escHtml(String(values.product ?? qr.product ?? ''))}</span>
           <span><strong>Suffix:</strong> ${escHtml(String(values.suffix ?? qr.suffix ?? ''))}</span>
+          ${values.modelYear != null && String(values.modelYear).trim() !== '' ? `<span><strong>Model year:</strong> ${escHtml(String(values.modelYear))}</span>` : ''}
           <span><strong>Reservation:</strong> ${escHtml(formatBoDate(qr.reservationDate || values.reservationDate))}</span>
         </div>
         ${wildBanner}
@@ -1245,41 +1332,37 @@
       'lite ace':        ['lite ace'],
       'liteace':         ['lite ace'],
       'hiace bus':       ['hiace bus'],
-      'hiace van':       ['hiace van'],
-      'lexus':           ['lexus'],
-      'lexus es':        ['lexus es'],
-      'es':              ['lexus es'],
-      'lexus is':        ['lexus is'],
-      'is':              ['lexus is'],
-      'lexus nx':        ['lexus nx'],
-      'nx':              ['lexus nx'],
-      'lexus rx':        ['lexus rx'],
-      'rx':              ['lexus rx'],
-      'lexus ux':        ['lexus ux'],
-      'ux':              ['lexus ux']
+      'hiace van':       ['hiace van']
     };
 
-    function lexusImageBasename(productName) {
-      const compact = String(productName || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-      if (!compact) return '';
-      const hasLexus = /\blexus\b/.test(compact);
-      const models = ['es', 'is', 'nx', 'rx', 'ux'];
-      for (let i = 0; i < models.length; i += 1) {
-        const model = models[i];
-        const word = new RegExp('\\b' + model + '\\b');
-        if ((hasLexus && word.test(compact)) || compact === model || compact.startsWith(model + ' ')) {
-          return 'lexus ' + model;
+    function lexusPictureBasename(productName) {
+      const text = String(productName || '').toLowerCase();
+      const tokens = text.split(/[^a-z0-9]+/).filter(Boolean);
+      const models = [
+        ['esh', 'lexus es'],
+        ['nxh', 'lexus nx'],
+        ['rxh', 'lexus rx'],
+        ['es', 'lexus es'],
+        ['is', 'lexus is'],
+        ['nx', 'lexus nx'],
+        ['rx', 'lexus rx'],
+        ['ux', 'lexus ux']
+      ];
+      for (const token of tokens) {
+        for (const [code, file] of models) {
+          if (token === code || (token.startsWith(code) && /^\d/.test(token.slice(code.length)))) return file;
         }
       }
-      return hasLexus ? 'lexus' : '';
+      if (tokens.includes('lexus') || text.includes('لكزس')) return 'lexus';
+      return '';
     }
 
     function productImageCandidates(productName) {
       const lower = String(productName || '').toLowerCase().trim();
       const noSpace = lower.replace(/\s+/g, '');
       const slug = productSlug(productName);
-      const lexusBase = lexusImageBasename(productName);
-      const aliasNames = (lexusBase ? [lexusBase] : []).concat(productImageAliases[lower] || []);
+      const lexusFile = lexusPictureBasename(productName);
+      const aliasNames = (lexusFile ? [lexusFile] : []).concat(productImageAliases[lower] || []);
       const exts = ['png', 'jpg', 'jpeg', 'webp'];
       const candidates = new Set();
 
@@ -1550,9 +1633,105 @@
       return String(s ?? '').trim().toLowerCase();
     }
 
+    function showBoOrder(data) {
+      lastOrderPayload = data;
+      if (resultCardTitle) {
+        resultCardTitle.classList.remove('live-team-label');
+        resultCardTitle.removeAttribute('dir');
+        resultCardTitle.textContent = tl('card_order');
+      }
+      resultMeta.style.display = '';
+      setStatus(tl('status_order_found', { col: data.matchedColumn }), 'ok');
+      const source = data.source || {};
+      const plantNames = Array.isArray(source.sheets) ? source.sheets.map((sheet) => sheet.sheetName).filter(Boolean) : [];
+      const place = source.brand === 'lexus'
+        ? (plantNames.length > 1 ? `All plants: ${plantNames.join(', ')}` : `Plant: ${source.sheetName || plantNames[0] || '—'}`)
+        : `Sheet: ${source.sheetName || '—'}`;
+      resultMeta.textContent = `Source: ${source.filename || '—'} | ${place} | Uploaded: ${source.uploadedAt ? new Date(source.uploadedAt).toLocaleString() : '—'}`;
+      renderQueue(data.queue);
+      renderOrderUnits(data.orderUnits);
+      renderDetails(data.details);
+      resultCard.style.display = 'block';
+      fillNewCustomerQueueFromOrder(data.queue);
+    }
+
+    const LIVE_SHEET_EMPLOYEE_URL = 'https://delivery-operation-production.up.railway.app/delivery-transformation/employee.html';
+    const LIVE_SHEET_FINDER_URL = 'https://delivery-operation-production.up.railway.app/delivery-transformation/vin-finder.html';
+
+    function liveSheetOpenUrl(row) {
+      const q = String((row && (row.vin || row.order)) || '').trim();
+      if (!q) return LIVE_SHEET_EMPLOYEE_URL;
+      return `${LIVE_SHEET_FINDER_URL}?q=${encodeURIComponent(q)}`;
+    }
+
+    function renderLiveSheet(rows) {
+      lastLiveRows = rows;
+      const card = document.getElementById('liveSheetCard');
+      const title = document.getElementById('liveSheetTitle');
+      const body = document.getElementById('liveSheetBody');
+      if (!card || !title || !body) return;
+      const names = [...new Set(rows.map((row) => String(row.employee || '').trim()).filter(Boolean))];
+      title.textContent = names.length ? names.join(' · ') : tl('card_live');
+      body.innerHTML = '';
+      rows.forEach((row, index) => {
+        if (rows.length > 1) {
+          const heading = document.createElement('tr');
+          heading.innerHTML = `<th colspan="2">${escHtml(tl('live_match', { n: index + 1 }))}</th>`;
+          body.appendChild(heading);
+        }
+        const vinShown = row.vin ? `<a href="${escHtml(liveSheetOpenUrl(row))}" target="_blank" rel="noopener">${escHtml(row.vin)}</a>` : '—';
+        const orderShown = row.order ? `<a href="${escHtml(liveSheetOpenUrl(row))}" target="_blank" rel="noopener">${escHtml(row.order)}</a>` : '—';
+        [
+          [tl('live_employee'), row.employee == null || String(row.employee).trim() === '' ? '—' : escHtml(String(row.employee))],
+          [tl('live_status'), row.status == null || String(row.status).trim() === '' ? '—' : escHtml(String(row.status))],
+          [tl('live_vin'), vinShown],
+          [tl('live_order'), orderShown],
+          ['Live sheet', `<a href="${escHtml(LIVE_SHEET_EMPLOYEE_URL)}" target="_blank" rel="noopener">Open employee live sheet</a>`]
+        ].forEach(([key, valueHtml]) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<th>${escHtml(key)}</th><td>${valueHtml}</td>`;
+          body.appendChild(tr);
+        });
+      });
+      card.style.display = 'block';
+    }
+
+    async function searchLiveSheet(query, alongside) {
+      const card = document.getElementById('liveSheetCard');
+      if (card) card.style.display = 'none';
+      const compact = query.replace(/[^A-Za-z0-9]/g, '');
+      if (compact.length < 4) {
+        if (!alongside) setStatus(tl('status_not_found'), 'err');
+        return false;
+      }
+      if (!alongside) setStatus(tl('status_live_searching'), '');
+      // Same-origin proxy → local DT store, then Delivery Operation Live Sheet (employee.html).
+      const res = await fetch(`/api/delivery-transformation/vin-finder?q=${encodeURIComponent(query)}&_=${Date.now()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (!alongside) setStatus(data.error || tl('status_not_anywhere'), 'err');
+        return false;
+      }
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      if (!rows.length) {
+        if (!alongside) setStatus(tl('status_not_anywhere'), 'err');
+        return false;
+      }
+      renderLiveSheet(rows);
+      if (!alongside) {
+        const fromLive = data.source === 'delivery-operation' ? ' (Delivery Live Sheet)' : '';
+        setStatus(tl('status_live_found') + fromLive, 'ok');
+      }
+      return true;
+    }
+
     async function searchOrder() {
       const orderNumber = orderInput.value.trim();
       resultCard.style.display = 'none';
+      const liveCard = document.getElementById('liveSheetCard');
+      if (liveCard) liveCard.style.display = 'none';
+      lastLiveRows = null;
+      lastOrderPayload = null;
       if (!orderNumber) {
         setStatus(tl('status_enter_order'), 'err');
         return;
@@ -1560,24 +1739,23 @@
 
       lastOrderNumber = orderNumber;
       setStatus(tl('status_searching'), '');
+      let boFound = false;
       try {
         const res = await fetch(`/api/bo-data/order/${encodeURIComponent(orderNumber)}`);
-        const data = await res.json();
-        if (!res.ok) {
-          setStatus(data.error || tl('status_not_found'), 'err');
-          return;
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          showBoOrder(data);
+          boFound = true;
+        } else if (res.status !== 404) {
+          setStatus(data.error || tl('status_lookup_fail'), 'err');
         }
-
-        lastOrderPayload = data;
-        setStatus(tl('status_order_found', { col: data.matchedColumn }), 'ok');
-        resultMeta.textContent = `Source: ${data.source.filename} | Sheet: ${data.source.sheetName} | Uploaded: ${new Date(data.source.uploadedAt).toLocaleString()}`;
-        renderQueue(data.queue);
-        renderOrderUnits(data.orderUnits);
-        renderDetails(data.details);
-        resultCard.style.display = 'block';
-        fillNewCustomerQueueFromOrder(data.queue);
       } catch (e) {
         setStatus(tl('status_lookup_fail'), 'err');
+      }
+      try {
+        await searchLiveSheet(orderNumber, boFound);
+      } catch (e) {
+        if (!boFound) setStatus(tl('status_lookup_fail'), 'err');
       }
     }
 
@@ -1610,10 +1788,10 @@
           if (sel) selectProduct(sel);
         }
         if (lastOrderPayload && resultCard.style.display !== 'none') {
-          setStatus(tl('status_order_found', { col: lastOrderPayload.matchedColumn }), 'ok');
-          renderQueue(lastOrderPayload.queue);
-          renderOrderUnits(lastOrderPayload.orderUnits);
-          renderDetails(lastOrderPayload.details);
+          showBoOrder(lastOrderPayload);
+        }
+        if (lastLiveRows && document.getElementById('liveSheetCard') && document.getElementById('liveSheetCard').style.display !== 'none') {
+          renderLiveSheet(lastLiveRows);
         }
         if (!selectedProduct) {
           queueMatrixSummary.textContent = tl('matrix_pick_car');

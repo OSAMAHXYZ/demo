@@ -59,6 +59,35 @@ function samePersonName(a, b) {
     return short.every((word) => full.includes(word));
 }
 
+// BO rows with no salesman / API-PATCH placeholders go to Mohammed Al Fadel (login 1234).
+const ORPHAN_ASSIGNEE = { salesmanId: '1234', salesmanName: 'Mohammed Al Fadel' };
+function compactToken(value) {
+    return fold(value).replace(/[\s._-]+/g, '');
+}
+function isOrphanSalesman(id, name) {
+    const idKey = compactToken(id);
+    const nameKey = compactToken(name);
+    if (!idKey || idKey === 'unassigned') return true;
+    if (!nameKey || nameKey === 'unassigned') return true;
+    if (idKey === 'apipatch' || nameKey === 'apipatch') return true;
+    return false;
+}
+function resolveSalesman(id, name) {
+    const salesmanId = cellString(id) || 'UNASSIGNED';
+    const salesmanName = cellString(name) || 'Unassigned';
+    if (isOrphanSalesman(salesmanId, salesmanName)) {
+        return { salesmanId: ORPHAN_ASSIGNEE.salesmanId, salesmanName: ORPHAN_ASSIGNEE.salesmanName };
+    }
+    return { salesmanId, salesmanName };
+}
+function isMohammedAlFadelPerson(person) {
+    if (!person) return false;
+    if (String(person.employeeNumber || person.id || '') === '1234') return true;
+    if (String(person.recordId || '') === 'emp-mohammed-al-fadul') return true;
+    const key = fold(person.name || person.salesmanName || '').replace(/\s+/g, ' ').trim();
+    return key === 'mohammed al fadel' || key === 'mohammed al fadul';
+}
+
 function whatsappFromRow(row) {
     if (!row || !Object.prototype.hasOwnProperty.call(row, '__whatsapp')) return '';
     return cellString(row.__whatsapp);
@@ -210,8 +239,10 @@ function analyzeTable(table, rule) {
         conditionText: describeRule(rule),
         mappingWarnings
     };
-    if (!conditions.length || missingColumns.length === conditions.length) return empty;
     const wantedProducts = chosenList(rule, 'products', 'product').map(fold).filter(Boolean);
+    // Car-only rules are valid: product filter alone can match. Column conditions are optional.
+    if (conditions.length && missingColumns.length === conditions.length) return empty;
+    if (!conditions.length && !wantedProducts.length) return empty;
     const groups = new Map();
     const matchedSample = [];
     const excludedSample = [];
@@ -219,8 +250,12 @@ function analyzeTable(table, rule) {
     let excludedCount = 0;
     rows.forEach((row) => {
         const product = cellString(productHeader ? row[productHeader] : '');
-        const salesmanId = cellString(salesmanIdHeader ? row[salesmanIdHeader] : '') || 'UNASSIGNED';
-        const salesmanName = cellString(salesmanNameHeader ? row[salesmanNameHeader] : '') || 'Unassigned';
+        const resolved = resolveSalesman(
+            salesmanIdHeader ? row[salesmanIdHeader] : '',
+            salesmanNameHeader ? row[salesmanNameHeader] : ''
+        );
+        const salesmanId = resolved.salesmanId;
+        const salesmanName = resolved.salesmanName;
         const boNumber = cellString(orderHeader ? row[orderHeader] : '') || 'Order number unavailable';
         const rowOrderDate = displayOrderDate(orderDateHeader ? row[orderDateHeader] : '');
         const rowDeadline = deadlineHeader ? cellString(row[deadlineHeader]) : '';
@@ -241,7 +276,10 @@ function analyzeTable(table, rule) {
                 reason: pass ? '' : `${item.column} is ${value || 'blank'}; needed ${describeCondition(item)}`
             };
         });
-        const pass = !carFail && (mode === 'any' ? checks.some((item) => item.pass) : checks.every((item) => item.pass));
+        const conditionsPass = !conditions.length
+            ? true
+            : (mode === 'any' ? checks.some((item) => item.pass) : checks.every((item) => item.pass));
+        const pass = !carFail && conditionsPass;
         if (!pass) {
             excludedCount += 1;
             if (excludedSample.length < 8 && !seenExcluded.has(boNumber)) {
@@ -590,6 +628,7 @@ function attachBoErrorRules(app, deps) {
             deadlineColumn: deadlineSource(raw) === 'column' ? cellString(raw.deadlineColumn) : '',
             deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(cellString(raw.deadlineDate)) ? cellString(raw.deadlineDate) : '',
             fieldMap: cleanFieldMap(raw),
+            pushKind: raw.pushKind === 'message' ? 'message' : (has('pushKind') ? (raw.pushKind === 'error' ? 'error' : '') : ((previous && previous.pushKind) || '')),
             active: raw.active !== false,
             archived: !!(previous && previous.archived),
             createdAt: (previous && previous.createdAt) || now,
@@ -606,8 +645,9 @@ function attachBoErrorRules(app, deps) {
     function validate(rule, headers, opts) {
         if (!rule.name) return 'Enter a rule name.';
         const conditions = ruleConditions(rule);
-        if (!conditions.length) return 'Choose at least one BO column.';
-        if (headers.length) {
+        const products = chosenList(rule, 'products', 'product');
+        if (!conditions.length && !products.length) return 'Choose at least one car or BO column.';
+        if (conditions.length && headers.length) {
             const missing = conditions.filter((item) => !findHeader(headers, [item.column]));
             if (missing.length === conditions.length) return `Those columns are not in the latest BO file: ${missing.map((item) => item.column).join(', ')}. The rule can be saved, but it cannot be analyzed until a column is present.`;
         }
@@ -693,6 +733,7 @@ function attachBoErrorRules(app, deps) {
     }
     function employeeCanSee(user, item) {
         if (!user || !item) return false;
+        if (isMohammedAlFadelPerson(user) && isOrphanSalesman(item.salesmanId, item.salesmanName)) return true;
         if (item.salesmanId !== 'UNASSIGNED' && String(user.employeeNumber) === String(item.salesmanId)) {
             const twins = deps.loadStaff().filter((person) => String(person.id) === String(user.employeeNumber) && person.active !== false);
             if (twins.length <= 1) return true;
@@ -754,6 +795,48 @@ function attachBoErrorRules(app, deps) {
             lastPublishedEmployeeCount: last ? (last.employeeCount || 0) : 0
         };
     }
+    function publicationKind(publication, rule) {
+        if (publication && publication.kind === 'message') return 'message';
+        if (publication && publication.kind === 'error') return 'error';
+        if (rule && rule.pushKind === 'message') return 'message';
+        if (rule && rule.pushKind === 'error') return 'error';
+        return '';
+    }
+    function messageProgress(store) {
+        const latestByRule = new Map();
+        (store.publications || []).forEach((publication) => latestByRule.set(publication.ruleId, publication));
+        const messages = [];
+        latestByRule.forEach((publication, ruleId) => {
+            const rule = (store.rules || []).find((item) => item.id === ruleId);
+            if (!rule || rule.archived) return;
+            if (publicationKind(publication, rule) !== 'message') return;
+            const employees = publication.employees || [];
+            let sent = 0;
+            let done = 0;
+            let doneEmployees = 0;
+            employees.forEach((item) => {
+                const orders = item.orders || [];
+                sent += orders.length;
+                const state = store.statuses[statusKey(rule.id, item)] || {};
+                const completed = orders.filter((order) => orderSendState(state, order).sent).length;
+                done += completed;
+                if (orders.length && completed === orders.length) doneEmployees += 1;
+            });
+            messages.push({
+                id: rule.id,
+                publicationId: publication.id,
+                name: rule.name || 'Message',
+                message: cellString(rule.message),
+                publishedAt: publication.publishedAt || '',
+                sent: sent || publication.orderCount || 0,
+                done,
+                employeeCount: employees.length || publication.employeeCount || 0,
+                doneEmployees
+            });
+        });
+        messages.sort((a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));
+        return messages;
+    }
 
     app.get('/api/reserved-orders/bo-rules', (req, res) => {
         if (!deps.requireAdmin(req, res)) return;
@@ -770,8 +853,12 @@ function attachBoErrorRules(app, deps) {
         const salesmanNameHeader = findHeader(table.headers, ['Salesman Name', 'Salesman']);
         const peopleMap = new Map();
         (table.rows || []).forEach((row) => {
-            const salesmanId = cellString(salesmanIdHeader ? row[salesmanIdHeader] : '') || 'UNASSIGNED';
-            const salesmanName = cellString(salesmanNameHeader ? row[salesmanNameHeader] : '') || 'Unassigned';
+            const resolved = resolveSalesman(
+                salesmanIdHeader ? row[salesmanIdHeader] : '',
+                salesmanNameHeader ? row[salesmanNameHeader] : ''
+            );
+            const salesmanId = resolved.salesmanId;
+            const salesmanName = resolved.salesmanName;
             const product = cellString(productHeader ? row[productHeader] : '');
             const key = `${salesmanId}\u0001${fold(salesmanName)}`;
             if (!peopleMap.has(key)) peopleMap.set(key, { salesmanId, salesmanName, orders: 0, cars: {} });
@@ -933,6 +1020,7 @@ function attachBoErrorRules(app, deps) {
         const publication = {
             id: newId('pub'),
             ruleId: rule.id,
+            kind: 'error',
             publishedAt: new Date().toISOString(),
             employeeCount: rule.affectedEmployees,
             orderCount: rule.affectedOrders,
@@ -941,12 +1029,14 @@ function attachBoErrorRules(app, deps) {
         };
         store.publications.push(publication);
         rule.notificationStatus = 'pushed';
+        rule.pushKind = 'error';
         (rule.current.employees || []).forEach((item) => {
             if (item.salesmanId === 'UNASSIGNED') return;
             const key = statusKey(rule.id, item);
             if (!store.statuses[key]) store.statuses[key] = { status: 'new', at: publication.publishedAt, orders: {} };
         });
         saveStore(store);
+        if (typeof deps.notify === 'function') deps.notify();
         deps.audit(req, { user: 'Admin', role: 'admin', action: 'BO_ALERT_PUBLISHED', entity: 'bo-rule', source: 'admin', details: `${rule.name} to ${rule.affectedEmployees} employees` });
         res.json({ ok: true, publicationId: publication.id, rule: publicRule(rule) });
     });
@@ -988,9 +1078,11 @@ function attachBoErrorRules(app, deps) {
         if (last && last.fingerprint === nextPrint && !req.body?.confirmRepublish) {
             return res.status(409).json({ error: 'This same result was already pushed to the same employees. Confirm to publish it again.', needsConfirm: true });
         }
+        const kind = cellString(req.body && req.body.kind) === 'message' ? 'message' : 'error';
         const publication = {
             id: newId('pub'),
             ruleId: rule.id,
+            kind,
             publishedAt: new Date().toISOString(),
             employeeCount: employees.length,
             orderCount,
@@ -1002,11 +1094,13 @@ function attachBoErrorRules(app, deps) {
         };
         store.publications.push(publication);
         rule.notificationStatus = 'pushed';
+        rule.pushKind = kind;
         employees.forEach((item) => {
             const key = statusKey(rule.id, item);
             if (!store.statuses[key]) store.statuses[key] = { status: 'new', at: publication.publishedAt, orders: {} };
         });
         saveStore(store);
+        if (typeof deps.notify === 'function') deps.notify();
         const audienceText = targeted ? chosen.map((person) => person.name).join(', ') : 'all employees';
         deps.audit(req, { user: 'Admin', role: 'admin', action: 'BO_ALERT_PUBLISHED', entity: 'bo-rule', source: 'notifications', details: `${rule.name} to ${employees.length} employee(s) / ${orderCount} order(s) · ${audienceText}` });
         res.json({ ok: true, publicationId: publication.id, employeeCount: employees.length, orderCount, audience: audienceText, rule: publicRule(rule) });
@@ -1121,8 +1215,10 @@ function attachBoErrorRules(app, deps) {
             cards.push({
                 ruleId: rule.id,
                 publicationId: publication.id,
+                kind: publicationKind(publication, rule) || 'error',
                 name: rule.name,
                 errorLabel: rule.errorLabel || '',
+                conditionText: (rule.current && rule.current.conditionText) || describeRule(rule) || '',
                 messageMode: rule.messageMode || '',
                 language: rule.language || '',
                 product: rule.product || 'All cars',
@@ -1175,6 +1271,7 @@ function attachBoErrorRules(app, deps) {
         }
         store.statuses[key] = state;
         saveStore(store);
+        if (typeof deps.notify === 'function') deps.notify();
         deps.audit(req, { user: user.name, employeeNumber: user.employeeNumber, recordId: user.recordId, role: 'employee', action: status === 'completed' ? 'BO_CORRECTION_COMPLETED' : 'BO_ALERT_OPENED', entity: 'bo-rule', source: 'employee', orderNumber: req.body?.boNumber || '', details: rule.name, newValue: status });
         res.json({ ok: true });
     });
@@ -1207,8 +1304,14 @@ function attachBoErrorRules(app, deps) {
         state.at = now;
         store.statuses[key] = state;
         saveStore(store);
+        if (typeof deps.notify === 'function') deps.notify();
         deps.audit(req, { user: user.name, employeeNumber: user.employeeNumber, recordId: user.recordId, role: 'employee', action: 'BO_MESSAGE_SENT', entity: 'bo-rule', source: 'employee', details: `${rule.name} · ${mine.orders.length} orders`, newValue: 'sent' });
         res.json({ ok: true, sentAt: now });
+    });
+
+    app.get('/api/reserved-orders/message-progress', (req, res) => {
+        const store = loadStore();
+        res.json({ messages: messageProgress(store) });
     });
 
     return { reanalyzeActive, analyzeTable };

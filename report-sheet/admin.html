@@ -12,10 +12,11 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261106cp2" />
-  <link rel="stylesheet" href="bo-notifications.css?v=20261109nn1" />
+  <link rel="stylesheet" href="bo-notifications.css?v=20261112boe2" />
   <script src="auth.js?v=20261109nn1"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261107mod1"></script>
+  <script src="data-store.js?v=20261110boe1"></script>
+  <script src="bo-error-builtins.js?v=20261112boe2"></script>
   <script src="gec-data.js?v=20261023op1"></script>
   <script src="allocation-plan-data.js?v=20261107mod1"></script>
   <style>
@@ -539,6 +540,30 @@
 
     /* hide empty boxes the builder leaves behind (they show up again when filled) */
     body.admin-page #boe-rules-root :is(div,p,section,pre):empty{display:none !important}
+
+    /* cleaner BO Error Condition builder */
+    body.admin-page #panel-bonotifications .br-form-clean{display:flex;flex-direction:column;gap:14px}
+    body.admin-page #panel-bonotifications .br-sec{padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(148,163,184,.04)}
+    body.admin-page #panel-bonotifications .br-sec-title{margin:0 0 10px;font:700 11px/1 "Archivo",system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    body.admin-page #panel-bonotifications .br-car-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    body.admin-page #panel-bonotifications .br-car-chip{display:inline-flex;align-items:center;gap:0;padding:0;margin:0;border:1px solid var(--line-2);border-radius:999px;background:var(--sunk);cursor:pointer;overflow:hidden}
+    body.admin-page #panel-bonotifications .br-car-chip input{position:absolute;opacity:0;pointer-events:none}
+    body.admin-page #panel-bonotifications .br-car-chip span{display:block;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+    body.admin-page #panel-bonotifications .br-car-chip.is-on{border-color:rgba(255,45,66,.55);background:rgba(255,45,66,.12);box-shadow:0 0 0 2px rgba(255,45,66,.12)}
+    body.admin-page #panel-bonotifications .br-car-chip.is-on span{color:#fff}
+    body.admin-page #panel-bonotifications .br-car-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px}
+    body.admin-page #panel-bonotifications .br-cond{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(110px,.9fr) minmax(0,1fr) auto;gap:8px;align-items:center;margin:0 0 8px}
+    body.admin-page #panel-bonotifications .br-cond-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+    body.admin-page #panel-bonotifications .br-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    body.admin-page #panel-bonotifications .br-meta-grid .check{grid-column:1 / -1;align-items:center}
+    body.admin-page #panel-bonotifications .br-msg summary{cursor:pointer;font-weight:700;color:var(--ink);margin-bottom:10px}
+    body.admin-page #panel-bonotifications .br-next{margin:0;padding:12px 14px;border:1px solid rgba(255,45,66,.28);border-radius:14px;background:rgba(255,45,66,.06)}
+    body.admin-page #panel-bonotifications .br-next-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    body.admin-page #panel-bonotifications .br-next-choice button{text-align:left;padding:12px;border-radius:12px;min-height:88px}
+    @media (max-width:900px){
+      body.admin-page #panel-bonotifications .br-cond{grid-template-columns:1fr}
+      body.admin-page #panel-bonotifications .br-meta-grid,.br-next-choice{grid-template-columns:1fr}
+    }
 
     /* ===== BO Error Condition · one screen ===== */
     .shell:has(#panel-bonotifications:not([hidden])) > #admin-kpis{display:none !important}
@@ -1282,8 +1307,8 @@
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
     { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Lead Data sheet · Employee Number in Col R · feeds the GEC Dashboard · optional Visitors sheet" },
     { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Optional · visitor log · Date · Promoter (emp. no. or name) · Visit Purpose · optional Count · no personal info" },
-    { id: "lexusB2c", n: 9, title: "Lexus B2C", ar: "لكزس · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Lexus Controller & Lexus Tracker" },
-    { id: "toyotaB2c", n: 10, title: "Toyota B2C", ar: "تويوتا · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Toyota B2C Controller & B2C Tracker" },
+    { id: "lexusB2c", n: 9, title: "Lexus B2C", ar: "لكزس · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new, updates matching, and removes orders gone from the file · entered tracker notes/edits stay · feeds the Lexus Controller & Lexus Tracker" },
+    { id: "toyotaB2c", n: 10, title: "Toyota B2C", ar: "تويوتا · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new, updates matching, and removes orders gone from the file · entered tracker notes/edits stay · feeds the Toyota B2C Controller & B2C Tracker" },
     { id: "reserved", n: 11, title: "Reserved File", ar: "الملف المحجوز", blurb: "Sheet E-Sales المحجوز (or first sheet) · order Col F · VIN Col L · product Col I · feeds Reserved Vehicles · replaces the reserved sheet inside Stock E-Sales when both are pushed" },
   ];
   const B2C_SLOTS = [
@@ -1906,7 +1931,7 @@
     const note = $("#bo-notif-unlock-note");
     if (note) note.textContent = "Loading BO Error Condition…";
     const script = document.createElement("script");
-    script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261103gm1";
+    script.src = "/bo-rules-ui.js?v=20261112boe2";
     script.onload = () => { if (note) note.textContent = ""; };
     script.onerror = () => {
       boNotifLoaded = false;
@@ -2481,7 +2506,7 @@
         if (!m) return "";
         return m.error
           ? ` · ${label}: ${m.error}`
-          : ` · ${label}: ${m.added} new, ${m.updated} updated, ${m.kept} kept${m.skipped ? `, ${m.skipped} closed at month end skipped` : ""} (${m.total} orders)`;
+          : ` · ${label}: ${m.added} new, ${m.updated} updated${m.removed ? `, ${m.removed} removed` : ""}${m.kept ? `, ${m.kept} kept` : ""}${m.skipped ? `, ${m.skipped} closed at month end skipped` : ""} (${m.total} orders)`;
       }).join("");
       setStatus(
         srOk
@@ -3077,8 +3102,8 @@
     <div class="bon-result" id="bon-result" role="status"></div>
     <div class="bon-mini" id="bon-mini"></div>
     <div class="bon-choice">
-      <button type="button" class="bon-btn bon-red" id="bon-go-err" disabled><i>⚠</i><span>Add to BO Error dashboard<em>Shows under Order Errors · must be fixed</em></span></button>
-      <button type="button" class="bon-btn bon-blue" id="bon-go-msg" disabled><i>✉</i><span>Send message only<em>Messages page · nothing added to Order Errors</em></span></button>
+      <button type="button" class="bon-btn bon-red" id="bon-go-err" disabled><i>⚠</i><span>Add to BO Error dashboard<em>Report Sheet BO Errors + Order Errors for selected employees</em></span></button>
+      <button type="button" class="bon-btn bon-blue" id="bon-go-msg" disabled><i>✉</i><span>Send employee message<em>Select employees · Messages + Send to WhatsApp</em></span></button>
     </div>
     <div class="bon-pick" id="bon-pickwrap"><label for="bon-saved">Or test a saved rule</label><select id="bon-saved"><option value="">Saved rules…</option></select></div>`;
   const stage = document.createElement("div");
@@ -3183,8 +3208,19 @@
     setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, 3800);
   }
 
+  function adminPass() {
+    return sessionStorage.getItem("reserved-orders-admin-pass") || localStorage.getItem("reserved-orders-admin-pass") || "osama1234";
+  }
   async function api(path, body) {
-    const res = await rawFetch(API + path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const pass = adminPass();
+    if (body === undefined) {
+      const join = path.indexOf("?") >= 0 ? "&" : "?";
+      const res = await rawFetch(API + path + join + "password=" + encodeURIComponent(pass));
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    }
+    const payload = Object.assign({ password: pass }, body || {});
+    const res = await rawFetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await res.json().catch(() => ({}));
     return { res, data };
   }
@@ -3201,15 +3237,39 @@
         if (res.ok) onTested(body.rule || body, data);
       } catch (e) { /* ignore */ }
     }
-    if (method === "POST" && /\/api\/reserved-orders\/bo-rules(\?|$)/.test(url)) state.rules = null;
+    if (method === "POST" && /\/api\/reserved-orders\/bo-rules(\?|$)/.test(url) && !/\/test(\?|$)/.test(url)) state.rules = null;
     return res;
   };
+  window.addEventListener("boe-rules-tested", (event) => {
+    const detail = event && event.detail;
+    if (!detail) return;
+    if (detail.error) {
+      document.getElementById("bon-title").textContent = "Test failed";
+      document.getElementById("bon-sub").textContent = detail.error;
+      document.getElementById("bon-go-err").disabled = true;
+      document.getElementById("bon-go-msg").disabled = true;
+      return;
+    }
+    if (detail.rule && detail.data) onTested(detail.rule, detail.data);
+  });
 
   function onTested(rule, data) {
     state.rule = JSON.parse(JSON.stringify(rule || {}));
     delete state.rule.current;
     state.data = data || {};
+    // Normalize previews so the dock can show per-employee order counts.
+    if (Array.isArray(state.data.previews)) {
+      state.data.previews = state.data.previews.map((p) => Object.assign({}, p, {
+        orderCount: p.orderCount != null ? p.orderCount : (Array.isArray(p.orders) ? p.orders.length : 0),
+        name: p.salesmanName || p.name || "Employee",
+      }));
+    }
     paintDock();
+    if ((Number(state.data.orderCount) || 0) > 0) {
+      toast("Test ready", `${state.data.orderCount} orders · ${state.data.employeeCount || 0} employees — choose Add to dashboard or Send`);
+    } else {
+      toast("No matching orders", "Change the column / value and press Test conditions again.", true);
+    }
   }
 
   function paintDock() {
@@ -3310,8 +3370,8 @@
     tag.textContent = isErr ? "BO Error dashboard" : "Message only";
     document.getElementById("bon-dtitle").textContent = isErr ? "Add these orders to the BO Error dashboard" : "Send a message to each employee";
     document.getElementById("bon-dlead").textContent = isErr
-      ? "Each employee sees only his own orders under Order Errors in Reserved Orders, with the date, and must fix them."
-      : "Each employee gets one message with his own orders on the Messages page. Nothing is added to Order Errors.";
+      ? "Adds the condition to Report Sheet BO Errors, and each selected employee sees his matching orders under Order Errors in Reserved Orders."
+      : "Select employees. Each gets the message under Messages in Reserved Orders and can press Send to WhatsApp using the order phone.";
     drawer.classList.add("open");
     scrim.classList.add("open");
     drawer.setAttribute("aria-hidden", "false");
@@ -3508,6 +3568,29 @@
   /* ---------- send ---------- */
   document.getElementById("bon-send").addEventListener("click", () => (state.mode === "err" ? sendErrors(false) : sendMessages()));
 
+  async function syncReportSheetBoErrors(rule, testData) {
+    if (!window.ReportSheetStore || typeof ReportSheetStore.saveBoErrorRulesToServer !== "function") return;
+    try {
+      const pack = await rawFetch("/api/report-sheet/bo-error-rules").then((r) => r.json()).catch(() => ({ rules: [] }));
+      const id = String((rule && rule.id) || `c${Date.now().toString(36)}`).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || `c${Date.now().toString(36)}`;
+      const nextRule = {
+        id,
+        name: String((rule && (rule.errorLabel || rule.name)) || "BO error condition").slice(0, 80),
+        severity: "critical",
+        matchMode: rule && rule.matchMode === "any" ? "any" : "all",
+        products: Array.isArray(rule && rule.products) ? rule.products : [],
+        conditions: Array.isArray(rule && rule.conditions) ? rule.conditions : [],
+        active: true,
+        submitted: true,
+        testedAt: Date.now(),
+        testCount: Number(testData && testData.orderCount) || 0,
+        fileName: String((testData && testData.fileName) || "").slice(0, 120),
+      };
+      const next = (pack.rules || []).filter((item) => item && item.id !== id).concat(nextRule);
+      await ReportSheetStore.saveBoErrorRulesToServer(next);
+    } catch (e) { /* employee push still succeeded */ }
+  }
+
   async function sendErrors(confirmRepublish) {
     const btn = document.getElementById("bon-send");
     const previews = (draft.data && draft.data.previews) || [];
@@ -3517,11 +3600,12 @@
     if (!all && !recordIds.length) { toast("No login account", "The selected employees have no Reserved Orders account.", true); return; }
     state.busy = true; paintFoot(); btn.textContent = "Adding…";
     try {
-      const { res: sres, data: saved } = await api("/bo-rules", { rule: buildRule(), analyze: true });
+      const rulePayload = buildRule();
+      const { res: sres, data: saved } = await api("/bo-rules", { rule: rulePayload, analyze: true });
       if (!sres.ok) throw new Error(saved.error || "Could not save the rule.");
       const id = (saved.rule && saved.rule.id) || state.rule.id;
       if (saved.rule && saved.rule.id) state.rule.id = saved.rule.id;
-      const { res, data } = await api("/bo-rules/" + encodeURIComponent(id) + "/push-targeted", { recordIds, confirmRepublish: !!confirmRepublish });
+      const { res, data } = await api("/bo-rules/" + encodeURIComponent(id) + "/push-targeted", { recordIds, kind: "error", confirmRepublish: !!confirmRepublish });
       if (res.status === 409 && data.needsConfirm && !confirmRepublish) {
         const box = document.getElementById("bon-confirm");
         box.innerHTML = `<div class="bon-note warn">${esc(data.error || "This rule was pushed before.")} Sending again updates those employees' Order Errors.<br><button type="button" class="bon-btn bon-red" id="bon-again">Send again</button></div>`;
@@ -3530,6 +3614,7 @@
         return;
       }
       if (!res.ok) throw new Error(data.error || "Push failed.");
+      await syncReportSheetBoErrors(Object.assign({}, rulePayload, saved.rule || {}, { id }), draft.data || {});
       toast("Added to BO Error dashboard", `${data.employeeCount || 0} employee(s) · ${data.orderCount || 0} order(s) now in Order Errors`);
       done(`Added to BO Error dashboard · ${data.employeeCount || 0} employees · ${data.orderCount || 0} orders`);
     } catch (e) {
@@ -3539,29 +3624,46 @@
     }
   }
 
-  async function sendMessages() {
+  async function sendMessages(confirmRepublish) {
     const list = chosen();
     if (!list.length) return;
+    const btn = document.getElementById("bon-send");
     const bar = document.getElementById("bon-bar");
     const fill = bar.firstElementChild;
     bar.hidden = false;
     state.busy = true; paintFoot();
-    const title = String(draft.title || "").trim();
-    let ok = 0; const failed = [];
-    for (let k = 0; k < list.length; k++) {
-      const { p, rid } = list[k];
-      document.getElementById("bon-send").textContent = `Sending ${k + 1}/${list.length}…`;
-      try {
-        const { res, data } = await api("/notifications", { password: "", title, message: p.message || draft.message, recordIds: [rid] });
-        if (!res.ok) throw new Error(data.error || "failed");
-        ok++;
-      } catch (e) { failed.push(p.salesmanName || p.name || "?"); }
-      fill.style.width = Math.round(((k + 1) / list.length) * 100) + "%";
+    btn.textContent = "Sending…";
+    fill.style.width = "35%";
+    try {
+      const rulePayload = buildRule();
+      if (draft.title) rulePayload.name = String(draft.title).trim().slice(0, 120);
+      const { res: sres, data: saved } = await api("/bo-rules", { rule: rulePayload, analyze: true });
+      if (!sres.ok) throw new Error(saved.error || "Could not save the rule.");
+      const id = (saved.rule && saved.rule.id) || state.rule.id;
+      if (saved.rule && saved.rule.id) state.rule.id = saved.rule.id;
+      const recordIds = list.map((x) => x.rid).filter(Boolean);
+      const { res, data } = await api("/bo-rules/" + encodeURIComponent(id) + "/push-targeted", {
+        recordIds,
+        kind: "message",
+        confirmRepublish: !!confirmRepublish,
+      });
+      if (res.status === 409 && data.needsConfirm && !confirmRepublish) {
+        fill.style.width = "100%";
+        const box = document.getElementById("bon-confirm");
+        box.innerHTML = `<div class="bon-note warn">${esc(data.error || "This message was sent before.")} Sending again updates those employees' Messages.<br><button type="button" class="bon-btn bon-blue" id="bon-again">Send again</button></div>`;
+        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        document.getElementById("bon-again").addEventListener("click", () => { box.innerHTML = ""; sendMessages(true); });
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || "Send failed.");
+      fill.style.width = "100%";
+      toast(`${data.employeeCount || 0} message${(data.employeeCount || 0) === 1 ? "" : "s"} sent`, "Employees see them on Messages in Reserved Orders · Send to WhatsApp uses the order phone");
+      done(`Message sent to ${data.employeeCount || 0} employee${(data.employeeCount || 0) === 1 ? "" : "s"} · not added to Order Errors`);
+    } catch (e) {
+      toast("Not sent", e.message || "", true);
+    } finally {
+      state.busy = false; paintFoot();
     }
-    state.busy = false; paintFoot();
-    if (failed.length) toast(`${ok} sent · ${failed.length} failed`, failed.join(", "), true);
-    else toast(`${ok} message${ok === 1 ? "" : "s"} sent`, "Employees see them now on the Messages page in Reserved Orders");
-    if (ok) done(`Message sent to ${ok} employee${ok === 1 ? "" : "s"} · not added to Order Errors`);
   }
 
   function done(line) {

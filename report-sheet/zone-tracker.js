@@ -1027,6 +1027,10 @@
         case "zt-month-now": case "zt-empty-now": thisMonth(); break;
         case "zt-refresh": case "zt-empty-refresh": render({ force: true, monthKey: view.monthLocked ? view.monthKey : "" }); break;
         case "zt-export": exportExcel(); break;
+        case "zt-exit":
+          if (typeof global.switchReportPanel === "function") global.switchReportPanel("salesreport");
+          else if (typeof global.switchPanel === "function") global.switchPanel("salesreport");
+          break;
         case "zt-clear":
           Object.assign(view, { zone: "", sharing: "", product: "", sfx: "", usage: "", status: "", q: "", moveKind: "" });
           if ($("#zt-q")) $("#zt-q").value = "";

@@ -16,7 +16,7 @@
   const CHANNELS = [
     { id: "lexus", title: "Lexus Sales", short: "Lexus", brand: "LEXUS", sub: "Hamid Saeed", color: "#c9b28a", img: "../images/cars/thumbs/lexus.webp" },
     { id: "telesales", title: "Telesales", short: "Telesales", brand: "TOYOTA", sub: "All other advisors", color: "#22c3d6", img: "../images/cars/thumbs/camry.webp" },
-    { id: "b2c", title: "B2C Sales", short: "B2C", brand: "TOYOTA", sub: "Mohammed Alfadul · Mohannad Alyoubi", color: "#a78bfa", img: "../images/cars/thumbs/fortuner.webp" },
+    { id: "b2c", title: "B2C Sales", short: "B2C", brand: "TOYOTA", sub: "Mohammed Alfadul · Mohannad Alyoubi · Not Assigned", color: "#a78bfa", img: "../images/cars/thumbs/fortuner.webp" },
     { id: "guest", title: "Experience Automall", short: "Automall", brand: "TOYOTA", sub: "Guest Experience Center", color: "#f2b24c", img: "../images/cars/thumbs/alj-register.webp" },
   ];
   const CH_INDEX = Object.fromEntries(CHANNELS.map((c, i) => [c.id, i]));

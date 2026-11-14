@@ -893,7 +893,37 @@ function reservedExpiryFields(row) {
     const parsed = parseExcelDate(row && row.expiryRaw);
     if (parsed) return { expiryDate: localStamp(parsed), expiryDisplay: displayStamp(parsed) };
     const text = cleanText(row && row.expiryRaw);
-    return text ? { expiryDate: '', expiryDisplay: text } : null;
+    if (!text || text === '—' || text === '-' || /^n\/?a$/i.test(text)) return null;
+    return { expiryDate: '', expiryDisplay: text };
+}
+
+/** Fill blank expiry/deadline from assign/timer + payment hours. Never clears status/notes. */
+function ensureOrderExpiry(order) {
+    if (!order || typeof order !== 'object') return order;
+    const blank = (value) => {
+        const text = cleanText(value);
+        return !text || text === '—' || text === '-' || /^n\/?a$/i.test(text);
+    };
+    const hasExpiry = !blank(order.expiryDate) || !blank(order.expiryDisplay);
+    const hasDeadline = !blank(order.deadline);
+    if (hasExpiry && hasDeadline) return order;
+    if (!hasExpiry && hasDeadline) {
+        order.expiryDate = order.expiryDate || order.deadline;
+        const parsed = parseLocalStamp(order.deadline);
+        if (parsed && blank(order.expiryDisplay)) order.expiryDisplay = displayStamp(parsed);
+        return order;
+    }
+    const hours = Number(order.paymentHours);
+    const start = parseLocalStamp(order.assignDate)
+        || parseLocalStamp(order.timerStartedAt)
+        || parseLocalStamp(order.createdDate);
+    if (!start || !Number.isFinite(hours) || hours <= 0) return order;
+    const end = new Date(start.getTime() + hours * 3600000);
+    const stamp = localStamp(end);
+    if (blank(order.expiryDate)) order.expiryDate = stamp;
+    if (blank(order.expiryDisplay)) order.expiryDisplay = displayStamp(end);
+    if (blank(order.deadline)) order.deadline = stamp;
+    return order;
 }
 
 function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, reservedSheets, rtlRows }) {
@@ -927,13 +957,32 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         if (!order) return;
         if (order.key) previousByKey.set(order.key, order);
         const vin = normalizeVin(order.vin);
-        if (vin) previousByKey.set(`vin:${vin}`, order);
         const orderNo = cleanText(order.orderNumber).toLowerCase();
+        if (vin) previousByKey.set(`vin:${vin}`, order);
         if (orderNo && orderNo !== 'no order') previousByKey.set(`order:${orderNo}`, order);
+        // Exact reservation identity: same chassis + same back-order number.
+        if (vin && orderNo && orderNo !== 'no order') previousByKey.set(`vinbo:${vin}:${orderNo}`, order);
     });
+    function normalizeBackOrder(value) {
+        const text = cleanText(value).toLowerCase();
+        return !text || text === 'no order' ? '' : text;
+    }
+    function sameBackOrder(a, b) {
+        const left = normalizeBackOrder(a && a.orderNumber != null ? a.orderNumber : a);
+        const right = normalizeBackOrder(b && b.orderNumber != null ? b.orderNumber : b);
+        return Boolean(left && right && left === right);
+    }
     function earlierOrder(row, vin) {
-        const orderNo = cleanText(row.orderNumber).toLowerCase();
-        return (vin && previousByKey.get(`vin:${vin}`)) || (orderNo && orderNo !== 'no order' && previousByKey.get(`order:${orderNo}`)) || null;
+        const orderNo = normalizeBackOrder(row && row.orderNumber);
+        // Prefer the prior row that matches BOTH VIN and back-order number.
+        if (vin && orderNo) {
+            const exact = previousByKey.get(`vinbo:${vin}:${orderNo}`);
+            if (exact) return exact;
+        }
+        // Same VIN with a different BO still resolves so carryForward can reset that reservation.
+        return (vin && previousByKey.get(`vin:${vin}`))
+            || (orderNo && previousByKey.get(`order:${orderNo}`))
+            || null;
     }
     function sameSalesman(a, b) {
         const norm = (value) => cleanText(value).toLowerCase().replace(/\s+/g, ' ');
@@ -958,14 +1007,18 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
     }
     function carryForward(prev, record, infoChanged) {
         if (!prev) return record;
-        // Same VIN pushed again for ANOTHER salesman, or with changed Reserved Order File info: take the new info and
-        // start over with a blank status (no old status, note, history or clock). An unchanged VIN keeps everything.
-        if (infoChanged || !sameSalesman(prev.salesAdvisor, record.salesAdvisor)) {
+        const boMatch = sameBackOrder(prev, record);
+        // Keep status/notes only when VIN already matched AND the back-order number is unchanged.
+        // A-J / salesman edits must NOT wipe a matching VIN+BO reservation.
+        // Different BO on the same VIN = new reservation → blank status/notes. Unmatched VINs are dropped later.
+        if (!boMatch) {
             const assignmentHistory = Array.isArray(prev.assignmentHistory) ? prev.assignmentHistory.slice() : [];
             assignmentHistory.push({
                 salesAdvisor: record.salesAdvisor,
                 assignDate: record.assignDisplay || record.assignDate,
-                at: localStamp(new Date())
+                at: localStamp(new Date()),
+                reason: 'back-order-changed',
+                previousOrderNumber: prev.orderNumber || ''
             });
             return {
                 ...record,
@@ -988,15 +1041,16 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 timerStartedAt: record.assignDate || localStamp(new Date())
             };
         }
+        void infoChanged;
         const assignmentHistory = Array.isArray(prev.assignmentHistory) ? prev.assignmentHistory.slice() : [];
-        if (prev.salesAdvisor !== record.salesAdvisor || prev.assignDate !== record.assignDate) {
+        if (!sameSalesman(prev.salesAdvisor, record.salesAdvisor) || prev.assignDate !== record.assignDate) {
             assignmentHistory.push({
                 salesAdvisor: record.salesAdvisor,
                 assignDate: record.assignDisplay || record.assignDate,
                 at: localStamp(new Date())
             });
         }
-        // Existing VIN: keep the original deadline clock — do not recount on re-push.
+        // Same VIN + same back-order: keep status, notes, and the original deadline clock.
         const keepClock = Boolean(prev.deadline || prev.assignDate || prev.expiryDate);
         return {
             ...record,
@@ -1163,6 +1217,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                     if (!existing.deadline && expiry.expiryDate) existing.deadline = expiry.expiryDate;
                     if (!countedExpiry.has(vin)) { countedExpiry.add(vin); reservedFileExpiryVins += 1; }
                 }
+                ensureOrderExpiry(existing);
                 if (!countedUpdated.has(vin)) { countedUpdated.add(vin); reservedFileUpdatedVins += 1; }
                 return;
             }
@@ -1479,9 +1534,14 @@ function withColorQueue(orders, table) {
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
     const headers = table && Array.isArray(table.headers) ? table.headers : [];
     const list = Array.isArray(orders) ? orders : [];
-    if (!rows.length || !headers.length) return list.map((order) => ({ ...order, ahead: [], boTierQueues: [null, null, null] }));
+    if (!rows.length || !headers.length) return list.map((order) => ({ ...order, ahead: [], queueOrders: [], boTierQueues: [null, null, null] }));
     const lookup = BoOrderLookup.fromBoData({ rows, headers });
-    const productColumn = lookup.resolveColumn(headers, [/^product$/i, /product/i, /model/i]);
+    // Confirm Flag priority (Camry / RAV4 / Hilux SC·DC / LC300 / LC70) is reserved-orders only.
+    // BO Order Lookup keeps normal reservation-date ranking.
+    lookup.preferConfirmSort = true;
+    const productColumn = lookup.resolveColumn(headers, [/^product$/i, /\bproduct\b/i, /^vehicle$/i, /\bvehicle\b/i])
+        || headers.find((header) => /product|vehicle/i.test(String(header || '')) && !/model\s*year/i.test(String(header || '')))
+        || null;
     const suffixColumn = lookup.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
     const dateColumn = lookup.resolveReservationCreatedDateColumn(headers);
     const orderColumn = lookup.resolveBackOrderColumn(headers, null);
@@ -1539,7 +1599,8 @@ function withColorQueue(orders, table) {
             }
             pushRowMatch(matched, seen, row);
         });
-        const sorted = lookup.sortQueueEntries(matched);
+        // Reserved orders only: Confirm Flag priority for Camry / RAV4 / Hilux SC·DC / LC300 / LC70.
+        const sorted = lookup.sortQueueEntries(matched, { preferConfirm: true });
         cache.set(key, sorted);
         return sorted;
     };
@@ -1563,7 +1624,7 @@ function withColorQueue(orders, table) {
                 const hasExt = pairs.some((pair) => colorsMatchLoose(lookup, refPair.exterior, pair.exterior));
                 const hasInt = pairs.some((pair) => colorsMatchLoose(lookup, refPair.interior, pair.interior));
                 return hasExt && hasInt;
-            })));
+            }), { preferConfirm: true }));
         }
         return cache.get(key) || [];
     };
@@ -1588,6 +1649,8 @@ function withColorQueue(orders, table) {
         });
     };
 
+    // First three back-order numbers in the matched vehicle queue (product + suffix + colors),
+    // same ranking as bo-order-lookup.html: reservation date, then order number.
     const toAhead = (queue) => queue.slice(0, 3).map((entry, index) => ({
         queueNumber: index + 1,
         boPosition: index + 1,
@@ -1597,7 +1660,7 @@ function withColorQueue(orders, table) {
     }));
 
     return list.map((order) => {
-        if (!rows.length) return { ...order, ahead: [], boTierQueues: [null, null, null] };
+        if (!rows.length) return { ...order, ahead: [], queueOrders: [], boTierQueues: [null, null, null] };
         const needle = lookup.normalizeText(order.orderNumber);
         let refEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
         const spec = orderQueueSpec(order);
@@ -1616,16 +1679,19 @@ function withColorQueue(orders, table) {
         } : null;
         if (!refEntry && specRef) refEntry = specRef;
 
-        let queue = [];
+        // Queue 1–3 / ahead: only same product + suffix + exterior + interior (BO Order Lookup).
+        let colorQueue = [];
         if (refEntry && refEntry.pairs && refEntry.pairs.length) {
-            queue = queueFor(refEntry, 'strict');
-            if (!queue.length) queue = queueFor(refEntry, 'loose');
+            colorQueue = queueFor(refEntry, 'strict');
+            if (!colorQueue.length) colorQueue = queueFor(refEntry, 'loose');
         }
-        if (!queue.length && specRef && specRef.pairs.length) {
-            queue = queueFor(specRef, 'strict');
-            if (!queue.length) queue = queueFor(specRef, 'loose');
-            if (!queue.length) queue = queueFromRows(spec, 'colors');
+        if (!colorQueue.length && specRef && specRef.pairs.length) {
+            colorQueue = queueFor(specRef, 'strict');
+            if (!colorQueue.length) colorQueue = queueFor(specRef, 'loose');
+            if (!colorQueue.length) colorQueue = queueFromRows(spec, 'colors');
         }
+
+        let queue = colorQueue.slice();
         if (!queue.length && specRef && spec.exterior) {
             queue = queueFor(specRef, 'ext');
             if (!queue.length) queue = queueFromRows(spec, 'ext');
@@ -1642,13 +1708,16 @@ function withColorQueue(orders, table) {
 
         const posIdx = needle ? queue.findIndex((entry) => entry.orderNorm === needle) : -1;
         const fileEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
+        const queueOrders = toAhead(colorQueue.length ? colorQueue : queue);
         return {
             ...order,
             boTierQueues: fileEntry ? tierQueues(fileEntry) : [null, null, null],
-            ahead: toAhead(queue),
+            ahead: queueOrders,
+            // Queue 1 / 2 / 3 on the Live sheet = these first three matched order numbers.
+            queueOrders,
             boQueuePosition: posIdx >= 0 ? posIdx + 1 : null,
             boOrdersAhead: posIdx >= 0 ? posIdx : null,
-            boQueueSize: queue.length || null
+            boQueueSize: (colorQueue.length ? colorQueue : queue).length || null
         };
     });
 }
@@ -1661,12 +1730,19 @@ function publicOrder(order) {
 }
 
 function publicStaff(person) {
+    const editFor = Array.isArray(person && person.editFor)
+        ? person.editFor.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 40)
+        : [];
     return {
         recordId: person.recordId,
         name: person.name,
         id: person.id,
         role: person.role || 'employee',
-        active: person.active !== false
+        active: person.active !== false,
+        matchedSalesman: String((person && person.matchedSalesman) || '').trim(),
+        editFor,
+        canEditOrdersStartingWith5: !!(person && person.canEditOrdersStartingWith5),
+        editFiveOnly: !!(person && person.editFiveOnly)
     };
 }
 
@@ -1741,6 +1817,7 @@ const SEEDED_EMPLOYEES = [
     ['45615', 'Fatmah Mohammed Alasseri', 'emp-fatmah'],
     ['45646', 'Essa Meraizeeq Almutairy', 'emp-essa'],
     ['31629', 'Moath Khalel Al Hjoouj', 'emp-moath'],
+    ['osama1234', 'Emad Harazi', 'emp-emad-harazi'],
     ['46662', 'Khulood Abdulmajeed Albaloushi', 'emp-khulood'],
     ['46643', 'Raoum Fahad Samkari', 'emp-raoum'],
     ['49602', 'Alawiyyah Rafi Saad Al Shehri', 'emp-alawiyyah'],
@@ -1753,13 +1830,23 @@ const SEEDED_EMPLOYEES = [
     // Shared provisional ID — update in Admin → Employees if needed.
     // These two may edit any order whose order number starts with 5.
     ['12345', 'Reda Salah', 'emp-reda-salah'],
-    ['12345', 'Mohammed Al Fadul', 'emp-mohammed-al-fadul']
+    ['1234', 'Mohammed Al Fadel', 'emp-mohammed-al-fadul']
 ].map(([id, name, recordId]) => {
     const canEditOrdersStartingWith5 = recordId === 'emp-reda-salah' || recordId === 'emp-mohammed-al-fadul';
-    return { recordId, id, name, role: 'employee', active: true, canEditOrdersStartingWith5 };
+    const editFiveOnly = recordId === 'emp-mohammed-al-fadul';
+    const isNamedAdmin = recordId === 'emp-moath' || recordId === 'emp-emad-harazi';
+    return {
+        recordId,
+        id,
+        name,
+        role: isNamedAdmin ? 'admin' : 'employee',
+        active: true,
+        canEditOrdersStartingWith5,
+        editFiveOnly
+    };
 }).concat([{
     recordId: 'emp-reserved-admin',
-    id: '1234',
+    id: 'osama1234',
     name: 'admin',
     role: 'admin',
     active: true
@@ -1821,12 +1908,26 @@ function attachReservedOrders(app, options) {
     loadStatuses();
 
     function sanitizeSheetLayout(raw) {
-        const order = Array.isArray(raw && raw.order)
+        const queueTail = ['Queue 1', 'Queue 2', 'Queue 3'];
+        let order = Array.isArray(raw && raw.order)
             ? raw.order.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 80)
             : [];
-        const hidden = Array.isArray(raw && raw.hidden)
+        let hidden = Array.isArray(raw && raw.hidden)
             ? raw.hidden.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 80)
             : [];
+        hidden = hidden.filter((label) => !queueTail.includes(label) && label !== 'Queue position');
+        // Empty order means "use the client default columns". Do not collapse to Q1/Q2/Q3 only.
+        // Queue columns stay visible and pinned as the last three.
+        if (order.length) {
+            const rest = [];
+            const seen = new Set();
+            order.forEach((label) => {
+                if (queueTail.includes(label) || seen.has(label)) return;
+                seen.add(label);
+                rest.push(label);
+            });
+            order = rest.concat(queueTail);
+        }
         return { order, hidden, updatedAt: raw && raw.updatedAt ? String(raw.updatedAt) : '' };
     }
     function loadSheetLayout() {
@@ -1915,6 +2016,19 @@ function attachReservedOrders(app, options) {
         } catch (e) {
             return { headers: [], rows: [] };
         }
+    }
+    // Queue 1/2/3 on the live sheet must use the Admin Push Back Order file (report-sheet),
+    // not the separate BO hub file, so reserved order numbers can match.
+    function loadQueueBoTable() {
+        if (typeof options.readReportSheetBackOrder === 'function') {
+            try {
+                const data = options.readReportSheetBackOrder() || {};
+                if (Array.isArray(data.rows) && data.rows.length) {
+                    return { headers: data.headers || [], rows: data.rows };
+                }
+            } catch (e) { /* fall through */ }
+        }
+        return loadBoTable();
     }
     function boFieldCatalog() {
         const table = loadBoTable();
@@ -2030,7 +2144,11 @@ function attachReservedOrders(app, options) {
     }
     function boProducts(table) {
         const headers = table.headers || [];
-        const productCol = boColumn(headers, [/product/, /model/, /vehicle/]);
+        const productCol = (() => {
+            const exact = headers.findIndex((header) => /^product$/i.test(String(header || '')));
+            if (exact >= 0) return exact;
+            return headers.findIndex((header) => /product|vehicle/i.test(String(header || '')) && !/model\s*year/i.test(String(header || '')));
+        })();
         const suffixCol = boColumn(headers, [/suffix/, /sfx/]);
         const productName = productCol >= 0 ? headers[productCol] : '';
         const suffixName = suffixCol >= 0 ? headers[suffixCol] : '';
@@ -2055,6 +2173,14 @@ function attachReservedOrders(app, options) {
     function adminPassword(req) {
         return String(req.body?.password || req.query?.password || '');
     }
+    function adminSecrets() {
+        // Primary password is osama1234; keep 1234 as a legacy fallback so existing logins never brick.
+        const primary = String(options.adminPassword || 'osama1234').trim();
+        return new Set(['osama1234', '1234', primary].filter(Boolean));
+    }
+    function isAdminSecret(secret) {
+        return adminSecrets().has(String(secret || '').trim());
+    }
     function requestToken(req) {
         return String((req.body && req.body.token) || (req.query && req.query.token) || '').trim();
     }
@@ -2063,7 +2189,7 @@ function attachReservedOrders(app, options) {
         return user && user.role === 'admin' ? user : null;
     }
     function requireAdmin(req, res) {
-        if (adminPassword(req) === String(options.adminPassword || '')) return true;
+        if (isAdminSecret(adminPassword(req))) return true;
         if (staffAdminFromReq(req)) return true;
         res.status(401).json({ error: 'Unauthorized: Invalid password' });
         return false;
@@ -2077,51 +2203,136 @@ function attachReservedOrders(app, options) {
     // pages without a password (owner request, 2026-10-21). Every other admin
     // endpoint keeps using requireAdmin above.
     function openAdmin() { return true; }
+    // Fallback edit-rights map used when the live staff file was wiped by a deploy/boot race.
+    // ensureStaff merges these in only when a person currently has empty matchedSalesman/editFor.
+    const DEFAULT_EDIT_RIGHTS = {
+        'emp-samaher': { matchedSalesman: '', editFor: ['Samaher Al Amri'] },
+        'emp-wasim': { matchedSalesman: '', editFor: ['Wasim Awad'] },
+        'emp-ahmed-binmahfoodh': { matchedSalesman: '', editFor: ['Ahmed Binmahfoodh'] },
+        'emp-ghina': { matchedSalesman: '', editFor: ['Ghina Assad Salem Alameer Assa'] },
+        'emp-muteb': { matchedSalesman: '', editFor: ['Muteb Al Shehri'] },
+        'emp-ahmed-fitni': { matchedSalesman: '', editFor: ['Ahmed Al Fitni'] },
+        'emp-mohammed-negry': { matchedSalesman: '', editFor: ['Mohammed Negry'] },
+        'emp-mohsen': { matchedSalesman: '', editFor: ['Mohsen Al Attas'] },
+        'emp-fatmah': { matchedSalesman: '', editFor: ['fatmah al asseri'] },
+        'emp-essa': { matchedSalesman: '', editFor: ['Essa Almutairy'] },
+        'emp-khulood': { matchedSalesman: '', editFor: ['Khulood Abdulmajeed Ghulam Alb'] },
+        'emp-raoum': { matchedSalesman: '', editFor: ['Raoum Samkari'] },
+        'emp-alawiyyah': { matchedSalesman: '', editFor: ['Alawiyyah Al Shehri'] },
+        'emp-manal': { matchedSalesman: '', editFor: ['Manal Almalki'] },
+        'emp-lujen': { matchedSalesman: '', editFor: ['Lujen Bazhair'] },
+        'emp-muhannad': { matchedSalesman: '', editFor: ['Muhannad Minyawi'] },
+        'emp-ali-muharraq': { matchedSalesman: '', editFor: ['Ali Alharbi'] }
+    };
     function ensureStaff() {
-        let staff = loadStaff().map((person, index) => ({
+        const before = loadStaff();
+        let staff = before.map((person, index) => ({
             recordId: person.recordId || `emp-legacy-${person.id || 'x'}-${index}`,
             id: String(person.id || ''),
             name: String(person.name || ''),
             role: person.role === 'admin' ? 'admin' : 'employee',
             active: person.active !== false,
-            canEditOrdersStartingWith5: !!person.canEditOrdersStartingWith5
+            canEditOrdersStartingWith5: !!person.canEditOrdersStartingWith5,
+            editFiveOnly: !!person.editFiveOnly,
+            matchedSalesman: String(person.matchedSalesman || '').trim().slice(0, 80),
+            editFor: Array.isArray(person.editFor)
+                ? person.editFor.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 40)
+                : []
         }));
+        let dirty = staff.length !== before.length;
         SEEDED_EMPLOYEES.forEach((seed) => {
             let existing = staff.find((person) => person.recordId === seed.recordId);
-            if (!existing && (seed.canEditOrdersStartingWith5 || seed.recordId === 'emp-reserved-admin')) {
+            if (!existing && (seed.canEditOrdersStartingWith5 || seed.role === 'admin' || seed.recordId === 'emp-reserved-admin')) {
                 const seedName = String(seed.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                existing = staff.find((person) => String(person.name || '').replace(/\s+/g, ' ').trim().toLowerCase() === seedName);
+                existing = staff.find((person) => {
+                    const key = String(person.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                    return key === seedName
+                        || (seed.recordId === 'emp-mohammed-al-fadul' && (key === 'mohammed al fadul' || key === 'mohammed al fadel'))
+                        || (seed.recordId === 'emp-emad-harazi' && (key === 'emad harazi' || key === 'emad al harazi'));
+                });
             }
             if (!existing) {
                 staff.push({ ...seed });
+                dirty = true;
                 return;
             }
             if (seed.canEditOrdersStartingWith5) {
+                if (!existing.canEditOrdersStartingWith5) dirty = true;
                 existing.canEditOrdersStartingWith5 = true;
-                if (seed.id) existing.id = String(seed.id);
-                if (seed.name) existing.name = seed.name;
+                if (seed.id && existing.id !== String(seed.id)) { existing.id = String(seed.id); dirty = true; }
+                if (seed.name && existing.name !== seed.name) { existing.name = seed.name; dirty = true; }
+            }
+            if (seed.editFiveOnly) {
+                if (!existing.editFiveOnly || existing.matchedSalesman || (existing.editFor && existing.editFor.length)) dirty = true;
+                existing.editFiveOnly = true;
+                existing.matchedSalesman = '';
+                existing.editFor = [];
             }
             if (seed.role === 'admin' && seed.recordId === 'emp-reserved-admin') {
-                existing.id = '1234';
+                if (existing.id !== 'osama1234' || existing.name !== 'admin' || existing.role !== 'admin') dirty = true;
+                existing.id = 'osama1234';
                 existing.name = 'admin';
                 existing.role = 'admin';
                 existing.active = true;
             }
+            if (seed.role === 'admin' && (seed.recordId === 'emp-moath' || seed.recordId === 'emp-emad-harazi')) {
+                if (existing.role !== 'admin') dirty = true;
+                existing.role = 'admin';
+                existing.active = true;
+                if (seed.id) existing.id = String(seed.id);
+                if (seed.name) existing.name = seed.name;
+            }
         });
-        saveStaff(staff);
+        // Refill wiped edit rights from the built-in map (deploy/boot safety net).
+        Object.keys(DEFAULT_EDIT_RIGHTS).forEach((recordId) => {
+            const person = staff.find((item) => item.recordId === recordId);
+            const fallback = DEFAULT_EDIT_RIGHTS[recordId];
+            if (!person || !fallback || person.editFiveOnly || person.role === 'admin') return;
+            const hasMatch = !!String(person.matchedSalesman || '').trim();
+            const hasEdit = Array.isArray(person.editFor) && person.editFor.length > 0;
+            if (hasMatch || hasEdit) return;
+            person.matchedSalesman = String(fallback.matchedSalesman || '').trim();
+            person.editFor = Array.isArray(fallback.editFor) ? fallback.editFor.slice() : [];
+            dirty = true;
+        });
+        if (dirty || before.length === 0) saveStaff(staff);
         return staff;
     }
     function personKey(value) {
         return cleanText(value).replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     }
+    function sanitizeEditFor(list) {
+        const src = Array.isArray(list) ? list : (list ? [list] : []);
+        const seen = new Set();
+        const out = [];
+        src.forEach((item) => {
+            const name = cleanText(item).slice(0, 80);
+            const key = personKey(name);
+            if (!name || !key || seen.has(key)) return;
+            seen.add(key);
+            out.push(name);
+        });
+        return out.slice(0, 40);
+    }
+    function staffEditNames(person) {
+        return sanitizeEditFor([person && person.name, person && person.matchedSalesman].concat((person && person.editFor) || []));
+    }
     function orderNumberStartsWith5(order) {
         return String(order && order.orderNumber || '').trim().startsWith('5');
+    }
+    function isMohammedAlFadel(name) {
+        const key = personKey(name);
+        return key === 'mohammed al fadel' || key === 'mohammed al fadul';
     }
     function isOrder5Editor(user) {
         if (!user) return false;
         if (user.canEditOrdersStartingWith5) return true;
-        const key = personKey(user.name);
-        return key === 'reda salah' || key === 'mohammed al fadul';
+        return personKey(user.name) === 'reda salah' || isMohammedAlFadel(user.name);
+    }
+    function isFiveOnlyEditor(user) {
+        if (!user) return false;
+        if (user.editFiveOnly) return true;
+        return isMohammedAlFadel(user.name);
     }
     function reservedColumnA(order) {
         const pools = [order && order.reservedFields, order && order.fromReservedFile ? order.fields : null];
@@ -2148,11 +2359,12 @@ function attachReservedOrders(app, options) {
         return text;
     }
     function advisorOwnsOrder(user, order) {
+        if (isFiveOnlyEditor(user)) return orderNumberStartsWith5(order);
         if (isOrder5Editor(user) && orderNumberStartsWith5(order)) return true;
-        const advisor = personKey(responsibleAdvisor(order));
+        const advisor = responsibleAdvisor(order);
         if (!user || !advisor) return false;
-        if (samePerson(user.name, advisor)) return true;
-        return personKey(user.employeeNumber) === advisor;
+        if (staffEditNames(user).some((name) => samePerson(name, advisor))) return true;
+        return personKey(user.employeeNumber) === personKey(advisor);
     }
     // Same name ignoring case, dots, extra spaces and word order ("Ali Ahmed" = "ahmed  ali").
     function samePerson(a, b) {
@@ -2182,13 +2394,17 @@ function attachReservedOrders(app, options) {
         if (!person) return null;
         const canEditOrdersStartingWith5 = !!person.canEditOrdersStartingWith5
             || personKey(person.name) === 'reda salah'
-            || personKey(person.name) === 'mohammed al fadul';
+            || isMohammedAlFadel(person.name);
+        const editFiveOnly = !!person.editFiveOnly || isMohammedAlFadel(person.name);
         return {
             name: person.name,
             employeeNumber: person.id,
             recordId: person.recordId,
             role: person.role || 'employee',
-            canEditOrdersStartingWith5
+            canEditOrdersStartingWith5,
+            editFiveOnly,
+            matchedSalesman: editFiveOnly ? '' : String(person.matchedSalesman || '').trim(),
+            editFor: editFiveOnly ? [] : sanitizeEditFor(person.editFor)
         };
     }
     function clientIp(req) {
@@ -2345,7 +2561,7 @@ function attachReservedOrders(app, options) {
         if (!built.ok) return built;
         const reconciled = reconcileLiveOrders(previousOrders, built.orders);
         const removed = reconciled.removed;
-        const orders = applyQueue(reconciled.orders);
+        const orders = applyQueue(reconciled.orders).map(ensureOrderExpiry);
         // Existing VIN status is carried forward in buildReservedDataset; only new VINs start fresh.
         // Removed VINs → Sold: Col V invoice = Delivered; found without invoice = Proforma.
         const salesMap = indexSalesRawByVin(salesSheets);
@@ -2451,7 +2667,13 @@ function attachReservedOrders(app, options) {
             audit(req, { action: 'LOGIN_FAILED', entity: 'session', role: 'employee', details: 'Duplicate employee ID requires a selected name', newValue: password });
             return res.status(401).json({ error: 'Select your name. That employee ID is shared.' });
         }
-        if (!person || person.active === false || password !== String(person.id)) {
+        // Shared admin account accepts the configured admin password (and legacy 1234), not only the stored employee id.
+        const passwordOk = !!person && (
+            password === String(person.id)
+            || (person.recordId === 'emp-reserved-admin' && isAdminSecret(password))
+            || (person.role === 'admin' && person.recordId === 'emp-reserved-admin' && isAdminSecret(password))
+        );
+        if (!person || person.active === false || !passwordOk) {
             audit(req, { user: name, action: 'LOGIN_FAILED', entity: 'session', role: 'employee', details: 'Name and employee ID did not match' });
             return res.status(401).json({ error: 'Name or employee ID is not valid.' });
         }
@@ -2460,14 +2682,18 @@ function attachReservedOrders(app, options) {
         audit(req, { user: person.name, employeeNumber: person.id, recordId: person.recordId, role: person.role, action: 'LOGIN', entity: 'session', source: 'employee' });
         const canEditOrdersStartingWith5 = !!person.canEditOrdersStartingWith5
             || personKey(person.name) === 'reda salah'
-            || personKey(person.name) === 'mohammed al fadul';
+            || isMohammedAlFadel(person.name);
+        const editFiveOnly = !!person.editFiveOnly || isMohammedAlFadel(person.name);
         res.json({
             token,
             name: person.name,
             recordId: person.recordId,
             employeeNumber: person.id,
             role: person.role || 'employee',
-            canEditOrdersStartingWith5
+            canEditOrdersStartingWith5,
+            editFiveOnly,
+            matchedSalesman: editFiveOnly ? '' : String(person.matchedSalesman || '').trim(),
+            editFor: editFiveOnly ? [] : (Array.isArray(person.editFor) ? person.editFor : [])
         });
     });
     app.post('/api/reserved-orders/logout', (req, res) => {
@@ -2489,7 +2715,7 @@ function attachReservedOrders(app, options) {
     });
     app.get('/api/reserved-orders/live', (req, res) => {
         const live = loadLive();
-        const orders = withColorQueue(live.orders || [], loadBoTable());
+        const orders = withColorQueue((live.orders || []).map(ensureOrderExpiry), loadQueueBoTable());
         res.json({
             updatedAt: live.updatedAt || '',
             report: live.report || {},
@@ -2635,6 +2861,119 @@ function attachReservedOrders(app, options) {
         notify();
         res.json({ ok: true, order });
     });
+    // Restore a snapshot of reserved-orders-live.json (and optional staff/sold/marketing). Never deletes
+    // unknown keys blindly: merges by order key and keeps whichever side has the richer status/note.
+    app.post('/api/reserved-orders/admin/restore-snapshot', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const incoming = req.body && req.body.live;
+        if (!incoming || !Array.isArray(incoming.orders)) {
+            return res.status(400).json({ error: 'Body must include live.orders array from a snapshot.' });
+        }
+        const current = loadLive();
+        // replaceOrders: use snapshot orders as the full live sheet (no orphan rows left behind).
+        // Default remains merge-into-current so older restores stay non-destructive.
+        const replaceOrders = req.body && (req.body.replaceOrders === true || req.body.mode === 'replace');
+        const byKey = new Map();
+        if (!replaceOrders) {
+            (current.orders || []).forEach((order) => {
+                if (order && order.key) byKey.set(String(order.key), order);
+            });
+        }
+        let restored = 0;
+        let kept = 0;
+        let added = 0;
+        (incoming.orders || []).forEach((snap) => {
+            if (!snap || !snap.key) return;
+            const key = String(snap.key);
+            const cur = byKey.get(key);
+            if (!cur) {
+                byKey.set(key, snap);
+                added += 1;
+                restored += 1;
+                return;
+            }
+            const snapNote = cleanText(snap.statusNote);
+            const curNote = cleanText(cur.statusNote);
+            const snapAt = Date.parse(snap.statusChangedAt || snap.statusNoteAt || snap.updatedAt || '') || 0;
+            const curAt = Date.parse(cur.statusChangedAt || cur.statusNoteAt || cur.updatedAt || '') || 0;
+            const snapHas = !!(cleanText(snap.status) || snapNote);
+            const curHas = !!(cleanText(cur.status) || curNote);
+            const preferSnap = (snapHas && !curHas)
+                || (snapNote && !curNote)
+                || (snapHas && snapAt >= curAt && (snapNote.length >= curNote.length || snapAt > curAt));
+            if (preferSnap) {
+                byKey.set(key, Object.assign({}, cur, snap));
+                restored += 1;
+            } else {
+                kept += 1;
+            }
+        });
+        const nextLive = Object.assign({}, current, incoming, {
+            orders: Array.from(byKey.values()),
+            updatedAt: new Date().toISOString(),
+            restoredFromSnapshotAt: new Date().toISOString()
+        });
+        saveLive(nextLive);
+        if (Array.isArray(req.body.sold)) {
+            saveSold(mergeSoldRecords(loadSold(), req.body.sold));
+        }
+        if (Array.isArray(req.body.staff) && req.body.staff.length) {
+            const existing = loadStaff();
+            const byId = new Map(existing.map((person) => [person.recordId, person]));
+            req.body.staff.forEach((person) => {
+                if (!person || !person.recordId) return;
+                const prev = byId.get(person.recordId) || {};
+                const next = Object.assign({}, prev, person);
+                const prevEdit = Array.isArray(prev.editFor) ? prev.editFor.filter(Boolean) : [];
+                const snapEdit = Array.isArray(person.editFor) ? person.editFor.filter(Boolean) : [];
+                // Never let an empty snapshot wipe live edit rights.
+                next.editFor = snapEdit.length ? sanitizeEditFor(snapEdit.concat(prevEdit)) : sanitizeEditFor(prevEdit);
+                const prevMatch = cleanText(prev.matchedSalesman);
+                const snapMatch = cleanText(person.matchedSalesman);
+                next.matchedSalesman = snapMatch || prevMatch;
+                if (prev.canEditOrdersStartingWith5 || person.canEditOrdersStartingWith5) {
+                    next.canEditOrdersStartingWith5 = true;
+                }
+                byId.set(person.recordId, next);
+            });
+            saveStaff(Array.from(byId.values()));
+        }
+        if (Array.isArray(req.body.marketing)) {
+            const existing = loadMarketing();
+            const seen = new Set(existing.map((item) => String(item.id || item.orderNumber || '')));
+            const merged = existing.slice();
+            req.body.marketing.forEach((item) => {
+                const id = String((item && (item.id || item.orderNumber)) || '');
+                if (!id || seen.has(id)) return;
+                seen.add(id);
+                merged.push(item);
+            });
+            saveMarketing(merged.slice(-500));
+        }
+        if (req.body.sheetLayout && typeof req.body.sheetLayout === 'object') {
+            saveSheetLayout(req.body.sheetLayout);
+        }
+        if (Array.isArray(req.body.statuses) && req.body.statuses.length) {
+            saveStatuses(req.body.statuses);
+        }
+        audit(req, {
+            user: 'Admin',
+            role: 'admin',
+            action: 'SNAPSHOT_RESTORED',
+            entity: 'live',
+            source: 'admin',
+            details: `restored=${restored} kept=${kept} added=${added} total=${nextLive.orders.length}`
+        });
+        notify();
+        res.json({
+            ok: true,
+            restored,
+            kept,
+            added,
+            orderCount: nextLive.orders.length,
+            updatedAt: nextLive.updatedAt
+        });
+    });
     app.post('/api/reserved-orders/admin/statuses', (req, res) => {
         if (!requireAdmin(req, res)) return;
         const action = String(req.body?.action || 'replace').toLowerCase();
@@ -2765,8 +3104,10 @@ function attachReservedOrders(app, options) {
     app.get('/api/reserved-orders/admin', (req, res) => {
         if (!requireAdmin(req, res)) return;
         const live = loadLive();
-        const orders = withColorQueue(live.orders || [], loadBoTable());
+        const orders = withColorQueue((live.orders || []).map(ensureOrderExpiry), loadQueueBoTable());
         const sold = loadSold();
+        const marketingStore = loadMarketing().slice().reverse();
+        const marketingLive = marketingStore.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
         res.json({
             updatedAt: live.updatedAt || '',
             esalesName: live.esalesName || '',
@@ -2778,6 +3119,7 @@ function attachReservedOrders(app, options) {
             orders,
             sold,
             staff: loadStaff().map(publicStaff),
+            marketing: marketingStore.map((item) => publicMarketing(item, marketingLive)),
             archive: readJson(path.join(archiveDir, 'index.json'), []),
             auditCount: readAudit().length
         });
@@ -2978,18 +3320,49 @@ function attachReservedOrders(app, options) {
         const role = req.body?.role === 'admin' ? 'admin' : 'employee';
         const active = req.body?.active !== false;
         const previousRecordId = String(req.body?.previousRecordId || '').trim();
+        const matchedSalesman = cleanText(req.body?.matchedSalesman).slice(0, 80);
+        const canEditOrdersStartingWith5 = req.body?.canEditOrdersStartingWith5 === true
+            || req.body?.canEditOrdersStartingWith5 === 'true';
         if (!name || !id) return res.status(400).json({ error: 'Employee name and ID are required.' });
         const staff = loadStaff();
         const index = previousRecordId ? staff.findIndex((person) => person.recordId === previousRecordId) : -1;
+        const editFor = req.body && Object.prototype.hasOwnProperty.call(req.body, 'editFor')
+            ? sanitizeEditFor(req.body.editFor)
+            : (index >= 0 ? sanitizeEditFor(staff[index].editFor) : []);
         let action = 'EMPLOYEE_ADDED';
         let oldValue = '';
         if (index >= 0) {
             oldValue = `${staff[index].name} / ${staff[index].active ? 'active' : 'inactive'} / ${staff[index].role}`;
             const wasActive = staff[index].active !== false;
-            staff[index] = { ...staff[index], name, id, role, active };
+            const keepFive = req.body && Object.prototype.hasOwnProperty.call(req.body, 'canEditOrdersStartingWith5')
+                ? canEditOrdersStartingWith5
+                : !!staff[index].canEditOrdersStartingWith5;
+            const fiveOnly = isMohammedAlFadel(name) || staff[index].recordId === 'emp-mohammed-al-fadul' || !!staff[index].editFiveOnly;
+            staff[index] = {
+                ...staff[index],
+                name,
+                id,
+                role,
+                active,
+                matchedSalesman: fiveOnly ? '' : matchedSalesman,
+                editFor: fiveOnly ? [] : editFor,
+                canEditOrdersStartingWith5: keepFive || fiveOnly,
+                editFiveOnly: fiveOnly
+            };
             action = !active && wasActive ? 'EMPLOYEE_DISABLED' : (active && !wasActive ? 'EMPLOYEE_ENABLED' : 'EMPLOYEE_EDITED');
         } else {
-            staff.push({ recordId: `emp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name, id, role, active });
+            const fiveOnly = isMohammedAlFadel(name);
+            staff.push({
+                recordId: `emp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+                name,
+                id,
+                role,
+                active,
+                matchedSalesman: fiveOnly ? '' : matchedSalesman,
+                editFor: fiveOnly ? [] : editFor,
+                canEditOrdersStartingWith5: canEditOrdersStartingWith5 || fiveOnly,
+                editFiveOnly: fiveOnly
+            });
         }
         saveStaff(staff);
         const actor = adminActor(req);
@@ -3005,6 +3378,59 @@ function attachReservedOrders(app, options) {
             source: 'admin'
         });
         res.json({ ok: true, staff: staff.map(publicStaff) });
+    });
+    app.post('/api/reserved-orders/staff-rights', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const people = Array.isArray(req.body && req.body.people) ? req.body.people : [];
+        if (!people.length) return res.status(400).json({ error: 'Select who can edit whose cars.' });
+        const staff = loadStaff();
+        const byId = new Map(staff.map((person) => [person.recordId, person]));
+        let changed = 0;
+        let preserved = 0;
+        people.forEach((row) => {
+            const recordId = String(row && row.recordId || '').trim();
+            const person = byId.get(recordId);
+            if (!person || person.role === 'admin') return;
+            if (person.editFiveOnly) {
+                person.matchedSalesman = '';
+                person.editFor = [];
+                person.canEditOrdersStartingWith5 = true;
+                changed += 1;
+                return;
+            }
+            const incomingMatch = cleanText(row.matchedSalesman).slice(0, 80);
+            const incomingEdit = sanitizeEditFor(row.editFor).filter((name) => !samePerson(name, incomingMatch));
+            const incomingEmpty = !incomingMatch && !incomingEdit.length;
+            const existingMatch = cleanText(person.matchedSalesman);
+            const existingEdit = sanitizeEditFor(person.editFor);
+            const existingHas = !!(existingMatch || existingEdit.length);
+            // Protect against the admin UI saving a blank form (no chips selected) and wiping live rights.
+            // Explicit clear only when clearRights=true.
+            if (incomingEmpty && existingHas && row.clearRights !== true && row.clearRights !== 'true') {
+                preserved += 1;
+            } else {
+                person.matchedSalesman = incomingMatch;
+                person.editFor = incomingEdit;
+            }
+            if (Object.prototype.hasOwnProperty.call(row, 'canEditOrdersStartingWith5')) {
+                person.canEditOrdersStartingWith5 = row.canEditOrdersStartingWith5 === true || row.canEditOrdersStartingWith5 === 'true';
+            }
+            changed += 1;
+        });
+        saveStaff(staff);
+        const actor = adminActor(req);
+        audit(req, {
+            user: actor.name,
+            employeeNumber: actor.employeeNumber,
+            recordId: actor.recordId,
+            role: 'admin',
+            action: 'EDIT_RIGHTS_SAVED',
+            entity: 'employee',
+            newValue: `${changed} people`,
+            details: preserved ? `preserved ${preserved} non-empty right(s)` : '',
+            source: 'admin'
+        });
+        res.json({ ok: true, staff: staff.map(publicStaff), preserved });
     });
     function publicMarketing(item, live) {
         let fields = Array.isArray(item.fields) ? item.fields : [];
@@ -3022,6 +3448,10 @@ function attachReservedOrders(app, options) {
             id: item.id || '',
             cancelled: item.cancelled === true,
             cancelledDisplay: item.cancelledDisplay || '',
+            done: item.done === true,
+            doneAt: item.doneAt || '',
+            doneDisplay: item.doneDisplay || '',
+            doneBy: item.doneBy || '',
             fields: fields.map((field) => ({
                 label: cleanText(field && field.label).slice(0, 120),
                 value: cleanText(field && field.value).slice(0, 2000)
@@ -3136,7 +3566,42 @@ function attachReservedOrders(app, options) {
         const live = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
         res.json({ requests: store.map((item) => publicMarketing(item, live)) });
     });
+    app.post('/api/reserved-orders/marketing/done', (req, res) => {
+        const id = cleanText(req.body && req.body.id);
+        const orderToken = cleanText(req.body && req.body.orderNumber).replace(/\s+/g, '').toLowerCase();
+        if (!id && !orderToken) return res.status(400).json({ error: 'Choose a marketing order to mark done.' });
+        const store = loadMarketing();
+        const index = store.findIndex((item) => {
+            if (item.cancelled === true) return false;
+            if (id && item.id === id) return true;
+            return !id && orderToken && String(item.orderNumber || '').replace(/\s+/g, '').toLowerCase() === orderToken;
+        });
+        if (index < 0) return res.status(404).json({ error: 'That marketing order was not found.' });
+        const entry = store[index];
+        if (entry.done !== true) {
+            const now = new Date();
+            entry.done = true;
+            entry.doneAt = now.toISOString();
+            entry.doneDisplay = displayStamp(now);
+            entry.doneBy = cleanText(req.body && req.body.doneBy) || 'Leader';
+            saveMarketing(store);
+            audit(req, {
+                user: entry.doneBy,
+                role: 'leader',
+                action: 'MARKETING_DONE',
+                entity: 'marketing',
+                orderNumber: entry.orderNumber,
+                source: 'report-sheet',
+                details: `${entry.doneBy} stamped order ${entry.orderNumber} done`
+            });
+            notify();
+        }
+        res.json({ ok: true, request: publicMarketing(entry, null) });
+    });
     function compactBoardOrder(order) {
+        const queueOrders = Array.isArray(order.queueOrders) && order.queueOrders.length
+            ? order.queueOrders
+            : (Array.isArray(order.ahead) ? order.ahead : []);
         return {
             queueNumber: order.queueNumber == null ? null : order.queueNumber,
             orderNumber: order.orderNumber || '',
@@ -3145,6 +3610,14 @@ function attachReservedOrders(app, options) {
             customerName: order.customerName || '',
             paymentLabel: order.paymentLabel || '',
             status: order.status || order.lastStatus || '',
+            statusNote: order.statusNote || '',
+            statusNoteBy: order.statusNoteBy || '',
+            statusChangedBy: order.statusChangedBy || '',
+            statusChangedAt: order.statusChangedAt || '',
+            statusChangedDisplay: order.statusChangedDisplay || '',
+            leaderNote: order.leaderNote || '',
+            leaderNoteBy: order.leaderNoteBy || '',
+            leaderNoteDisplay: order.leaderNoteDisplay || '',
             vehicle: order.vehicle || '',
             product: order.vehicle || order.product || '',
             modelYear: order.modelYear || '',
@@ -3153,8 +3626,13 @@ function attachReservedOrders(app, options) {
             interior: order.interior || '',
             area: order.searchArea || order.rtlSearchArea || '',
             share: order.shareLevel || '',
+            usage: order.usage || '',
+            allocationAge: order.allocationAge || order.age || '',
             assignDate: order.assignDate || '',
             deadline: order.deadline || order.expiryDate || '',
+            expiryDisplay: order.expiryDisplay || order.expiryDate || '',
+            ahead: queueOrders,
+            queueOrders,
             removed: order.removed === true,
             sold: order.sold === true,
             soldKind: order.soldKind || '',
@@ -3238,6 +3716,8 @@ function attachReservedOrders(app, options) {
         const movement = latest && latest.version ? (movementForVersion(latest.version) || { counts: {}, rows: [] }) : { counts: { new: 0, reassigned: 0, removed: 0, unchanged: 0, ambiguous: 0, first: true }, rows: [] };
         const store = loadMarketing().slice().reverse();
         const bo = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
+        // Same enrichment as admin/employee live sheet so Q1–Q3 and notes match.
+        const enriched = withColorQueue(live.orders || [], loadQueueBoTable());
         const soldOrders = loadSold().map((item) => compactBoardOrder(Object.assign({}, item, { removed: true, sold: true })));
         res.json({
             viewing: '',
@@ -3245,7 +3725,8 @@ function attachReservedOrders(app, options) {
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             report: live.report || {},
-            orders: (live.orders || []).map(compactBoardOrder).concat(soldOrders),
+            layout: loadSheetLayout(),
+            orders: enriched.map(compactBoardOrder).concat(soldOrders),
             sold: soldOrders,
             requests: store.map((item) => publicMarketing(item, bo)),
             pushes,
@@ -3294,6 +3775,7 @@ module.exports = {
     localStamp,
     normalizeVin,
     normalizePayment,
+    ensureOrderExpiry,
     normalizeStatus,
     sheetGridsFromBuffer,
     backOrderTableFromBuffer,

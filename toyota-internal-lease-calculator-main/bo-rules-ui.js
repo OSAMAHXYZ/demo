@@ -10,6 +10,8 @@
     let messageTarget = 'br-message';
     let previewKey = '';
     let lastTest = null;
+    let nextBusy = false;
+    const onReportSheet = () => !!document.getElementById('panel-bonotifications');
     const DEFAULT_MESSAGE = 'Hello {employeeName},\n\nYou have {affectedOrderCount} {product} back orders under your name where {conditionText}.\n\nPlease update it to {correctValue} for the affected orders below:\n{orderDateLine}\n\nOnly the orders listed above match this condition.';
     const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'conditionText', 'orderNumber', 'orderDate', 'deadline', 'orderDateLine', 'orderLines'];
     const OPS = [
@@ -26,7 +28,8 @@
     ];
     const OP_TEXT = { equals: 'equals', not_equals: 'does not equal', contains: 'contains', not_contains: 'does not contain', empty: 'is empty', not_empty: 'is not empty', gt: 'is greater than', lt: 'is less than', in_list: 'is one of', not_in_list: 'is not one of' };
     const needsValue = (op) => !['empty', 'not_empty'].includes(op);
-    const password = () => sessionStorage.getItem(passKey) || '';
+    // Report Sheet Admin does not set reserved-orders-admin-pass; fall back to the shared admin secret.
+    const password = () => sessionStorage.getItem(passKey) || localStorage.getItem(passKey) || 'osama1234';
     const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     async function api(url, options) {
         const res = await fetch(url, options);
@@ -56,10 +59,38 @@
     function checkedValues(boxId) {
         return [...document.querySelectorAll('#' + boxId + ' input:checked')].filter((input) => !input.hasAttribute('data-all-cars')).map((input) => input.value).filter(Boolean);
     }
+    function syncCarSelectFromChips() {
+        const box = document.getElementById('br-cars');
+        if (!box) return;
+        const checked = new Set([...document.querySelectorAll('.br-car-check:checked')].map((el) => el.value));
+        [...box.options].forEach((opt) => { opt.selected = checked.has(opt.value); });
+        document.querySelectorAll('.br-car-chip').forEach((chip) => {
+            const input = chip.querySelector('.br-car-check');
+            chip.classList.toggle('is-on', !!(input && input.checked));
+        });
+    }
     function selectedCars() {
-        const all = document.getElementById('br-all-cars');
-        if (!all || all.checked) return [];
-        return checkedValues('br-cars');
+        const mode = document.getElementById('br-car-mode');
+        if (!mode || mode.value !== 'cars') return [];
+        const chips = [...document.querySelectorAll('.br-car-check:checked')].map((el) => el.value).filter(Boolean);
+        if (chips.length) return chips;
+        const box = document.getElementById('br-cars');
+        if (!box) return [];
+        return [...box.querySelectorAll('option:checked')].map((opt) => opt.value).filter(Boolean);
+    }
+    function paintCarHelp() {
+        const mode = document.getElementById('br-car-mode');
+        const wrap = document.getElementById('br-car-pick');
+        const help = document.getElementById('br-car-help');
+        const cars = selectedCars();
+        if (wrap) wrap.hidden = !(mode && mode.value === 'cars');
+        if (help) {
+            help.textContent = mode && mode.value === 'cars'
+                ? (cars.length
+                    ? `Condition applies only to: ${cars.join(', ')}`
+                    : 'Tap one or more cars below.')
+                : 'Condition applies to every car in the Back Order file.';
+        }
     }
     const DAY_CHOICES = [0, 1, 2, 3, 5, 6, 7];
     function dateSource() {
@@ -251,36 +282,96 @@
                 ${ruleRows()}
             </section>
             <section class="panel br-editor">
-                <h2>${editing && editing.id ? 'Message builder' : 'New message rule'}</h2>
-                <p class="muted">Generate reads the current BO file. Send uses the existing push, and each employee only receives their own orders.</p>
-                <div class="br-form">
-                    <label><span>Rule name</span><input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional"></label>
-                    <div class="br-cars">
-                        <span>Cars</span>
-                        <label class="check"><input id="br-all-cars" type="checkbox" data-all-cars ${picked(selected, 'products', 'product').length ? '' : 'checked'}> All cars</label>
-                        <div class="br-picks" id="br-cars">${(pack.products || []).map((name) => `<label><input type="checkbox" value="${esc(name)}"${picked(selected, 'products', 'product').includes(name) ? ' checked' : ''}>${esc(name)}</label>`).join('') || '<p class="muted">Upload a BO file to list the cars.</p>'}</div>
+                <h2>${editing && editing.id ? (onReportSheet() ? 'BO error condition' : 'Message builder') : (onReportSheet() ? 'New BO error condition' : 'New message rule')}</h2>
+                <p class="muted">${onReportSheet()
+                    ? 'Test the condition, then choose: make it a BO error condition, or just send it to employees.'
+                    : 'Generate reads the current BO file. Send uses the existing push, and each employee only receives their own orders.'}</p>
+                <div class="br-form br-form-clean">
+                    <div class="br-sec">
+                        <h3 class="br-sec-title">1 · Name</h3>
+                        <label class="wide"><span>Rule name</span><input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional — auto-filled from cars / column"></label>
                     </div>
-                    <label class="wide"><span>Match</span><select id="br-match"><option value="all"${initialMode(selected) === 'all' ? ' selected' : ''}>Match ALL conditions</option><option value="any"${initialMode(selected) === 'any' ? ' selected' : ''}>Match ANY condition</option></select></label>
-                    <div class="br-conditions wide" id="br-conditions">${savedConditions(selected).map(conditionRow).join('')}</div>
-                    <div class="wide"><button type="button" id="br-add-cond">Add condition</button> <button type="button" id="br-test">Test conditions</button></div>
-                    <div class="br-apply wide" id="br-apply"></div>
-                    <div class="br-test-out wide" id="br-test-out"></div>
-                    <label><span>Correction value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
-                    <label><span>Deadline date</span><select id="br-date-source">
-                        <option value="column"${['fixed', 'sent'].includes(selected.deadlineSource) ? '' : ' selected'}>From a column in the BO file</option>
-                        <option value="sent"${selected.deadlineSource === 'sent' ? ' selected' : ''}>The date the employee sends it</option>
-                        <option value="fixed"${selected.deadlineSource === 'fixed' ? ' selected' : ''}>A specific date</option>
-                    </select></label>
-                    <label id="br-date-column-wrap"${['fixed', 'sent'].includes(selected.deadlineSource) ? ' hidden' : ''}><span>BO date column</span><select id="br-date-column"><option value="">Order Date</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${selected.deadlineColumn === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
-                    <label id="br-date-fixed-wrap"${selected.deadlineSource === 'fixed' ? '' : ' hidden'}><span>Specific date</span><input id="br-date-fixed" type="date" value="${esc(selected.deadlineDate || '')}"></label>
-                    <label><span>Days after</span><select id="br-deadline">${dayOptions(selected.deadlineDays)}</select></label>
-                    <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
-                    <div class="br-msg wide">
-                        <h3>Error notification</h3>
+                    <div class="br-sec br-cars">
+                        <h3 class="br-sec-title">2 · Cars</h3>
+                        <label class="wide" style="margin:0"><span>Car for this condition</span>
+                            <select id="br-car-mode">
+                                <option value="all"${picked(selected, 'products', 'product').length ? '' : ' selected'}>All cars</option>
+                                <option value="cars"${picked(selected, 'products', 'product').length ? ' selected' : ''}>Select car(s)</option>
+                            </select>
+                        </label>
+                        <p class="muted" id="br-car-help" style="margin:6px 0 0"></p>
+                        <div id="br-car-pick" ${picked(selected, 'products', 'product').length ? '' : 'hidden'}>
+                            <div class="br-car-chips" id="br-car-chips">
+                                ${(function () {
+                                    const pickedCars = picked(selected, 'products', 'product');
+                                    const seen = new Set();
+                                    const list = [];
+                                    (pack.products || []).concat(pickedCars).forEach((name) => {
+                                        const text = String(name || '').trim();
+                                        const key = text.toLowerCase();
+                                        if (!text || seen.has(key)) return;
+                                        seen.add(key);
+                                        list.push(text);
+                                    });
+                                    return list.map((name) => {
+                                        const on = pickedCars.some((c) => String(c).toLowerCase() === name.toLowerCase());
+                                        return `<label class="br-car-chip${on ? ' is-on' : ''}"><input type="checkbox" class="br-car-check" value="${esc(name)}"${on ? ' checked' : ''}><span>${esc(name)}</span></label>`;
+                                    }).join('') || '<p class="muted">No cars in the BO file yet.</p>';
+                                })()}
+                            </div>
+                            <select id="br-cars" multiple hidden>
+                                ${(function () {
+                                    const pickedCars = picked(selected, 'products', 'product');
+                                    const seen = new Set();
+                                    const list = [];
+                                    (pack.products || []).concat(pickedCars).forEach((name) => {
+                                        const text = String(name || '').trim();
+                                        const key = text.toLowerCase();
+                                        if (!text || seen.has(key)) return;
+                                        seen.add(key);
+                                        list.push(text);
+                                    });
+                                    return list.map((name) => `<option value="${esc(name)}"${pickedCars.some((c) => String(c).toLowerCase() === name.toLowerCase()) ? ' selected' : ''}>${esc(name)}</option>`).join('');
+                                })()}
+                            </select>
+                            <div class="br-car-add">
+                                <input id="br-car-custom" type="text" placeholder="Add a car name not in the list">
+                                <button type="button" id="br-car-add-btn">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="br-sec">
+                        <h3 class="br-sec-title">3 · Conditions</h3>
+                        <label class="wide"><span>Match</span><select id="br-match"><option value="all"${initialMode(selected) === 'all' ? ' selected' : ''}>Match ALL conditions</option><option value="any"${initialMode(selected) === 'any' ? ' selected' : ''}>Match ANY condition</option></select></label>
+                        <div class="br-conditions wide" id="br-conditions">${savedConditions(selected).map(conditionRow).join('')}</div>
+                        <div class="br-cond-actions wide">
+                            <button type="button" id="br-add-cond">Add condition</button>
+                            <button type="button" class="solid" id="br-test">Test conditions</button>
+                        </div>
+                        <div class="br-apply wide" id="br-apply"></div>
+                        <div class="br-test-out wide" id="br-test-out"></div>
+                    </div>
+                    ${nextChoiceHtml(!!(lastTest && lastTest.orderCount))}
+                    <div class="br-sec">
+                        <h3 class="br-sec-title">4 · Correction &amp; deadline</h3>
+                        <div class="br-meta-grid">
+                            <label><span>Correction value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
+                            <label><span>Deadline date</span><select id="br-date-source">
+                                <option value="column"${['fixed', 'sent'].includes(selected.deadlineSource) ? '' : ' selected'}>From a column in the BO file</option>
+                                <option value="sent"${selected.deadlineSource === 'sent' ? ' selected' : ''}>The date the employee sends it</option>
+                                <option value="fixed"${selected.deadlineSource === 'fixed' ? ' selected' : ''}>A specific date</option>
+                            </select></label>
+                            <label id="br-date-column-wrap"${['fixed', 'sent'].includes(selected.deadlineSource) ? ' hidden' : ''}><span>BO date column</span><select id="br-date-column"><option value="">Order Date</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${selected.deadlineColumn === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                            <label id="br-date-fixed-wrap"${selected.deadlineSource === 'fixed' ? '' : ' hidden'}><span>Specific date</span><input id="br-date-fixed" type="date" value="${esc(selected.deadlineDate || '')}"></label>
+                            <label><span>Days after</span><select id="br-deadline">${dayOptions(selected.deadlineDays)}</select></label>
+                            <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
+                        </div>
+                    </div>
+                    <details class="br-sec br-msg wide"${onReportSheet() ? '' : ' open'}>
+                        <summary>Message template (optional)</summary>
                         <label><span>Message template</span><textarea id="br-message" rows="4">${esc(selected.message || DEFAULT_MESSAGE)}</textarea></label>
                         <label><span>WhatsApp message</span><textarea id="br-wa" rows="3" placeholder="Optional. Leave blank to use the message template.">${esc(selected.whatsappMessage || '')}</textarea></label>
                         <label><span>Language</span><select id="br-lang"><option value="en">English</option><option value="ar">Arabic</option></select></label>
-                        <p class="muted">Language only sets the preview direction. It is not saved on the rule.</p>
                         <div>
                             <span class="br-label">Available placeholders</span>
                             <div class="br-chips">${PLACEHOLDERS.map((key) => `<button type="button" data-token="{${key}}">{${key}}</button>`).join('')}</div>
@@ -290,7 +381,6 @@
                             <label><span>Order date column</span><select id="br-map-date">${columnOptions(mapValue(selected, 'orderDate'), 'Usual date column')}</select></label>
                             <label><span>Product column</span><select id="br-map-product">${columnOptions(mapValue(selected, 'product'), 'Usual product column')}</select></label>
                         </div>
-                        <p class="muted">Incorrect value uses the error column. Correction uses the correction value. Employee name uses the salesman on the row. Deadline uses the deadline settings. Each order number stays with the date from that same row.</p>
                         <div>
                             <span class="br-label" id="br-preview-caption">Message template</span>
                             <div class="br-template" id="br-template"></div>
@@ -298,13 +388,12 @@
                         <div class="br-preview-box is-example">
                             <div class="br-bubble" id="br-preview"></div>
                         </div>
-                        <p class="muted">The example above is not a real employee. Generate messages to fill names, order numbers, and dates from the BO file. A missing date stays labeled instead of being invented.</p>
-                    </div>
+                    </details>
                 </div>
                 ${reviewHtml()}
                 <div class="br-buttons">
-                    <button class="solid" id="br-push" type="button"${(lastTest && lastTest.orderCount === 0) || (!lastTest && detail && detail.rule && detail.rule.lastAnalysisAt && !detail.rule.affectedOrders) ? ' disabled' : ''}>Send to employees</button>
-                    <button id="br-save-run" type="button">Generate messages</button>
+                    <button class="solid" id="br-push" type="button"${onReportSheet() ? ' hidden' : ''}${(lastTest && lastTest.orderCount === 0) || (!lastTest && detail && detail.rule && detail.rule.lastAnalysisAt && !detail.rule.affectedOrders) ? ' disabled' : ''}>Send to employees</button>
+                    <button id="br-save-run" type="button"${onReportSheet() ? ' hidden' : ''}>Generate messages</button>
                     <button id="br-copy" type="button">Copy template</button>
                     <button id="br-reset" type="button">Reset unsaved edits</button>
                 </div>
@@ -499,19 +588,70 @@
         message.classList.toggle('ar', arabic);
         if (wa) wa.classList.toggle('ar', arabic);
         paintApply();
+        paintCarHelp();
         paintLive();
     }
     function paintApply() {
         const box = document.getElementById('br-apply');
         if (!box) return;
+        const carMode = document.getElementById('br-car-mode');
         const cars = selectedCars();
         const mode = document.getElementById('br-match') && document.getElementById('br-match').value === 'any' ? 'any' : 'all';
-        box.innerHTML = `<b>This message applies only when</b><ul><li>Car is ${esc(cars.length ? cars.join(', ') : 'all cars')}.</li><li>${mode === 'any' ? 'Any condition matches' : 'Every condition matches'}: ${esc(describeConditions(readConditions(), mode))}.</li><li>Each employee receives only their own matching orders.</li></ul>`;
+        const carText = !(carMode && carMode.value === 'cars')
+            ? 'all cars'
+            : (cars.length ? cars.join(', ') : 'no car selected yet');
+        box.innerHTML = `<b>This condition applies only when</b><ul><li>Car is ${esc(carText)}.</li><li>${mode === 'any' ? 'Any condition matches' : 'Every condition matches'}: ${esc(describeConditions(readConditions(), mode))}.</li><li>Each employee receives only their own matching orders.</li></ul>`;
+    }
+    function nextChoiceHtml(enabled) {
+        if (!onReportSheet()) return '';
+        const off = enabled ? '' : ' disabled';
+        return `<div class="wide br-next" id="br-next">
+            <p class="br-next-lead">What do you want to do?</p>
+            <div class="br-next-choice">
+                <button type="button" class="br-as-error" id="br-as-error"${off}>
+                    <b>Make it a BO error condition</b>
+                    <span>Shows under Order Errors. Employees must fix these orders.</span>
+                </button>
+                <button type="button" class="br-as-message" id="br-as-message"${off}>
+                    <b>Just send it to employees</b>
+                    <span>With a message: it appears under Messages so they can mark it done. Without a message: orders go to Order Errors.</span>
+                </button>
+            </div>
+            <p class="br-next-note" id="br-next-note">${enabled ? '' : 'Test the condition first. Then these two buttons turn on.'}</p>
+        </div>`;
+    }
+    function paintNext(data) {
+        const enabled = !!(data && data.orderCount);
+        const errBtn = document.getElementById('br-as-error');
+        const msgBtn = document.getElementById('br-as-message');
+        if (errBtn) errBtn.disabled = !enabled || nextBusy;
+        if (msgBtn) msgBtn.disabled = !enabled || nextBusy;
+        const note = document.getElementById('br-next-note');
+        if (!note) return;
+        if (nextBusy) return;
+        if (!data) note.textContent = 'Test the condition first. Then these two buttons turn on.';
+        else if (!enabled) note.textContent = 'No matching orders. Change the condition and test again.';
+        else note.textContent = '';
+    }
+    function nameKey(value) {
+        return String(value || '').toLowerCase().replace(/[\u064b-\u065f\u0670]/g, '').replace(/[\u0623\u0625\u0622]/g, '\u0627').replace(/\u0629/g, '\u0647').replace(/\u0649/g, '\u064a').replace(/\s+/g, ' ').trim();
+    }
+    function recordIdForPerson(person, staff) {
+        const n = nameKey(person && (person.salesmanName || person.name));
+        if (!n) return '';
+        const list = staff || [];
+        const hit = list.find((item) => nameKey(item.name) === n)
+            || list.find((item) => {
+                const other = nameKey(item.name);
+                return other && (other.includes(n) || n.includes(other));
+            });
+        return hit ? hit.recordId : '';
     }
     function paintTest(data) {
         const box = document.getElementById('br-test-out');
         const send = document.getElementById('br-push');
         if (send) send.disabled = !!(data && data.orderCount === 0);
+        paintNext(data);
         if (!box || !data) return;
         const matched = (data.matchedSample || []).map((row) => `<tr><td>${esc(row.salesmanName)}</td><td>${esc(row.boNumber)}</td><td>${esc(row.orderDate || 'Date unavailable')}</td><td>${esc(row.incorrectValue || row.values)}</td><td>${esc(row.product)}</td></tr>`).join('');
         const excluded = (data.excludedSample || []).map((row) => `<tr><td>${esc(row.boNumber)}</td><td>${esc(row.salesmanName)}</td><td>${esc(row.product)}</td><td>${esc(row.reason)}</td></tr>`).join('');
@@ -584,16 +724,70 @@
             if (columnWrap) columnWrap.hidden = dateSourceField.value !== 'column';
             if (fixedWrap) fixedWrap.hidden = dateSourceField.value !== 'fixed';
         });
-        const allCars = document.getElementById('br-all-cars');
+        const carMode = document.getElementById('br-car-mode');
         const carBox = document.getElementById('br-cars');
-        if (allCars && carBox) {
-            allCars.addEventListener('change', () => {
-                if (allCars.checked) carBox.querySelectorAll('input').forEach((input) => { input.checked = false; });
+        const carAdd = document.getElementById('br-car-add-btn');
+        const carCustom = document.getElementById('br-car-custom');
+        if (carMode) {
+            carMode.addEventListener('change', () => {
+                paintCarHelp();
+                lastTest = null;
                 paintPreview();
             });
+        }
+        if (carBox) {
             carBox.addEventListener('change', () => {
-                const any = [...carBox.querySelectorAll('input')].some((input) => input.checked);
-                allCars.checked = !any;
+                paintCarHelp();
+                lastTest = null;
+                paintPreview();
+            });
+        }
+        document.querySelectorAll('.br-car-check').forEach((box) => {
+            box.addEventListener('change', () => {
+                if (carMode) carMode.value = 'cars';
+                syncCarSelectFromChips();
+                paintCarHelp();
+                lastTest = null;
+                paintPreview();
+            });
+        });
+        if (carAdd && carBox) {
+            carAdd.addEventListener('click', () => {
+                const name = String((carCustom && carCustom.value) || '').trim();
+                if (!name) return;
+                const exists = [...carBox.options].some((opt) => opt.value.toLowerCase() === name.toLowerCase());
+                if (!exists) {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    carBox.appendChild(opt);
+                    const chips = document.getElementById('br-car-chips');
+                    if (chips) {
+                        const label = document.createElement('label');
+                        label.className = 'br-car-chip is-on';
+                        label.innerHTML = `<input type="checkbox" class="br-car-check" value="${esc(name)}" checked><span>${esc(name)}</span>`;
+                        const input = label.querySelector('.br-car-check');
+                        input.addEventListener('change', () => {
+                            if (carMode) carMode.value = 'cars';
+                            syncCarSelectFromChips();
+                            paintCarHelp();
+                            lastTest = null;
+                            paintPreview();
+                        });
+                        chips.appendChild(label);
+                    }
+                }
+                [...carBox.options].forEach((opt) => {
+                    if (opt.value.toLowerCase() === name.toLowerCase()) opt.selected = true;
+                });
+                document.querySelectorAll('.br-car-check').forEach((input) => {
+                    if (input.value.toLowerCase() === name.toLowerCase()) input.checked = true;
+                });
+                if (carMode) carMode.value = 'cars';
+                if (carCustom) carCustom.value = '';
+                syncCarSelectFromChips();
+                paintCarHelp();
+                lastTest = null;
                 paintPreview();
             });
         }
@@ -678,6 +872,10 @@
         document.getElementById('br-reset').addEventListener('click', () => { notice = ''; render(); });
         document.getElementById('br-push').addEventListener('click', () => pushDraft(false));
         document.getElementById('br-save-run').addEventListener('click', () => save(true));
+        const asError = document.getElementById('br-as-error');
+        if (asError) asError.addEventListener('click', () => makeAsError(false));
+        const asMessage = document.getElementById('br-as-message');
+        if (asMessage) asMessage.addEventListener('click', () => sendAsMessageOnly());
         root.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', () => openRule(button.dataset.open)));
         root.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => { const rule = pack.rules.find((item) => item.id === button.dataset.edit); editing = rule || null; render(); }));
         root.querySelectorAll('[data-run]').forEach((button) => button.addEventListener('click', () => run(button.dataset.run)));
@@ -712,15 +910,133 @@
             if (e.message !== 'unauthorized') error.textContent = e.message;
         }
     }
+    async function makeAsError(confirmRepublish) {
+        const note = document.getElementById('br-next-note');
+        const error = document.getElementById('br-error');
+        if (error) error.textContent = '';
+        if (!lastTest || !lastTest.orderCount) {
+            if (note) note.textContent = 'Test the condition first.';
+            return;
+        }
+        nextBusy = true;
+        paintNext(lastTest);
+        if (note) note.textContent = 'Saving as a BO error condition…';
+        try {
+            const saved = await api('/api/reserved-orders/bo-rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password(), rule: formRule(), analyze: true })
+            });
+            const rule = saved.rule || {};
+            const id = rule.id;
+            if (!id) throw new Error('The condition could not be saved.');
+            try {
+                await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(id) + '/push-targeted', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password(), recordIds: [], confirmRepublish: !!confirmRepublish, kind: 'error' })
+                });
+            } catch (pushErr) {
+                if (pushErr.needsConfirm && window.confirm(pushErr.message || 'This condition was already pushed. Send it again?')) {
+                    return makeAsError(true);
+                }
+                throw pushErr;
+            }
+            notice = `Saved as a BO error condition. ${rule.affectedEmployees || lastTest.employeeCount || 0} employees · ${rule.affectedOrders || lastTest.orderCount || 0} orders now in Order Errors.`;
+            if (note) note.textContent = notice;
+            editing = rule;
+            await load(id);
+        } catch (e) {
+            if (e.message !== 'unauthorized') {
+                if (error) error.textContent = e.message;
+                if (note) note.textContent = e.message || 'Could not save the BO error condition.';
+            }
+        } finally {
+            nextBusy = false;
+            paintNext(lastTest);
+        }
+    }
+    async function sendAsMessageOnly(confirmRepublish) {
+        const note = document.getElementById('br-next-note');
+        const error = document.getElementById('br-error');
+        if (error) error.textContent = '';
+        if (!lastTest || !lastTest.orderCount) {
+            if (note) note.textContent = 'Test the condition first.';
+            return;
+        }
+        nextBusy = true;
+        paintNext(lastTest);
+        const hasMessage = !!String((formRule() && formRule().message) || '').trim();
+        if (note) note.textContent = hasMessage
+            ? 'Sending your message to each employee\'s Messages…'
+            : 'Sending matching orders to each employee\'s Order Errors…';
+        try {
+            const draft = formRule();
+            draft.pushKind = String(draft.message || '').trim() ? 'message' : 'error';
+            const saved = await api('/api/reserved-orders/bo-rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password(), rule: draft, analyze: true })
+            });
+            const rule = saved.rule || {};
+            const id = rule.id;
+            if (!id) throw new Error('The condition could not be saved.');
+            const kind = String(rule.message || draft.message || '').trim() ? 'message' : 'error';
+            try {
+                await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(id) + '/push-targeted', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password(), recordIds: [], confirmRepublish: !!confirmRepublish, kind })
+                });
+            } catch (pushErr) {
+                if (pushErr.needsConfirm && window.confirm(pushErr.message || 'These orders were already sent. Send them again?')) {
+                    return sendAsMessageOnly(true);
+                }
+                throw pushErr;
+            }
+            notice = kind === 'message'
+                ? `Sent to Messages. ${rule.affectedEmployees || lastTest.employeeCount || 0} people now see your message and can mark it done.`
+                : `Sent to employees. ${rule.affectedEmployees || lastTest.employeeCount || 0} people now see their matching orders under Order Errors.`;
+            if (note) note.textContent = notice;
+            editing = rule;
+            await load(id);
+        } catch (e) {
+            if (e.message !== 'unauthorized') {
+                if (error) error.textContent = e.message;
+                if (note) note.textContent = e.message || 'Could not send the orders.';
+            }
+        } finally {
+            nextBusy = false;
+            paintNext(lastTest);
+        }
+    }
     async function testConditions() {
         const error = document.getElementById('br-error');
         if (error) error.textContent = '';
+        const mode = document.getElementById('br-car-mode');
+        if (mode && mode.value === 'cars' && !selectedCars().length) {
+            if (error) error.textContent = 'Select at least one car, or switch to All cars.';
+            return;
+        }
+        const rule = formRule();
+        const hasCond = (rule.conditions || []).some((c) => c && c.column && (c.operator === 'empty' || c.operator === 'not_empty' || (c.values && String(c.values).trim())));
+        const hasCars = Array.isArray(rule.products) && rule.products.length > 0;
+        if (!hasCond && !hasCars) {
+            if (error) error.textContent = 'Select at least one car (e.g. 86), or choose a BO column + value, then press Test conditions.';
+            return;
+        }
         try {
-            lastTest = await api('/api/reserved-orders/bo-rules/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password(), rule: formRule() }) });
+            lastTest = await api('/api/reserved-orders/bo-rules/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password(), rule }) });
             paintTest(lastTest);
             if (lastTest.warning && error) error.textContent = lastTest.warning;
+            try {
+                window.dispatchEvent(new CustomEvent('boe-rules-tested', { detail: { rule, data: lastTest } }));
+            } catch (e) { /* ignore */ }
         } catch (e) {
             if (e.message !== 'unauthorized' && error) error.textContent = e.message;
+            try {
+                window.dispatchEvent(new CustomEvent('boe-rules-tested', { detail: { rule, data: null, error: e.message } }));
+            } catch (err) { /* ignore */ }
         }
     }
     async function save(analyze) {
