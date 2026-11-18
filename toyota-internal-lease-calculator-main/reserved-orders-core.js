@@ -400,10 +400,53 @@ function findHeaderByPriority(groups, headers) {
 function parseAgingDays(value) {
     if (value == null || value === '') return null;
     if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
-    const match = String(value).trim().match(/-?\d+/);
+    const text = String(value).trim();
+    if (!text || text === '—' || text === '-') return null;
+    // Reject interior/color codes like "Black 20" / "NEUTRAL BEIGE 40" — those are not ages.
+    if (/[A-Za-z]/.test(text) && !/\b(age|day|days|d)\b/i.test(text) && !/^-?\d+(\.\d+)?\s*(d|day|days)?$/i.test(text)) {
+        return null;
+    }
+    const match = text.match(/-?\d+/);
     if (!match) return null;
     const days = Number(match[0]);
     return Number.isFinite(days) ? days : null;
+}
+
+/** RTL Stock age for a VIN: Allocation Ageing first, then NDC GR Age. Never Interior Color (col K). */
+function rtlAgeFromFields(fields) {
+    const list = fields || [];
+    const norm = (label) => String(label || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const valueOf = (pred) => {
+        const hit = list.find((field) => pred(norm(field && field.label)));
+        if (!hit) return '';
+        const text = cleanText(hit.value);
+        return !text || text === '—' ? '' : text;
+    };
+    const primary = valueOf((label) => /allocation\s*age/.test(label) || /vin\s*allocation\s*age/.test(label));
+    const fallback = valueOf((label) => /ndc\s*gr\s*age/.test(label) || /^stock\s*age$/.test(label) || /^ageing$/.test(label) || /^aging$/.test(label));
+    const raw = primary || fallback;
+    const days = parseAgingDays(raw);
+    return { raw: raw || '', days };
+}
+
+/** RTL usage text by header label (Vehicle Usage / Usage Description) — not a fixed column letter. */
+function rtlUsageFromFields(fields) {
+    const list = fields || [];
+    const norm = (label) => String(label || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const pick = (...preds) => {
+        for (const pred of preds) {
+            const hit = list.find((field) => pred(norm(field && field.label)));
+            if (!hit) continue;
+            const text = cleanText(hit.value);
+            if (text && text !== '—') return text;
+        }
+        return '';
+    };
+    return pick(
+        (label) => /vehicle\s*usage/.test(label),
+        (label) => label === 'usage description' || label === 'usage descr' || label === 'usage',
+        (label) => /usage\s*descr/.test(label)
+    );
 }
 
 function pickRtlSheet(sheets) {
@@ -431,15 +474,19 @@ function indexRtlAging(sheets) {
     const vinCol = rtlVinColumn(grid, headerIdx, headers);
     const ageCol = findHeaderByPriority([
         [/vin\s*allocation\s*ag[ei]ing/, /allocation\s*ag[ei]ing/, /allocation\s*age/],
-        [/^ag[ei]ing$/, /^age$/, /stock\s*age/]
+        [/ndc\s*gr\s*age/, /^ag[ei]ing$/, /^age$/, /stock\s*age/]
     ], headers);
+    const ndcAgeCol = findHeaderByPriority([[/ndc\s*gr\s*age/]], headers);
     const vinIndex = vinCol >= 0 ? vinCol : columnIndex('E');
-    const ageIndex = ageCol >= 0 ? ageCol : columnIndex('K');
+    // Never fall back to column K — current RTL stock puts Interior Color there.
+    const ageIndex = ageCol >= 0 ? ageCol : -1;
+    const ndcIndex = ndcAgeCol >= 0 ? ndcAgeCol : columnIndex('W');
     for (let r = headerIdx + 1; r < grid.length; r++) {
         const line = grid[r] || [];
         const vin = normalizeVin(cell(line, vinIndex));
         if (!vin || map.has(vin)) continue;
-        const days = parseAgingDays(cell(line, ageIndex));
+        const days = (ageIndex >= 0 ? parseAgingDays(cell(line, ageIndex)) : null)
+            ?? parseAgingDays(cell(line, ndcIndex));
         if (days == null) continue;
         map.set(vin, days);
     }
@@ -1284,25 +1331,25 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         order.rtlFields = rtl ? rtl.fields : [];
         order.rtlSheetName = rtl ? rtl.sheetName : '';
         order.rtlRowIndex = rtl ? rtl.rowIndex : null;
-        // Car details from the RTL row: L usage, K allocation age, X area, "Sharing level" column for share level.
+        // Car details from the RTL row by header label (layout can shift; do not hard-code K=age).
         const rtlText = (hit) => {
             const text = hit ? cleanText(hit.value) : '';
             return text === '—' ? '' : text;
         };
         const rtlCol = (letter) => rtlText(rtl && (rtl.fields || []).find((field) => String(field.col || '').toUpperCase() === letter));
         const rtlByLabel = (label) => rtlText(rtl && (rtl.fields || []).find((field) => String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase() === label));
-        order.rtlStatus = rtlCol('M');
-        order.rtlUsage = rtlCol('L');
-        order.rtlAllocationAge = rtlCol('K');
-        order.rtlArea = rtlCol('X');
-        order.rtlShareLevel = rtlByLabel('sharing level') || rtlCol('H');
+        const ageInfo = rtlAgeFromFields(rtl && rtl.fields);
+        order.rtlStatus = rtlByLabel('secondary status descripiton') || rtlByLabel('secondary status description') || rtlCol('M');
+        order.rtlUsage = rtlUsageFromFields(rtl && rtl.fields) || rtlCol('O') || rtlCol('X');
+        order.rtlAllocationAge = ageInfo.raw;
+        order.rtlArea = rtlByLabel('current location') || rtlByLabel('allocated location') || rtlCol('P') || rtlCol('Z');
+        order.rtlShareLevel = rtlByLabel('sharing level') || rtlCol('H') || rtlCol('N');
         if (!rtl) return;
         rtlMatched += 1;
         if (!cleanText(order.vehicle) && rtl.product) order.vehicle = rtl.product;
         order.searchArea = order.rtlArea;
         order.shareLevel = order.rtlShareLevel;
-        const rtlAge = parseAgingDays(order.rtlAllocationAge);
-        if (rtlAge != null) order.allocationAging = rtlAge;
+        if (ageInfo.days != null) order.allocationAging = ageInfo.days;
     });
 
     const orders = applyQueue(Array.from(byVin.values()));
@@ -1527,8 +1574,8 @@ function orderQueueSpec(order) {
 }
 
 /**
- * First 3 back-order numbers for an order. Prefer same product+suffix+colors
- * (BO lookup rules); if that is empty, fall back to same product+suffix.
+ * Live-sheet queue: same product + suffix + exterior + interior.
+ * Confirm Flag = Confirmed only for Camry / RAV4 / Hilux SC·DC / LC300 / LC70.
  */
 function withColorQueue(orders, table) {
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
@@ -1536,9 +1583,10 @@ function withColorQueue(orders, table) {
     const list = Array.isArray(orders) ? orders : [];
     if (!rows.length || !headers.length) return list.map((order) => ({ ...order, ahead: [], queueOrders: [], boTierQueues: [null, null, null] }));
     const lookup = BoOrderLookup.fromBoData({ rows, headers });
-    // Confirm Flag priority (Camry / RAV4 / Hilux SC·DC / LC300 / LC70) is reserved-orders only.
-    // BO Order Lookup keeps normal reservation-date ranking.
+    // Reserved Live sheet: same exterior+interior. Confirmed-only only for the listed cars.
+    // BO Order Lookup hub keeps its own ranking (does not set these flags).
     lookup.preferConfirmSort = true;
+    lookup.confirmedOnlyQueue = true;
     const productColumn = lookup.resolveColumn(headers, [/^product$/i, /\bproduct\b/i, /^vehicle$/i, /\bvehicle\b/i])
         || headers.find((header) => /product|vehicle/i.test(String(header || '')) && !/model\s*year/i.test(String(header || '')))
         || null;
@@ -1585,27 +1633,28 @@ function withColorQueue(orders, table) {
             if (!suffixesMatch(lookup, row[suffixColumn], spec.suffix)) return;
             if (mode === 'colors') {
                 if (!extNorm || !intNorm) return;
-                const hasExt = [extCols[0], extCols[1], extCols[2]].some((col) => col && colorsMatchLoose(lookup, extNorm, row[col]));
-                const hasInt = [intCols[0], intCols[1], intCols[2]].some((col) => col && colorsMatchLoose(lookup, intNorm, row[col]));
-                if (!hasExt || !hasInt) return;
-            } else if (mode === 'ext') {
-                if (!extNorm) return;
-                const hasExt = [extCols[0], extCols[1], extCols[2]].some((col) => col && colorsMatchLoose(lookup, extNorm, row[col]));
-                if (!hasExt) return;
-            } else if (mode === 'int') {
-                if (!intNorm) return;
-                const hasInt = [intCols[0], intCols[1], intCols[2]].some((col) => col && colorsMatchLoose(lookup, intNorm, row[col]));
-                if (!hasInt) return;
+                // Same exterior + interior on the same choice tier (1/2/3), not mixed across tiers.
+                const samePair = [0, 1, 2].some((i) => {
+                    const extCol = extCols[i];
+                    const intCol = intCols[i];
+                    return extCol && intCol
+                        && colorsMatchLoose(lookup, extNorm, row[extCol])
+                        && colorsMatchLoose(lookup, intNorm, row[intCol]);
+                });
+                if (!samePair) return;
+            } else {
+                return;
             }
             pushRowMatch(matched, seen, row);
         });
-        // Reserved orders only: Confirm Flag priority for Camry / RAV4 / Hilux SC·DC / LC300 / LC70.
-        const sorted = lookup.sortQueueEntries(matched, { preferConfirm: true });
+        // Confirmed-only + same color pair (see confirmedOnlyQueue on lookup).
+        const sorted = lookup.sortQueueEntries(matched, { preferConfirm: true, confirmedOnly: true });
         cache.set(key, sorted);
         return sorted;
     };
 
     const queueFor = (refEntry, mode) => {
+        if (mode !== 'strict') return [];
         const productNorm = lookup.normalizeText(refEntry.product);
         const suffixNorm = lookup.normalizeText(refEntry.suffix);
         const pairKey = (refEntry.pairs || []).map((pair) => `${pair.extNorm}/${pair.intNorm}`).sort().join('|');
@@ -1614,17 +1663,9 @@ function withColorQueue(orders, table) {
             cache.set(key, lookup.sortQueueEntries(allEntries.filter((entry) => {
                 if (productNorm && !productsMatch(lookup, entry.product, refEntry.product)) return false;
                 if (suffixNorm && !suffixesMatch(lookup, entry.suffix, refEntry.suffix)) return false;
-                if (mode === 'product-suffix') return true;
-                if (mode === 'strict') return lookup.orderPairsMatch(refEntry.pairs, entry.pairs);
-                const refPair = (refEntry.pairs || [])[0];
-                if (!refPair) return mode === 'product-suffix';
-                const pairs = Array.isArray(entry.pairs) ? entry.pairs : [];
-                if (mode === 'ext') return pairs.some((pair) => colorsMatchLoose(lookup, refPair.exterior, pair.exterior));
-                if (mode === 'int') return pairs.some((pair) => colorsMatchLoose(lookup, refPair.interior, pair.interior));
-                const hasExt = pairs.some((pair) => colorsMatchLoose(lookup, refPair.exterior, pair.exterior));
-                const hasInt = pairs.some((pair) => colorsMatchLoose(lookup, refPair.interior, pair.interior));
-                return hasExt && hasInt;
-            }), { preferConfirm: true }));
+                // Same exterior AND interior on one colour choice (not ext-only / mixed).
+                return lookup.orderPairsMatch(refEntry.pairs, entry.pairs);
+            }), { preferConfirm: true, confirmedOnly: true }));
         }
         return cache.get(key) || [];
     };
@@ -1679,45 +1720,29 @@ function withColorQueue(orders, table) {
         } : null;
         if (!refEntry && specRef) refEntry = specRef;
 
-        // Queue 1–3 / ahead: only same product + suffix + exterior + interior (BO Order Lookup).
+        // Queue = same product + suffix + exterior + interior, Confirm Flag = Confirmed only.
         let colorQueue = [];
         if (refEntry && refEntry.pairs && refEntry.pairs.length) {
             colorQueue = queueFor(refEntry, 'strict');
-            if (!colorQueue.length) colorQueue = queueFor(refEntry, 'loose');
         }
         if (!colorQueue.length && specRef && specRef.pairs.length) {
             colorQueue = queueFor(specRef, 'strict');
-            if (!colorQueue.length) colorQueue = queueFor(specRef, 'loose');
             if (!colorQueue.length) colorQueue = queueFromRows(spec, 'colors');
         }
 
-        let queue = colorQueue.slice();
-        if (!queue.length && specRef && spec.exterior) {
-            queue = queueFor(specRef, 'ext');
-            if (!queue.length) queue = queueFromRows(spec, 'ext');
-        }
-        if (!queue.length && specRef && spec.interior) {
-            queue = queueFor(specRef, 'int');
-            if (!queue.length) queue = queueFromRows(spec, 'int');
-        }
-        // Last resort for empty cells: first 3 on same product + suffix.
-        if (!queue.length && specRef) {
-            queue = queueFor(specRef, 'product-suffix');
-            if (!queue.length) queue = queueFromRows(spec, 'product-suffix');
-        }
-
+        const queue = colorQueue.slice();
         const posIdx = needle ? queue.findIndex((entry) => entry.orderNorm === needle) : -1;
         const fileEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
-        const queueOrders = toAhead(colorQueue.length ? colorQueue : queue);
+        const queueOrders = toAhead(queue);
         return {
             ...order,
             boTierQueues: fileEntry ? tierQueues(fileEntry) : [null, null, null],
             ahead: queueOrders,
-            // Queue 1 / 2 / 3 on the Live sheet = these first three matched order numbers.
+            // Queue 1 / 2 / 3 on the Live sheet = first three confirmed same-color order numbers.
             queueOrders,
             boQueuePosition: posIdx >= 0 ? posIdx + 1 : null,
             boOrdersAhead: posIdx >= 0 ? posIdx : null,
-            boQueueSize: (colorQueue.length ? colorQueue : queue).length || null
+            boQueueSize: queue.length || null
         };
     });
 }

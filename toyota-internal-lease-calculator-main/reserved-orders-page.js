@@ -828,7 +828,7 @@
         render();
     }
     function realText(value) { return isBlankValue(value) ? '' : String(value).replace(/\u00a0/g, ' ').trim(); }
-    // value of an RTL Stock column of the order's VIN (L usage, K allocation age, X area)
+    // value of an RTL Stock column of the order's VIN (by letter or header label)
     function rtlCol(order, letter) {
         const hit = (order.rtlFields || []).find((field) => String(field.col || '').toUpperCase() === letter);
         return hit ? realText(hit.value) : '';
@@ -836,6 +836,30 @@
     function rtlByLabel(order, label) {
         const hit = (order.rtlFields || []).find((field) => String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase() === label);
         return hit ? realText(hit.value) : '';
+    }
+    function rtlByLabelMatch(order, predicate) {
+        const hit = (order.rtlFields || []).find((field) => predicate(String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase()));
+        return hit ? realText(hit.value) : '';
+    }
+    /** Age from RTL stock by VIN headers — Allocation Ageing, else NDC GR Age. Never Interior Color. */
+    function rtlAgeText(order) {
+        if (order && order.rtlAllocationAge && realText(order.rtlAllocationAge) && !/[A-Za-z]/.test(String(order.rtlAllocationAge))) {
+            return realText(order.rtlAllocationAge);
+        }
+        const primary = rtlByLabelMatch(order, (label) => /allocation\s*age/.test(label) || /vin\s*allocation\s*age/.test(label));
+        if (primary && !/[A-Za-z]/.test(primary)) return primary;
+        const ndc = rtlByLabelMatch(order, (label) => /ndc\s*gr\s*age/.test(label));
+        if (ndc) return ndc;
+        if (order && order.allocationAging != null && Number.isFinite(Number(order.allocationAging))) {
+            return String(Math.round(Number(order.allocationAging)));
+        }
+        return primary || '';
+    }
+    function rtlUsageText(order) {
+        return rtlByLabelMatch(order, (label) => /vehicle\s*usage/.test(label))
+            || rtlByLabelMatch(order, (label) => label === 'usage description' || label === 'usage' || /usage\s*descr/.test(label))
+            || realText(order && order.rtlUsage)
+            || '';
     }
     function statusKey(value) {
         const text = String(value || '').trim().toLowerCase();
@@ -857,10 +881,10 @@
             'Interior color': pick('H') || realText(order.interior),
             VIN: looksLikeVinText(vinText) ? vinText : (looksLikeVinText(order.vin) ? String(order.vin).trim() : ''),
             'Expiry date': expiryText(order) || pick('J'),
-            Usage: rtlCol(order, 'L'),
-            'Allocation age': rtlCol(order, 'K'),
-            Area: rtlCol(order, 'X') || realText(order.searchArea),
-            'Share level': rtlByLabel(order, 'sharing level') || rtlCol(order, 'H') || realText(order.shareLevel)
+            Usage: rtlUsageText(order),
+            'Allocation age': rtlAgeText(order),
+            Area: rtlByLabelMatch(order, (label) => label === 'current location' || label === 'allocated location') || realText(order.searchArea) || rtlCol(order, 'P'),
+            'Share level': rtlByLabel(order, 'sharing level') || rtlCol(order, 'H') || rtlCol(order, 'N') || realText(order.shareLevel)
         };
     }
     function queueHtml(order) {
@@ -977,16 +1001,16 @@
             : (Array.isArray(order.ahead) ? order.ahead : []);
         return list[tier - 1] || null;
     }
-    // Queue 1 / 2 / 3 = first three BO order numbers for this vehicle (product + suffix + exterior + interior).
+    // Queue 1 / 2 / 3 = first three confirmed BO orders with the same exterior + interior.
     function queueTierHtml(order, n) {
         const item = queueOrderAt(order, n);
         const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
         if (!orderNo) {
-            return `<div class="q q-box is-empty" title="No matching back order #${n} for this vehicle (product + suffix + exterior + interior)"><b class="num">—</b></div>`;
+            return `<div class="q q-box is-empty" title="No matching back order #${n} (same exterior + interior; Camry/RAV4/Hilux SC·DC/LC300/LC70 require Confirm Flag = Confirmed)"><b class="num">—</b></div>`;
         }
         const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : '';
         const size = order.boQueueSize != null ? String(order.boQueueSize) : '';
-        const title = `Queue #${n} · order ${orderNo}` + (who ? ` · ${who}` : '') + (size ? ` · ${size} matched` : '') + ' (product + suffix + exterior + interior)';
+        const title = `Queue #${n} · order ${orderNo}` + (who ? ` · ${who}` : '') + (size ? ` · ${size} in queue` : '') + ' (same exterior + interior; Confirm Flag = Confirmed only for Camry/RAV4/Hilux SC·DC/LC300/LC70)';
         return `<div class="q q-box" title="${esc(title)}"><b class="num">${esc(orderNo)}</b></div>`;
     }
     function sheetCellHtml(order, label, values, mine) {
@@ -2820,17 +2844,6 @@
         const socket = new WebSocket(`${protocol}//${location.host}`);
         socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'pages_updated' && msg.version) {
-                try {
-                    const key = 'toyota_app_version_v1';
-                    const prev = sessionStorage.getItem(key) || '';
-                    if (!prev) sessionStorage.setItem(key, String(msg.version));
-                    else if (prev !== String(msg.version)) {
-                        sessionStorage.setItem(key, String(msg.version));
-                        location.reload();
-                    }
-                } catch (e) { /* ignore */ }
-            }
             if (msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') { loadLive(); paintMyAlerts(); }
         });
     } catch (e) { /* polling remains */ }

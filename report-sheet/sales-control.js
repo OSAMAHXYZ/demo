@@ -25,6 +25,8 @@
   const BIT_PRO = 2;
   const BIT_DEL_PREV = 4;
   const BIT_PRO_PREV = 8;
+  const BIT_DEL_DAY = 16;
+  const BIT_PRO_DAY = 32;
   const COLOR_DEL = "#34d399";
   const COLOR_PRO = "#5aa9ff";
   const DATE_PRESETS = [
@@ -204,6 +206,8 @@
       if (isProforma(r, live, period, pmk)) f |= BIT_PRO;
       if (isDelivery(r, live, "prev", pmk)) f |= BIT_DEL_PREV;
       if (isProforma(r, live, "prev", pmk)) f |= BIT_PRO_PREV;
+      if (isDelivery(r, live, "day", pmk)) f |= BIT_DEL_DAY;
+      if (isProforma(r, live, "day", pmk)) f |= BIT_PRO_DAY;
       flags[i] = f;
     }
     if (state.dateCache.size >= 8) state.dateCache.delete(state.dateCache.keys().next().value);
@@ -236,7 +240,7 @@
     if (hit) { state.perf.computeMs = 0; state.perf.cacheHit = true; return hit; }
     const t0 = now();
     const flags = dateFlags();
-    const counts = new Int32Array(NCH * 4);
+    const counts = new Int32Array(NCH * 6);
     const lists = CHANNELS.map(() => ({ del: [], pro: [] }));
     const modelAgg = new Map();
     const showroomAgg = new Map();
@@ -249,11 +253,13 @@
       const ch = norm.bucket[i];
       const fl = flags[i];
       if (ch >= NCH || !fl) return;
-      const o = ch * 4;
+      const o = ch * 6;
       if (fl & BIT_DEL) { counts[o] += 1; lists[ch].del.push(i); bump(modelAgg, norm.modelId[i], ch, 0); bump(showroomAgg, norm.showroomId[i], ch, 0); }
       if (fl & BIT_PRO) { counts[o + 1] += 1; lists[ch].pro.push(i); bump(modelAgg, norm.modelId[i], ch, 1); bump(showroomAgg, norm.showroomId[i], ch, 1); }
       if (fl & BIT_DEL_PREV) counts[o + 2] += 1;
       if (fl & BIT_PRO_PREV) counts[o + 3] += 1;
+      if (fl & BIT_DEL_DAY) counts[o + 4] += 1;
+      if (fl & BIT_PRO_DAY) counts[o + 5] += 1;
     };
     if (sId === -2 || mId === -2) { /* filter value no longer in data → empty */ } else {
       const list = candidates(sId, mId);
@@ -273,7 +279,8 @@
     const c = base.counts;
     const channels = CHANNELS.map((ch, i) => ({
       ...ch,
-      delivered: c[i * 4], proforma: c[i * 4 + 1], prevDelivered: c[i * 4 + 2], prevProforma: c[i * 4 + 3],
+      delivered: c[i * 6], proforma: c[i * 6 + 1], prevDelivered: c[i * 6 + 2], prevProforma: c[i * 6 + 3],
+      dailyDelivered: c[i * 6 + 4], dailyProforma: c[i * 6 + 5],
     }));
     const sel = state.filters.channel;
     const scope = sel ? channels.filter((x) => x.id === sel) : channels;
@@ -282,6 +289,8 @@
     const pro = sum("proforma");
     const pDel = sum("prevDelivered");
     const pPro = sum("prevProforma");
+    const dayDel = sum("dailyDelivered");
+    const dayPro = sum("dailyProforma");
     const ratio = ratioOf(del, pro);
     const prevRatio = ratioOf(pDel, pPro);
     const trend = state.ctx.trendPct;
@@ -299,6 +308,7 @@
       channels, scopeIdx, allDel, top,
       totals: {
         delivered: del, proforma: pro, prevDelivered: pDel, prevProforma: pPro, ratio,
+        dailyDelivered: dayDel, dailyProforma: dayPro,
         delTrend: trend(del, pDel), proTrend: trend(pro, pPro),
         ratioTrend: ratio != null && prevRatio != null ? ratio - prevRatio : null,
       },
@@ -361,7 +371,9 @@
           </div>
         </header>
 
-        <section class="gec-kpis sc-kpis" data-el="kpis" style="--kpi-count:6">
+        <section class="gec-kpis sc-kpis" data-el="kpis" style="--kpi-count:8">
+          ${kpiShell("dailyDelivered", "Daily Delivered", COLOR_DEL, true)}
+          ${kpiShell("dailyProforma", "Daily Pro-Forma", COLOR_PRO, true)}
           ${kpiShell("delivered", "Total Delivered", COLOR_DEL, true)}
           ${kpiShell("proforma", "Total Pro-Forma", COLOR_PRO, true)}
           ${kpiShell("ratio", "Delivery / Pro-Forma", "var(--gec-conv)", true)}
@@ -696,6 +708,15 @@
     const k = state.kpiEls;
     const meter = (key, p) => k[key].meter.style.setProperty("--p", `${(Math.max(0, Math.min(1, p || 0)) * 100).toFixed(1)}%`);
     const scopeTotal = t.delivered + t.proforma;
+    const dayTotal = (t.dailyDelivered || 0) + (t.dailyProforma || 0);
+    setNum(k.dailyDelivered.val, t.dailyDelivered || 0);
+    k.dailyDelivered.sub.textContent = "Col V · today";
+    k.dailyDelivered.card.classList.add("is-daily");
+    meter("dailyDelivered", dayTotal ? (t.dailyDelivered || 0) / dayTotal : 0);
+    setNum(k.dailyProforma.val, t.dailyProforma || 0);
+    k.dailyProforma.sub.textContent = "Col P · today · V blank";
+    k.dailyProforma.card.classList.add("is-daily");
+    meter("dailyProforma", dayTotal ? (t.dailyProforma || 0) / dayTotal : 0);
     setNum(k.delivered.val, t.delivered);
     k.delivered.sub.innerHTML = trendHtml(t.delTrend);
     meter("delivered", scopeTotal ? t.delivered / scopeTotal : 0);
@@ -973,7 +994,9 @@
   }
 
   function openKpi(key) {
-    if (key === "delivered" || key === "proforma") openRecords(state.filters.channel || "all", key);
+    if (key === "delivered" || key === "proforma" || key === "dailyDelivered" || key === "dailyProforma") {
+      openRecords(state.filters.channel || "all", key === "dailyProforma" || key === "proforma" ? "proforma" : "delivered");
+    }
     else if (key === "ratio" || key === "top") openChannelTable();
     else if (key === "prevDelivered" || key === "prevProforma") openPrev(key === "prevDelivered" ? BIT_DEL_PREV : BIT_PRO_PREV);
   }

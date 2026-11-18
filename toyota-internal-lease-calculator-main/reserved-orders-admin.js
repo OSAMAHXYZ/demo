@@ -654,7 +654,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN of the Reserved Order File, matched with RTL Stock and ranked against the Toyota Back Order file. Queue 1–3 show the first three matching back-order numbers (product + suffix + exterior + interior), same ranking as BO Order Lookup. Click a row to change its status.'
+        merged: 'One row per VIN of the Reserved Order File, matched with RTL Stock and ranked against the Toyota Back Order file. Queue 1–3 use the same exterior + interior. Confirm Flag = Confirmed is required only for Camry, RAV4, Hilux SC/DC, LC300 and LC70. Click a row to change its status.'
     };
     function queueOrderAt(order, tier) {
         const list = Array.isArray(order.queueOrders) && order.queueOrders.length
@@ -824,10 +824,10 @@
             'Interior color': firstReal(pick('H'), order.interior),
             VIN: vin,
             'Expiry date': firstReal(formatExpiryValue(order, reserved), pick('J')),
-            Usage: rtlValue(order, 'L'),
-            'Allocation age': rtlValue(order, 'K'),
-            Area: firstReal(rtlValue(order, 'X'), order.searchArea),
-            'Share level': firstReal(rtlByLabel(order, 'sharing level'), rtlValue(order, 'H'), order.shareLevel)
+            Usage: rtlUsageText(order),
+            'Allocation age': rtlAgeText(order),
+            Area: firstReal(rtlByLabelMatch(order, (label) => label === 'current location' || label === 'allocated location'), order.searchArea, rtlValue(order, 'P')),
+            'Share level': firstReal(rtlByLabel(order, 'sharing level'), rtlValue(order, 'H'), rtlValue(order, 'N'), order.shareLevel)
         };
         const mergedFields = MERGED_COL_ORDER.map((label) => ({
             label,
@@ -1544,6 +1544,33 @@
         const text = String(hit.value).trim();
         return text === '—' ? '' : text;
     }
+    function rtlByLabelMatch(order, predicate) {
+        const hit = (order && Array.isArray(order.rtlFields) ? order.rtlFields : []).find((field) => predicate(String(field.label || '').replace(/\s+/g, ' ').trim().toLowerCase()));
+        if (!hit || hit.value == null) return '';
+        const text = String(hit.value).trim();
+        return text === '—' ? '' : text;
+    }
+    /** Age from RTL stock by VIN: Allocation Ageing, else NDC GR Age — never Interior Color (col K). */
+    function rtlAgeText(order) {
+        if (order && order.rtlAllocationAge) {
+            const stored = String(order.rtlAllocationAge).trim();
+            if (stored && stored !== '—' && !/[A-Za-z]/.test(stored)) return stored;
+        }
+        const primary = rtlByLabelMatch(order, (label) => /allocation\s*age/.test(label) || /vin\s*allocation\s*age/.test(label));
+        if (primary && !/[A-Za-z]/.test(primary)) return primary;
+        const ndc = rtlByLabelMatch(order, (label) => /ndc\s*gr\s*age/.test(label));
+        if (ndc) return ndc;
+        if (order && order.allocationAging != null && Number.isFinite(Number(order.allocationAging))) {
+            return String(Math.round(Number(order.allocationAging)));
+        }
+        return primary || '';
+    }
+    function rtlUsageText(order) {
+        return rtlByLabelMatch(order, (label) => /vehicle\s*usage/.test(label))
+            || rtlByLabelMatch(order, (label) => label === 'usage description' || label === 'usage' || /usage\s*descr/.test(label))
+            || (order && order.rtlUsage ? String(order.rtlUsage).trim() : '')
+            || '';
+    }
     function sheetValue(order, label, source) {
         const tierMatch = /^Queue ([123])$/.exec(label);
         if (tierMatch) {
@@ -1804,17 +1831,17 @@
                 const item = queueOrderAt(order, tier);
                 const orderNo = item && item.orderNumber != null ? String(item.orderNumber).trim() : '';
                 if (!orderNo) {
-                    return `${tdOpen(label, 'col-queue col-tier col-q', 'No matching back order #' + tier + ' for this vehicle (product + suffix + exterior + interior)')}<div class="q q-box is-empty"><b class="num">—</b></div></td>`;
+                    return `${tdOpen(label, 'col-queue col-tier col-q', 'No matching back order #' + tier + ' (same exterior + interior; Camry/RAV4/Hilux SC·DC/LC300/LC70 require Confirm Flag = Confirmed)')}<div class="q q-box is-empty"><b class="num">—</b></div></td>`;
                 }
                 const who = item.salesAdvisor ? String(item.salesAdvisor).trim() : '';
                 const size = order.boQueueSize != null ? String(order.boQueueSize) : '';
-                const title = `Queue #${tier} · order ${orderNo}` + (who ? ` · ${who}` : '') + (size ? ` · ${size} matched` : '') + ' (product + suffix + exterior + interior)';
+                const title = `Queue #${tier} · order ${orderNo}` + (who ? ` · ${who}` : '') + (size ? ` · ${size} in queue` : '') + ' (same exterior + interior; Confirm Flag = Confirmed only for Camry/RAV4/Hilux SC·DC/LC300/LC70)';
                 return `${tdOpen(label, 'col-queue col-tier col-q', title)}<div class="q q-box"><b class="num">${esc(orderNo)}</b></div></td>`;
             }
             if (label === 'Queue position') {
-                if (order.boQueuePosition == null) return `${tdOpen(label, 'col-queue', 'Not found in the Toyota Back Order file')}<span class="ahead-empty">—</span></td>`;
+                if (order.boQueuePosition == null) return `${tdOpen(label, 'col-queue', 'No same-color match in the Toyota Back Order file')}<span class="ahead-empty">—</span></td>`;
                 const size = order.boQueueSize != null ? `<small class="q-of"> / ${esc(String(order.boQueueSize))}</small>` : '';
-                return `${tdOpen(label, 'col-queue', 'Back Order queue position')}<span class="q-pill">#${esc(String(order.boQueuePosition))}</span>${size}</td>`;
+                return `${tdOpen(label, 'col-queue', 'Same exterior + interior queue (Confirmed only for Camry/RAV4/Hilux SC·DC/LC300/LC70)')}<span class="q-pill">#${esc(String(order.boQueuePosition))}</span>${size}</td>`;
             }
             if (label === 'Note') {
                 return `${tdOpen(label, 'col-note', value)}<div class="note" dir="auto">${value ? esc(value) : '—'}</div></td>`;
@@ -3658,17 +3685,6 @@
         const socket = new WebSocket(`${protocol}//${location.host}`);
         socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'pages_updated' && msg.version) {
-                try {
-                    const key = 'toyota_app_version_v1';
-                    const prev = sessionStorage.getItem(key) || '';
-                    if (!prev) sessionStorage.setItem(key, String(msg.version));
-                    else if (prev !== String(msg.version)) {
-                        sessionStorage.setItem(key, String(msg.version));
-                        location.reload();
-                    }
-                } catch (e) { /* ignore */ }
-            }
             if ((msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') && (password() || adminToken())) refresh().catch(() => {});
         });
     } catch (e) { /* the sheet still refreshes on the next manual open */ }

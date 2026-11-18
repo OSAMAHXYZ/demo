@@ -272,16 +272,16 @@
             </section>
         </div>
     </div>
-    <script src="reserved-orders-page.js?v=20261112mkt1"></script>
+    <script src="reserved-orders-page.js?v=20261118q1"></script>
     <script>
-      /* Force a one-time hard refresh for all employees so the new marketing scroll CSS loads. No data writes. */
+      /* Force a one-time hard refresh so queue + RTL column updates load. No data writes. */
       (function () {
-        var KEY = 'ro-asset-refresh-v=20261112mkt1';
+        var KEY = 'ro-asset-refresh-v=20261118q1';
         try {
           if (sessionStorage.getItem(KEY)) return;
           sessionStorage.setItem(KEY, '1');
           var u = new URL(location.href);
-          u.searchParams.set('_ro', '20261112mkt1');
+          u.searchParams.set('_ro', '20261118q1');
           location.replace(u.toString());
         } catch (e) { /* ignore */ }
       })();

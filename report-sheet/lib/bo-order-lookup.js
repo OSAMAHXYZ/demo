@@ -389,18 +389,39 @@ class BoOrderLookup {
 
   /**
    * Default sort = reservation date, then order number (BO Order Lookup).
-   * Reserved-orders sets lookup.preferConfirmSort = true (or passes
-   * { preferConfirm: true }) so Camry / RAV4 / Hilux SC·DC / LC300 / LC70
-   * confirmed rows jump ahead. BO hub never enables this.
+   * Reserved-orders sets confirmedOnlyQueue so Live sheet queues for
+   * Camry / RAV4 / Hilux SC·DC / LC300 / LC70 only include Confirm Flag = Confirmed.
+   * Other products keep full same-color queues. BO hub never enables this.
    */
   sortQueueEntries(entries, opts) {
-    const list = Array.isArray(entries) ? entries : [];
+    let list = Array.isArray(entries) ? entries.slice() : [];
     const preferConfirm = !!(this.preferConfirmSort) || !!(opts && opts.preferConfirm);
+    const confirmedOnly = !!(this.confirmedOnlyQueue) || !!(opts && opts.confirmedOnly);
     const sample = list.find((entry) => entry && entry.row) || null;
     const headers = sample && sample.row ? Object.keys(sample.row) : (this.headers || []);
-    const confirmColumn = preferConfirm ? this.resolveConfirmFlagColumn(headers) : null;
-    const useConfirm = preferConfirm && list.some((entry) => this.confirmPriorityProduct(entry && entry.product));
-    return [...list].sort((a, b) => {
+    const confirmColumn = (preferConfirm || confirmedOnly) ? this.resolveConfirmFlagColumn(headers) : null;
+    // Confirmed-only applies ONLY to Camry / RAV4 / Hilux SC·DC / LC300 / LC70 — not every product.
+    const priorityQueue = confirmedOnly && list.some((entry) => this.confirmPriorityProduct(entry && entry.product));
+    if (priorityQueue) {
+      const hasConfirmSignal = list.some((entry) => {
+        if (!this.confirmPriorityProduct(entry && entry.product)) return false;
+        const row = entry && entry.row;
+        if (!row) return false;
+        if (confirmColumn && row[confirmColumn] != null && String(row[confirmColumn]).trim() !== '') return true;
+        const col = confirmColumn || this.resolveConfirmFlagColumn(Object.keys(row));
+        if (col && row[col] != null && String(row[col]).trim() !== '') return true;
+        const colH = Object.keys(row).find((h) => /^h$/i.test(String(h))) || (row.H != null ? 'H' : null);
+        return !!(colH && this.looksLikeConfirmFlagValue(row[colH]));
+      });
+      if (hasConfirmSignal) {
+        list = list.filter((entry) => {
+          if (!this.confirmPriorityProduct(entry && entry.product)) return true;
+          return this.entryIsConfirmed(entry, confirmColumn);
+        });
+      }
+    }
+    const useConfirm = !priorityQueue && preferConfirm && list.some((entry) => this.confirmPriorityProduct(entry && entry.product));
+    return list.sort((a, b) => {
         if (useConfirm) {
           const aPri = this.confirmPriorityProduct(a && a.product);
           const bPri = this.confirmPriorityProduct(b && b.product);
@@ -1085,5 +1106,4 @@ class BoOrderLookup {
 
 }
 
-// Node (tests / server) gets the export; in the browser the class is already a global.
 if (typeof module !== "undefined" && module.exports) module.exports = { BoOrderLookup };
