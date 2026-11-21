@@ -10,11 +10,14 @@
   <link rel="stylesheet" href="admin.css?v=20261010d" />
   <link rel="stylesheet" href="admin-layout.css?v=20261109emb2" />
   <link rel="stylesheet" href="live-excel.css?v=20261105xl2" />
+  <link rel="stylesheet" href="dt-motion.css?v=20261121a" />
+  <link rel="stylesheet" href="admin-overview.css?v=20261121a" />
   <script>
     if (/(?:^|[?&])view=1(?:&|$)/.test(location.search)) document.documentElement.classList.add("dt-embed");
   </script>
 </head>
 <body>
+  <script src="dt-motion.js?v=20261121a"></script>
   <div class="collector-gate auth" id="collector-gate">
     <section class="auth-brand">
       <div class="brand">
@@ -57,8 +60,10 @@
     </div>
     <nav class="dt-nav" aria-label="Collector sections">
       <p class="dt-nav-label">Dashboard</p>
+      <button type="button" class="tab-btn" data-tab="overview"><i aria-hidden="true">&#9632;</i><span>Overview</span></button>
       <button type="button" class="tab-btn active" data-tab="dash"><i aria-hidden="true">&#9636;</i><span>VSND</span></button>
       <button type="button" class="tab-btn" data-tab="ops"><i aria-hidden="true">&#9673;</i><span>Operations</span></button>
+      <button type="button" class="tab-btn" data-tab="archive"><i aria-hidden="true">&#8681;</i><span>Monthly archive</span></button>
       <p class="dt-nav-label">Setup</p>
       <button type="button" class="tab-btn" data-tab="schedule"><i aria-hidden="true">&#9201;</i><span>SLA</span></button>
       <button type="button" class="tab-btn" data-tab="weights"><i aria-hidden="true">&#9878;</i><span>KPI weights</span></button>
@@ -91,6 +96,56 @@
   </aside>
 
   <main class="wrap admin-wrap">
+    <section class="panel-tab" id="tab-overview">
+      <div class="ov-head">
+        <div>
+          <h1>Overview</h1>
+          <p>Cars = Delivered + Not delivered + cancelled</p>
+        </div>
+        <div class="ov-nav">
+          <button type="button" id="ov-prev" title="Previous month">‹</button>
+          <strong id="ov-month">—</strong>
+          <button type="button" id="ov-next" title="Next month">›</button>
+        </div>
+      </div>
+      <div class="ov-kpis">
+        <div class="ov-kpi cars"><span>Cars</span><b id="ov-cars">0</b></div>
+        <div class="ov-kpi ok"><span>Delivered</span><b id="ov-delivered">0</b></div>
+        <div class="ov-kpi warn"><span>Not delivered</span><b id="ov-open">0</b></div>
+        <div class="ov-kpi bad"><span>Cancelled</span><b id="ov-cancel">0</b></div>
+      </div>
+      <p class="ov-check" id="ov-check">Cars = Delivered + Not delivered + cancelled</p>
+    </section>
+
+    <section class="panel-tab" id="tab-archive">
+      <div class="ov-head">
+        <div>
+          <h1>Monthly archive</h1>
+          <p>Save a snapshot before clearing the Live Sheet. Only Admin extracts the Excel.</p>
+        </div>
+      </div>
+      <div class="arch-actions">
+        <button type="button" class="btn-primary" id="arch-save">Save snapshot now</button>
+        <button type="button" class="btn" id="arch-extract">Extract Excel</button>
+      </div>
+      <p class="arch-msg" id="arch-msg"></p>
+      <div class="ov-table-wrap">
+        <table class="ov-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Saved</th>
+              <th>By</th>
+              <th>Lock</th>
+              <th>Cars</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="arch-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="panel-tab active vsnd-board" id="tab-dash">
       <header class="vsnd-dash-head">
         <div class="vsnd-dash-title">
@@ -619,5 +674,6 @@
   <script src="live.js?v=20261010a"></script>
   <script src="live-excel.js?v=20261105xl2"></script>
   <script src="admin.js?v=20261109emb2"></script>
+  <script src="admin-overview.js?v=20261121a"></script>
 </body>
 </html>

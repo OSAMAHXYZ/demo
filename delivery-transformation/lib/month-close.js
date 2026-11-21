@@ -159,13 +159,13 @@ function markDownloaded(store, by) {
   return mc;
 }
 
-function applyMonthClosePurge(store, by) {
+function applyMonthClosePurge(store, by, opts) {
   const mc = store.data.meta && store.data.meta.monthClose;
   if (!mc || mc.purgedAt) {
     throw new Error(mc && mc.purgedAt ? 'Month close already applied' : 'No month archive ready');
   }
-  if (!mc.downloadedAt) {
-    throw new Error('Download the Excel archive first');
+  if (!mc.downloadedAt && !(opts && opts.archived)) {
+    throw new Error('Save the month archive first');
   }
 
   const all = store.allVehicles();

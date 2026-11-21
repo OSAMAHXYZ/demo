@@ -1,0 +1,47 @@
+/* Truck loader + page fade-in. Does not change print layouts. */
+html.dt-wait body > *:not(#dt-loader) { opacity: 0; }
+html.dt-in body > *:not(#dt-loader) {
+  animation: dt-fade .42s var(--dt-ease, cubic-bezier(.22, 1, .36, 1)) both;
+}
+#dt-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  background: #0b1522;
+  color: #fff;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity .4s ease;
+}
+#dt-loader.is-out { opacity: 0; }
+#dt-loader .dt-truck {
+  width: min(220px, 62vw);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+}
+#dt-loader svg { width: 132px; height: auto; overflow: visible; }
+#dt-loader .dt-body { fill: #eb0a1e; }
+#dt-loader .dt-cab { fill: #c40818; }
+#dt-loader .dt-win { fill: #dbe7f4; }
+#dt-loader .dt-wheel { fill: #1a1a1a; stroke: #ececec; stroke-width: 2; }
+#dt-loader .dt-roll { transform-origin: center; animation: dt-roll .7s linear infinite; }
+#dt-loader .dt-move { animation: dt-move 1.1s ease-in-out infinite alternate; }
+#dt-loader p {
+  margin: 0;
+  font: 700 12px/1.3 Manrope, "IBM Plex Sans Arabic", sans-serif;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .72);
+}
+@keyframes dt-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes dt-roll { to { transform: rotate(360deg); } }
+@keyframes dt-move { from { transform: translateX(-10px); } to { transform: translateX(10px); } }
+@media (prefers-reduced-motion: reduce) {
+  html.dt-wait body > *:not(#dt-loader),
+  html.dt-in body > *:not(#dt-loader) { opacity: 1; animation: none; transform: none; }
+  #dt-loader .dt-roll, #dt-loader .dt-move { animation: none; }
+  #dt-loader { transition: none; }
+}

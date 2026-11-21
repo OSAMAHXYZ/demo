@@ -1,0 +1,38 @@
+/* Light coordinator workspace. Print A4 stays in coordinator.css. */
+@media screen {
+  body.workspace-mode {
+    background: #eef2f6;
+    background-image: none;
+    color: #122033;
+  }
+  body.workspace-mode .ws-topbar {
+    background: #fff;
+    border: 1px solid #d5dee8;
+    box-shadow: 0 8px 20px rgba(12, 34, 56, 0.06);
+    backdrop-filter: none;
+  }
+  body.workspace-mode .ws-brand h1 { color: #122033; }
+  body.workspace-mode .ws-brand p,
+  body.workspace-mode .hint { color: #5a6b7d; }
+  body.workspace-mode .ws-user-pill strong { color: #122033; }
+  body.workspace-mode .btn-ghost {
+    background: #f4f7fa;
+    color: #122033;
+    border-color: #d5dee8;
+  }
+  body.workspace-mode .ws-stats,
+  body.workspace-mode .ws-section,
+  body.workspace-mode .co-actions,
+  body.workspace-mode .co-action,
+  body.workspace-mode .ws-section-head {
+    background: #fff;
+    border-color: #d5dee8;
+    color: #122033;
+  }
+  body.workspace-mode .co-action b { color: #122033; }
+  body.workspace-mode .co-action small { color: #5a6b7d; }
+  body.workspace-mode table { color: #122033; }
+  body.workspace-mode th { color: #5a6b7d; background: #f7fafc; }
+  body.workspace-mode td { border-color: #edf1f6; }
+  body.workspace-mode .live-pill { color: #0d6b3c; background: #e8f6ef; }
+}

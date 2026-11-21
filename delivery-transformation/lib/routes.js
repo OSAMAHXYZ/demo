@@ -69,6 +69,7 @@ const exportExcel = require('./export-excel');
 const fullExcel = require('./full-excel');
 const scheduleEngine = require('./schedule');
 const monthClose = require('./month-close');
+const { createMonthArchive, mountMonthArchiveRoutes } = require('./month-archive');
 const companyPerformance = require('./company-performance');
 const rtlInventory = require('./rtl-inventory');
 
@@ -278,7 +279,28 @@ function createDeliveryTransformationRouter(opts = {}) {
     || path.join(opts.root || process.cwd(), 'delivery-transformation-data.json');
   const store = createStore(dataFile);
   const rtlDir = path.join(path.dirname(dataFile), 'delivery-transformation-rtl');
+  const archiveDir = path.join(path.dirname(dataFile), 'archive');
+  const archive = createMonthArchive({
+    dir: archiveDir,
+    getVehicles: () => store.allVehicles(),
+    getPrints: () => store.data.prints || [],
+    getAudit: () => store.data.audit || [],
+  });
   monthClose.startMonthCloseScanner(store);
+  archive.startAutoSave();
+
+  function syncPendingMonthArchive() {
+    try {
+      const st = monthClose.monthCloseStatus(store);
+      if (st && st.forMonth && (st.ready || st.pending)) {
+        const row = archive.get(st.forMonth);
+        if (!(row && row.locked)) archive.save(st.forMonth, 'System');
+      }
+    } catch (err) {
+      console.error('[delivery-transformation] pending archive save failed:', err.message);
+    }
+  }
+  setTimeout(syncPendingMonthArchive, 5000);
 
   function rtlBox() {
     if (!store.data.meta || typeof store.data.meta !== 'object') store.data.meta = {};
@@ -580,6 +602,9 @@ function createDeliveryTransformationRouter(opts = {}) {
     };
   }
 
+  const requireAdmin = requireRole('admin');
+  mountMonthArchiveRoutes(router, archive, { requireAdmin, auth });
+
   function normalizePhone(value) {
     const ar = '٠١٢٣٤٥٦٧٨٩';
     return String(value || '')
@@ -841,10 +866,13 @@ function createDeliveryTransformationRouter(opts = {}) {
   });
 
   router.get('/month-close', auth, requireRole('admin', 'hanouf'), (_req, res) => {
-    res.json(monthClose.monthCloseStatus(store));
+    const status = monthClose.monthCloseStatus(store);
+    const snap = status.forMonth ? archive.get(status.forMonth) : null;
+    status.archived = !!(snap && snap.savedAt);
+    res.json(status);
   });
 
-  router.get('/month-close/download', auth, requireRole('admin', 'hanouf'), (req, res) => {
+  router.get('/month-close/download', auth, requireAdmin, (req, res) => {
     const status = monthClose.monthCloseStatus(store);
     if (!status.ready && !status.purged) {
       return res.status(404).json({ error: 'No month archive ready yet (runs automatically on day 1)' });
@@ -862,11 +890,20 @@ function createDeliveryTransformationRouter(opts = {}) {
 
   router.post('/month-close/apply', auth, requireRole('admin', 'hanouf'), (req, res) => {
     try {
-      const result = monthClose.applyMonthClosePurge(store, req.dtUser.name);
+      const before = monthClose.monthCloseStatus(store);
+      const month = before.forMonth;
+      if (month) archive.save(month, req.dtUser.name);
+      const result = monthClose.applyMonthClosePurge(store, req.dtUser.name, { archived: true });
+      if (month) {
+        try { archive.lock(month); } catch (_e) { /* already locked */ }
+      }
+      const status = monthClose.monthCloseStatus(store);
+      const snap = status.forMonth ? archive.get(status.forMonth) : (month ? archive.get(month) : null);
+      status.archived = !!(snap && snap.savedAt);
       return res.json({
         ok: true,
         ...result,
-        monthClose: monthClose.monthCloseStatus(store),
+        monthClose: status,
       });
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Could not apply month close' });
@@ -2255,6 +2292,9 @@ function createDeliveryTransformationRouter(opts = {}) {
 
   router.post('/backup', auth, requireRole('admin'), (req, res) => {
     const status = store.writeBackup('manual');
+    try {
+      archive.backupCopy(path.join(path.dirname(dataFile), 'delivery-transformation-archive-backup'));
+    } catch (_e) { /* archive copy is best-effort */ }
     store.pushAudit({
       user: req.dtUser.name,
       action: 'save_backup',

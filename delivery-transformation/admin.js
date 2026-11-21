@@ -2552,6 +2552,8 @@
     if (tab === 'assign') loadAutoAssign().catch((err) => { if ($('aa-hint')) $('aa-hint').textContent = err.message; });
     if (tab === 'give') loadGive().catch((err) => { if ($('give-hint')) $('give-hint').textContent = err.message; });
     if (tab === 'org') loadOrg().catch((err) => { if ($('org-msg')) $('org-msg').textContent = err.message; });
+    if (tab === 'overview' && window.DTOverview) window.DTOverview.load().catch(() => {});
+    if (tab === 'archive' && window.DTOverview) window.DTOverview.loadArchive().catch(() => {});
   }
 
   let orgData = { cities: [], companies: [] };

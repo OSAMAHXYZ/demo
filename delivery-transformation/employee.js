@@ -2558,13 +2558,15 @@
     const title = $('#month-close-title');
     const text = $('#month-close-text');
     const applyBtn = $('#month-close-apply');
+    const dl = $('#month-close-download');
+    if (dl) dl.hidden = true;
     if (title) title.textContent = `Month ${mc.forMonth || ''} archive ready`;
     if (text) {
-      text.textContent = mc.downloaded
-        ? `Excel downloaded · click Clear Live Sheet to remove ${mc.willRemove || 0} VIN(s) with status PSFU / Claimed / تم التسليم (keep ${mc.willKeep || 0}).`
-        : `Day-1 archive · download Excel first (${mc.total || 0} VINs). Then clear PSFU / Claimed / تم التسليم from the Live Sheet (keep other statuses).`;
+      text.textContent = mc.archived
+        ? `Month archived · click Clear Live Sheet to remove ${mc.willRemove || 0} VIN(s) with status PSFU / Claimed / تم التسليم (keep ${mc.willKeep || 0}).`
+        : `Wait for Admin to save the month archive (${mc.total || 0} VINs), then clear PSFU / Claimed / تم التسليم from the Live Sheet.`;
     }
-    if (applyBtn) applyBtn.disabled = !mc.downloaded;
+    if (applyBtn) applyBtn.disabled = !mc.archived;
   }
 
   async function refreshMonthClose() {
