@@ -4,6 +4,44 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
+
+/** Live Delivery app — VIN Live Sheet source of truth (employee.html). */
+const DT_LIVE_ORIGIN = String(process.env.DT_LIVE_ORIGIN || 'https://delivery-operation-production.up.railway.app').replace(/\/$/, '');
+
+function fetchJson(url, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const lib = String(url).startsWith('https') ? https : http;
+    const req = lib.request(url, {
+      method: opts.method || 'GET',
+      headers: Object.assign({ Accept: 'application/json' }, opts.headers || {}),
+      timeout: opts.timeout || 12000,
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        let json = null;
+        try { json = JSON.parse(text); } catch (_e) { json = null; }
+        resolve({ status: res.statusCode || 0, json, text });
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    if (opts.body) req.write(opts.body);
+    req.end();
+  });
+}
+
+function isSelfLiveOrigin(origin) {
+  try {
+    const host = new URL(origin).host;
+    return !host || /toyota-lease-calculator/i.test(host);
+  } catch (_e) {
+    return true;
+  }
+}
 const {
   STATUSES,
   LAST_MONTH_UPLOAD_STATUSES,
@@ -1201,8 +1239,9 @@ function createDeliveryTransformationRouter(opts = {}) {
     return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
 
-  /** Public Live Sheet lookup — VIN / order only. No customer or phone. */
-  router.get('/vin-finder', (req, res) => {
+  /** Public Live Sheet lookup — VIN / order only. No customer or phone.
+   *  Local store first; if empty, fall back to Delivery Operation Live Sheet (employee.html source). */
+  router.get('/vin-finder', async (req, res) => {
     const rawQ = String((req.query && (req.query.q || req.query.vin || req.query.order)) || '').trim();
     const q = finderKey(rawQ);
     if (q.length < 4) {
@@ -1228,14 +1267,31 @@ function createDeliveryTransformationRouter(opts = {}) {
       .sort((a, b) => Number(b.exact) - Number(a.exact) || String(a.vin).localeCompare(String(b.vin)))
       .slice(0, 20)
       .map(({ exact, ...row }) => row);
-    return res.json({ q: rawQ, total: rows.length, rows });
+    if (rows.length) {
+      return res.json({ q: rawQ, total: rows.length, rows, source: 'local' });
+    }
+    if (DT_LIVE_ORIGIN && !isSelfLiveOrigin(DT_LIVE_ORIGIN)) {
+      try {
+        const remote = await fetchJson(`${DT_LIVE_ORIGIN}/api/delivery-transformation/vin-finder?q=${encodeURIComponent(rawQ)}`);
+        if (remote.status >= 200 && remote.status < 300 && remote.json && Array.isArray(remote.json.rows) && remote.json.rows.length) {
+          return res.json({
+            q: rawQ,
+            total: remote.json.rows.length,
+            rows: remote.json.rows,
+            source: 'delivery-operation',
+          });
+        }
+      } catch (_e) { /* keep empty local result */ }
+    }
+    return res.json({ q: rawQ, total: 0, rows: [] });
   });
 
   /**
    * Batch VIN Finder — exact order-number or VIN matches only (same Live Sheet fields as /vin-finder).
    * body: { keys: string[] } → { results: { [normalisedKey]: { vin, order, status, employee } } }
+   * Missing keys are filled from Delivery Operation Live Sheet when possible.
    */
-  router.post('/vin-finder/lookup', (req, res) => {
+  router.post('/vin-finder/lookup', async (req, res) => {
     const raw = Array.isArray(req.body && req.body.keys) ? req.body.keys : [];
     const wanted = new Set(raw.slice(0, 3000).map(finderKey).filter((k) => k.length >= 4));
     const results = {};
@@ -1253,6 +1309,22 @@ function createDeliveryTransformationRouter(opts = {}) {
           if (!prev || (!prev.status && row.status)) results[k] = row;
         });
       });
+    }
+    const missing = [...wanted].filter((k) => !results[k]);
+    if (missing.length && DT_LIVE_ORIGIN && !isSelfLiveOrigin(DT_LIVE_ORIGIN)) {
+      try {
+        const remote = await fetchJson(`${DT_LIVE_ORIGIN}/api/delivery-transformation/vin-finder/lookup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ keys: missing }),
+        });
+        const remoteResults = remote.json && remote.json.results && typeof remote.json.results === 'object'
+          ? remote.json.results
+          : {};
+        Object.keys(remoteResults).forEach((k) => {
+          if (!results[k] && remoteResults[k]) results[k] = remoteResults[k];
+        });
+      } catch (_e) { /* keep local results */ }
     }
     return res.json({ total: Object.keys(results).length, results });
   });
